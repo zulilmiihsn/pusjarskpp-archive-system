@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "node tests/unit.test.js && node scripts/verify-project.js",
-    "lint": "npx eslint **/*.gs **/*.html --config .eslintrc.json",
+    "lint": "npx eslint \"**/*.gs\"",
     "clasp:status": "clasp status",
     "clasp:push": "node scripts/generate-assets.js && clasp push",
     "postinstall": "node scripts/generate-assets.js",

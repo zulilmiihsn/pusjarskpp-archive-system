@@ -163,8 +163,18 @@ const SettingsController = {
   },
 
   ensureArchiveMaintenanceTrigger: function () {
-    const handlerName = 'cleanupTrashedSubActivities';
+    const handlerName = 'runArchiveMaintenance';
+    const legacyHandler = 'cleanupTrashedSubActivities';
     const triggers = ScriptApp.getProjectTriggers();
+
+    // Migrasi: hapus trigger lama yang menunjuk endpoint ber-auth — di konteks
+    // trigger (tanpa sesi) endpoint itu akan selalu throw.
+    triggers.forEach(function (trigger) {
+      if (trigger.getHandlerFunction && trigger.getHandlerFunction() === legacyHandler) {
+        ScriptApp.deleteTrigger(trigger);
+      }
+    });
+
     const exists = triggers.some(trigger => trigger.getHandlerFunction && trigger.getHandlerFunction() === handlerName);
     if (exists) {
       return { installed: false, exists: true, handler: handlerName };

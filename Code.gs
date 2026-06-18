@@ -276,6 +276,19 @@ function cleanupTrashedSubActivities(payload) {
   return wrapApi(() => AppController.cleanupTrashedSubActivities(payload || {}));
 }
 
+/**
+ * Handler maintenance harian yang dipanggil time-trigger (konteks owner, TANPA
+ * sesi login). Sengaja TIDAK requireAuth_ dan terpisah dari endpoint
+ * cleanupTrashedSubActivities (yang dipanggil user dan butuh sesi).
+ */
+function runArchiveMaintenance() {
+  try {
+    SubActivityController.cleanupTrashedSubActivities({});
+  } catch (error) {
+    console.error('runArchiveMaintenance: cleanup gagal: ' + error.message);
+  }
+}
+
 function getInactiveSubActivities(payload) {
   return wrapApi(() => AppController.getInactiveSubActivities(payload || {}));
 }
