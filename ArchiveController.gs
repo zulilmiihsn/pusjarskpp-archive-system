@@ -274,6 +274,9 @@ const ArchiveController = {
 
   _processArchiveInLock: function (payload, activity, subActivity, metadata, sourceFile) {
     return withLock_(() => {
+      // Uniqueness diperiksa di dalam lock agar read-validate-write atomik
+      // terhadap arsip lain yang dikerjakan bersamaan.
+      ArchiveController._validateUniqueMetadata(payload, activity, subActivity, null);
       if (!metadata.nomor_item_arsip) {
         const nextNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
         metadata.nomor_item_arsip = String(nextNum).padStart(2, '0');
@@ -331,7 +334,9 @@ const ArchiveController = {
 
     const fields = config.fields.filter(function (field) { return field.activity_id === payload.activityId && isTrue_(field.is_visible_in_form); });
     Validator.requireMetadata(payload.metadata, fields);
-    ArchiveController._validateUniqueMetadata(payload, activity, subActivity, null);
+    // Catatan: cek uniqueness (uraian/nomor item) dilakukan DI DALAM lock pada
+    // _processArchiveInLock — kalau di sini, dua submit bersamaan sama-sama lolos
+    // sebelum baris pertama tertulis, lalu menghasilkan duplikat.
 
     const archiveId = 'ARC-' + Utilities.getUuid().slice(0, 8).toUpperCase();
     const sourceFile = DriveService.getFileFromInput(payload);

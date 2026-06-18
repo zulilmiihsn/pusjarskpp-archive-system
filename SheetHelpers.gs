@@ -96,17 +96,38 @@ function findRekapRowForSubActivity_(sheet, subActivity) {
   const targetSortOrder = normalizeComparableText_(subActivity && subActivity.sort_order);
   const targetNoBerkas = normalizeComparableText_(subActivity && subActivity.no_berkas);
 
+  // Kecocokan PERSIS dulu, di SELURUH baris, urut prioritas. Substring TIDAK boleh
+  // dipakai lebih awal: nama mirip ("Laporan" vs "Laporan Akhir", atau "1." vs "11."
+  // setelah dinormalisasi) bisa membuat ringkasan tertulis ke baris sub-kegiatan
+  // yang SALAH dan diam-diam merusak data sub lain.
   for (let i = 0; i < values.length; i++) {
-    const row = values[i];
-    const uraian = normalizeComparableText_(row[uraianCol - 1]);
+    const uraian = normalizeComparableText_(values[i][uraianCol - 1]);
     if (targetName && uraian === targetName) return REKAP_DATA_START_ROW + i;
-    if (targetName && uraian && (uraian.indexOf(targetName) >= 0 || targetName.indexOf(uraian) >= 0)) {
-      return REKAP_DATA_START_ROW + i;
-    }
+  }
+  for (let i = 0; i < values.length; i++) {
+    const uraian = normalizeComparableText_(values[i][uraianCol - 1]);
     if (folderName && uraian === folderName) return REKAP_DATA_START_ROW + i;
-    const nomorBerkas = normalizeComparableText_(row[nomorBerkasCol - 1]);
+  }
+  for (let i = 0; i < values.length; i++) {
+    const nomorBerkas = normalizeComparableText_(values[i][nomorBerkasCol - 1]);
     if (targetNoBerkas && nomorBerkas === targetNoBerkas) return REKAP_DATA_START_ROW + i;
     if (targetSortOrder && nomorBerkas === targetSortOrder) return REKAP_DATA_START_ROW + i;
+  }
+
+  // Fallback substring HANYA bila tidak ada kecocokan persis DAN hasilnya unik
+  // (tepat satu baris). Kalau ambigu, kembalikan null — lebih baik gagal lembut
+  // daripada menebak dan merusak baris milik sub-kegiatan lain.
+  if (targetName) {
+    let fuzzyRow = -1;
+    let fuzzyCount = 0;
+    for (let i = 0; i < values.length; i++) {
+      const uraian = normalizeComparableText_(values[i][uraianCol - 1]);
+      if (uraian && (uraian.indexOf(targetName) >= 0 || targetName.indexOf(uraian) >= 0)) {
+        fuzzyCount++;
+        fuzzyRow = i;
+      }
+    }
+    if (fuzzyCount === 1) return REKAP_DATA_START_ROW + fuzzyRow;
   }
   return null;
 }

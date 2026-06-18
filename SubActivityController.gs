@@ -189,28 +189,38 @@ const SubActivityController = {
         // Abaikan jika struktur dokumen tidak standar
       }
 
-      // 3. Update konfigurasi (Transfer Ownership)
+      // 3. Rename sheet Detail dulu (bawa semua baris data) dan TANGKAP hasilnya.
+      //    Kalau rename gagal (mis. nama tujuan sudah dipakai / sheet lama tak ada),
+      //    config harus tetap menunjuk ke sheet tempat data sebenarnya berada, bukan
+      //    ke nama baru yang kosong — kalau tidak, data lama jadi orphan & numbering reset.
+      const oldSheetName = existingSub.target_sheet_name || existingSub.sub_activity_name;
+      const renameOk = SpreadsheetService.renameSubActivitySheet(
+        activity, oldSheetName, newSubName, { spreadsheet_file_id: existingSub.spreadsheet_file_id }
+      );
+      const effectiveSheetName = renameOk ? newSubName : oldSheetName;
+
+      // 4. Update konfigurasi (Transfer Ownership) — target_sheet_name ikut hasil rename.
       const updatedSub = ConfigRepository.updateSubActivityMapping({
-        year: year, 
-        activityId: activity.activity_id, 
+        year: year,
+        activityId: activity.activity_id,
         subActivityId: existingSub.sub_activity_id,
         folderId: newChildFolder.getId(),
-        folderPath: existingSub.parent_folder_name 
-          ? existingSub.parent_folder_name + ' > ' + parentFolderName + ' > ' + newSubName 
+        folderPath: existingSub.parent_folder_name
+          ? existingSub.parent_folder_name + ' > ' + parentFolderName + ' > ' + newSubName
           : parentFolderName + ' > ' + newSubName,
-        targetSheetName: newSubName,
+        targetSheetName: effectiveSheetName,
         formalArchiveName: wsSuggestFormalArchiveName_(activity, newSubName),
         subActivityName: newSubName,
         parentFolderId: parentFolderId,
         parentFolderName: parentFolderName,
-        parentFolderPath: existingSub.parent_folder_name 
-          ? existingSub.parent_folder_name + ' > ' + parentFolderName 
+        parentFolderPath: existingSub.parent_folder_name
+          ? existingSub.parent_folder_name + ' > ' + parentFolderName
           : parentFolderName,
         spreadsheetFileId: existingSub.spreadsheet_file_id
       });
 
-      // Update spreadsheet identity
-      SpreadsheetService.renameSubActivitySheet(activity, existingSub.target_sheet_name, newSubName, updatedSub);
+      // 5. Pastikan sheet Detail ada (kalau rename gagal/old belum ada) + segarkan identitas baris Rekap.
+      SpreadsheetService.ensureSubActivitySheet(activity, updatedSub);
       SpreadsheetService.updateRekapSubActivityIdentity(activity, existingSub, updatedSub);
 
       CacheHelper.invalidate(year);
