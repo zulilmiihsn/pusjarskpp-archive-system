@@ -1,15 +1,34 @@
 <script>
-  function injectBgImages() {
-    if (typeof ASSETS === 'undefined') return;
-    var existing = document.getElementById('bg-image-style');
-    if (existing) return;
+  // Aset background berat (gedung + ornamen) dimuat LAZY dari server, bukan
+  // di-inline ke payload HTML awal. Hasilnya di-cache di memori per sesi.
+  var __heavyAssets = null;
+  var __heavyAssetsLoading = false;
+
+  function applyBgImages(assets) {
+    if (!assets) return;
+    if (document.getElementById('bg-image-style')) return;
     var style = document.createElement('style');
     style.id = 'bg-image-style';
     var css = '';
-    if (ASSETS.gedungUtama) css += '.tall-card-bg { background-image: url(\'' + ASSETS.gedungUtama + '\') !important; }';
-    if (ASSETS.ornamen) css += '.panel-ornamen-bg { background-image: url(\'' + ASSETS.ornamen + '\') !important; }';
+    if (assets.gedungUtama) css += '.tall-card-bg { background-image: url(\'' + assets.gedungUtama + '\') !important; }';
+    if (assets.ornamen) css += '.panel-ornamen-bg { background-image: url(\'' + assets.ornamen + '\') !important; }';
     style.innerHTML = css;
     document.head.appendChild(style);
+  }
+
+  function injectBgImages() {
+    if (document.getElementById('bg-image-style')) return;
+    if (__heavyAssets) { applyBgImages(__heavyAssets); return; }
+    if (__heavyAssetsLoading) return;
+    __heavyAssetsLoading = true;
+    api('getDecorativeAssets').then(function (assets) {
+      __heavyAssets = assets || {};
+      __heavyAssetsLoading = false;
+      // Hormati state toggle terkini (user bisa mematikan sebelum fetch selesai).
+      if (localStorage.getItem('portal_show_bg_images') !== 'false') applyBgImages(__heavyAssets);
+    }).catch(function () {
+      __heavyAssetsLoading = false;
+    });
   }
   function removeBgImages() {
     var existing = document.getElementById('bg-image-style');

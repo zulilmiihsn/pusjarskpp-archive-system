@@ -65,6 +65,15 @@ function getSettings() {
   return wrapApi(() => AppController.getSettings());
 }
 
+/**
+ * Lazy-load aset dekoratif berat (background gedung & ornamen) di luar payload
+ * HTML awal. Dipanggil client hanya saat toggle background aktif.
+ * @return {{success: boolean, data?: {gedungUtama: string, ornamen: string}, error?: string}}
+ */
+function getDecorativeAssets() {
+  return wrapApi(() => JSON.parse(HtmlService.createHtmlOutputFromFile('ClientAssetsHeavy').getContent()));
+}
+
 function saveSettings(payload) {
   return wrapApi(() => AppController.saveSettings(payload));
 }

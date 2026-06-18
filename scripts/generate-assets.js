@@ -5,24 +5,33 @@ const logoPath = path.join(__dirname, '../assets/logo PUSJARSKPP-01.png');
 const gedungPath = path.join(__dirname, '../assets/gedung utama.png');
 const ornamenPath = path.join(__dirname, '../assets/ornamen.png');
 const logoSosmedPath = path.join(__dirname, '../assets/LOGO SOSMED 2025-03.png');
-const outputPath = path.join(__dirname, '../ClientAssets.html');
+const lightOutputPath = path.join(__dirname, '../ClientAssets.html');
+const heavyOutputPath = path.join(__dirname, '../ClientAssetsHeavy.html');
 
-console.log('Membaca file logo dan gedung...');
-const logoBase64 = fs.readFileSync(logoPath).toString('base64');
-const gedungBase64 = fs.readFileSync(gedungPath).toString('base64');
-const ornamenBase64 = fs.readFileSync(ornamenPath).toString('base64');
-const logoSosmedBase64 = fs.readFileSync(logoSosmedPath).toString('base64');
+const dataUri = (p) => 'data:image/png;base64,' + fs.readFileSync(p).toString('base64');
 
-const htmlContent = `<script>
+console.log('Membaca aset gambar...');
+const logo = dataUri(logoPath);
+const logoSosmed = dataUri(logoSosmedPath);
+const gedungUtama = dataUri(gedungPath);
+const ornamen = dataUri(ornamenPath);
+
+// Bundle KRITIS (logo + watermark sosmed): di-inline ke Index.html, dipakai
+// pada setiap halaman untuk branding. Kecil (~130KB).
+const lightContent = `<script>
   const ASSETS = {
-    logo: 'data:image/png;base64,${logoBase64}',
-    gedungUtama: 'data:image/png;base64,${gedungBase64}',
-    ornamen: 'data:image/png;base64,${ornamenBase64}',
-    logoSosmed: 'data:image/png;base64,${logoSosmedBase64}'
+    logo: '${logo}',
+    logoSosmed: '${logoSosmed}'
   };
 </script>
 `;
 
-console.log('Menulis file ClientAssets.html...');
-fs.writeFileSync(outputPath, htmlContent, 'utf8');
-console.log('File ClientAssets.html berhasil dibuat!');
+// Bundle BERAT (background dekoratif): TIDAK di-inline. Hanya dimuat lazy lewat
+// endpoint getDecorativeAssets saat toggle background aktif. Format JSON murni
+// supaya server bisa langsung JSON.parse isinya. ~2.5MB → keluar dari payload awal.
+const heavyContent = JSON.stringify({ gedungUtama: gedungUtama, ornamen: ornamen });
+
+console.log('Menulis ClientAssets.html (kritis) & ClientAssetsHeavy.html (lazy)...');
+fs.writeFileSync(lightOutputPath, lightContent, 'utf8');
+fs.writeFileSync(heavyOutputPath, heavyContent, 'utf8');
+console.log('Aset berhasil dibuat (kritis + lazy terpisah)!');
