@@ -1,0 +1,20 @@
+# Ignore all files by default
+**
+
+# Allow Google Apps Script source files
+!*.gs
+!*.html
+!appsscript.json
+
+# Explicitly ignore configurations, dependencies, documentation, and templates
+node_modules/**
+docs/**
+templates/**
+package.json
+package-lock.json
+README.md
+.gitignore
+.clasp.json
+.claspignore
+tests/**
+scripts/**

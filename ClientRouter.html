@@ -1,0 +1,1092 @@
+<script>
+  function injectBgImages() {
+    if (typeof ASSETS === 'undefined') return;
+    var existing = document.getElementById('bg-image-style');
+    if (existing) return;
+    var style = document.createElement('style');
+    style.id = 'bg-image-style';
+    var css = '';
+    if (ASSETS.gedungUtama) css += '.tall-card-bg { background-image: url(\'' + ASSETS.gedungUtama + '\') !important; }';
+    if (ASSETS.ornamen) css += '.panel-ornamen-bg { background-image: url(\'' + ASSETS.ornamen + '\') !important; }';
+    style.innerHTML = css;
+    document.head.appendChild(style);
+  }
+  function removeBgImages() {
+    var existing = document.getElementById('bg-image-style');
+    if (existing) existing.remove();
+  }
+  function initBgImages() {
+    if (localStorage.getItem('portal_show_bg_images') !== 'false') injectBgImages();
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+
+  function init() {
+    const activeTheme = localStorage.getItem('portal_theme') || 'sleek';
+    document.documentElement.className = 'theme-' + activeTheme;
+
+    if (activeTheme === 'custom') {
+      const customColors = JSON.parse(localStorage.getItem('portal_custom_colors') || '{"kepemimpinan":"#10B981","latsar":"#F43F5E","teknis":"#F59E0B","lain":"#8B5CF6"}');
+      
+      function hexToRgb(hex) {
+        var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? parseInt(result[1], 16) + ', ' + parseInt(result[2], 16) + ', ' + parseInt(result[3], 16) : '0,0,0';
+      }
+
+      function shadeColor(color, percent) {
+        var R = parseInt(color.substring(1,3),16), G = parseInt(color.substring(3,5),16), B = parseInt(color.substring(5,7),16);
+        R = parseInt(R * (100 + percent) / 100); R = (R<255)?R:255;
+        G = parseInt(G * (100 + percent) / 100); G = (G<255)?G:255;
+        B = parseInt(B * (100 + percent) / 100); B = (B<255)?B:255;
+        return "#" + ((1<<24) + (R<<16) + (G<<8) + B).toString(16).slice(1);
+      }
+
+      let styleEl = document.createElement('style');
+      styleEl.id = 'custom-theme-style';
+      styleEl.setAttribute('data-custom-theme', 'true');
+      
+      const cats = ['kepemimpinan', 'latsar', 'teknis', 'lain'];
+      let cssText = '.theme-custom {';
+      cats.forEach(c => {
+        const base = customColors[c];
+        const start = shadeColor(base, 20);
+        const text = shadeColor(base, -40);
+        cssText += `
+          --color-${c}-start: ${start};
+          --color-${c}-end: ${base};
+          --color-${c}-border: ${shadeColor(base, -20)};
+          --color-${c}-rgb: ${hexToRgb(base)};
+          --color-${c}-text: ${text};
+        `;
+      });
+      cssText += '}';
+      styleEl.innerHTML = cssText;
+      document.head.appendChild(styleEl);
+    }
+
+    const logoImg = document.getElementById('brand-logo-img');
+      if (typeof ASSETS !== 'undefined') {
+        if (logoImg) logoImg.src = ASSETS.logo;
+        if (logoImg) {
+          logoImg.addEventListener('click', function() {
+            var on = localStorage.getItem('portal_show_bg_images') !== 'false';
+            localStorage.setItem('portal_show_bg_images', on ? 'false' : 'true');
+            if (on) removeBgImages(); else injectBgImages();
+          });
+        }
+        if (ASSETS.logoSosmed) {
+          const wm = document.getElementById('watermark-logo-sosmed');
+          if (wm) wm.src = ASSETS.logoSosmed;
+        }
+        initBgImages();
+      }
+
+    try {
+      // GLOBAL CLICK DELEGATOR
+      document.addEventListener('click', (e) => {
+        // 1. Handle Dropdowns
+        const dropdownBtn = e.target.closest('[data-action="toggle-dropdown"]');
+        if (dropdownBtn) {
+          e.stopPropagation();
+          const menu = dropdownBtn.nextElementSibling;
+          const card = dropdownBtn.closest('.tall-card');
+          document.querySelectorAll('.sub-dropdown-menu.open').forEach(m => {
+            if (m !== menu) {
+              m.classList.remove('open');
+              const c = m.closest('.tall-card');
+              if (c) c.classList.remove('dropdown-open');
+            }
+          });
+          if (menu) {
+            const isOpen = menu.classList.toggle('open');
+            if (card) card.classList.toggle('dropdown-open', isOpen);
+          }
+        } else {
+          document.querySelectorAll('.sub-dropdown-menu.open').forEach(m => {
+            m.classList.remove('open');
+            const c = m.closest('.tall-card');
+            if (c) c.classList.remove('dropdown-open');
+          });
+        }
+
+        // 2. Handle generic data-action clicks
+        const actionBtn = e.target.closest('[data-action]');
+        if (actionBtn && actionBtn.dataset.action !== 'toggle-dropdown') {
+          const action = actionBtn.dataset.action;
+          
+          if (action === 'submit-process' && typeof handleFinalize === 'function') {
+            handleFinalize();
+          } else if (action === 'save-draft-process' && typeof handleSaveDraft === 'function') {
+            handleSaveDraft();
+          }
+        }
+      });
+      const sidebarToggle = document.getElementById('sidebar-toggle');
+      const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+      const appShell = document.getElementById('app');
+      if (sidebarToggle && sidebarBackdrop && appShell) {
+        function closeSidebar() {
+          appShell.classList.remove('sidebar-open');
+          sidebarToggle.setAttribute('aria-expanded', 'false');
+        }
+        function toggleSidebar() {
+          const isOpen = appShell.classList.toggle('sidebar-open');
+          sidebarToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        }
+        sidebarToggle.addEventListener('click', toggleSidebar);
+        sidebarBackdrop.addEventListener('click', closeSidebar);
+        document.querySelectorAll('.nav-item, .nav-child-item').forEach(function(el) {
+          el.addEventListener('click', closeSidebar);
+        });
+        // GLOBAL KEYBOARD DELEGATOR
+        document.addEventListener('keydown', function(e) {
+          // 1. Sidebar Escape
+          if (e.key === 'Escape' && appShell.classList.contains('sidebar-open')) closeSidebar();
+
+          // 2. Escape Modal (ClientArchiveFolder / ClientTemplates)
+          if (e.key === 'Escape') {
+             const cancelBtn = document.querySelector('.modal [data-action="cancel"], .modal #doc-cancel-btn');
+             if (cancelBtn && cancelBtn.offsetParent !== null) cancelBtn.click();
+             
+             if (state.view === 'archive_folder' && window._activeArchiveModalCleanup) {
+               e.preventDefault();
+               window._activeArchiveModalCleanup();
+             }
+          }
+
+          // 3. Ctrl+Enter (Finalize Forms)
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            const submitBtn = document.querySelector('#finalize-archive, #doc-submit-btn, #doc-submit-btn-modal');
+            if (submitBtn && !submitBtn.disabled && submitBtn.offsetParent !== null) {
+              e.preventDefault();
+              submitBtn.click();
+            } else if (state.view === 'archive_folder' && window._activeArchiveModalSubmit) {
+              e.preventDefault();
+              window._activeArchiveModalSubmit();
+            }
+          }
+
+          // 4. Ctrl+S (Save Draft)
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            const saveBtn = document.querySelector('#save-draft-btn');
+            if (saveBtn && !saveBtn.disabled && saveBtn.offsetParent !== null) {
+              e.preventDefault();
+              saveBtn.click();
+            }
+          }
+        });
+      }
+
+      document.querySelectorAll('.nav-item').forEach(button => {
+        if (button.id === 'nav-kegiatan') {
+          button.addEventListener('click', () => {
+            const parent = document.getElementById('nav-kegiatan-group');
+            if (parent) {
+              const isExpanded = parent.classList.toggle('expanded');
+              localStorage.setItem('kegiatan_expanded', isExpanded ? '1' : '0');
+            }
+          });
+        } else {
+          button.addEventListener('click', () => {
+            if (button.id === 'nav-process') {
+              state.draft = null;
+              state.preselectedTargetFolderId = null;
+              if (typeof clearProcessStateFromLocal === 'function') {
+                clearProcessStateFromLocal();
+              }
+            }
+            if (button.id === 'nav-document-process') {
+              if (state.view === 'archive_folder' && state.selectedActivityId) {
+                state.preselectedActivityId = state.selectedActivityId;
+                state.preselectedSubActivityId = state.selectedSubActivityId || null;
+              } else if (state.view === 'activity_detail' && state.selectedActivityId) {
+                state.preselectedActivityId = state.selectedActivityId;
+                state.preselectedSubActivityId = null;
+              } else {
+                state.preselectedActivityId = null;
+                state.preselectedSubActivityId = null;
+              }
+            }
+            if (button.id === 'nav-templates') {
+              state.templateActiveCategoryId = '';
+            }
+            if (button.dataset.view) {
+              setView(button.dataset.view);
+            }
+          });
+        }
+      });
+  } catch (e) {
+    console.error('init nav error:', e);
+  }
+
+  getSessionUser();
+  google.script.url.getLocation(onLocationChange);
+  setTimeout(bindSearchBar, 100);
+}
+
+  async function getSessionUser() {
+    try {
+      state.currentUser = await api('getCurrentUser');
+      if (state.currentUser.role === 'guest') {
+        localStorage.removeItem('portal_session_id');
+      }
+    } catch (e) {
+      console.error('getCurrentUser failed:', e);
+      state.currentUser = { role: 'guest', username: '', displayName: 'Tamu' };
+      localStorage.removeItem('portal_session_id');
+    }
+    if (typeof renderLogoutBar === 'function') renderLogoutBar();
+    applyRoleVisibility();
+    populateDashboardNav();
+    document.getElementById('app').classList.remove('loading');
+    if (typeof loadBootstrap === 'function' && !state.bootstrap) loadBootstrap();
+  }
+
+  const GUEST_ALLOWED = ['dashboard', 'templates'];
+
+  function isRestrictedForGuest(view) {
+    if (!state.currentUser) return true;
+    if (state.currentUser.role !== 'guest') return false;
+    if (view === 'activity_detail') return false;
+    return GUEST_ALLOWED.indexOf(view) === -1;
+  }
+
+  function applyRoleVisibility() {
+    const role = state.currentUser ? state.currentUser.role : 'guest';
+    const isGuest = (role === 'guest');
+    document.querySelectorAll('.nav-admin').forEach(el => {
+      el.style.display = (role === 'admin') ? '' : 'none';
+    });
+    document.querySelectorAll('.nav-auth').forEach(el => {
+      el.style.display = isGuest ? 'none' : '';
+    });
+  }
+
+  function populateDashboardNav() {
+    const container = document.getElementById('nav-kegiatan-children');
+    if (!container) return;
+    const btn = document.getElementById('nav-kegiatan');
+    
+    if (!state.bootstrap || !state.bootstrap.configured) {
+      if (btn) btn.disabled = true;
+      container.innerHTML = '';
+      return;
+    }
+    
+    if (btn) btn.disabled = false;
+    const activities = state.bootstrap.activities || [];
+    container.innerHTML = activities.map(a => `
+      <button class="nav-child-item" data-activity-id="${esc(a.activity_id)}">${esc(a.activity_name)}</button>
+    `).join('');
+    container.querySelectorAll('.nav-child-item').forEach(btnChild => {
+      btnChild.addEventListener('click', () => {
+        setView('activity_detail', { activityId: btnChild.dataset.activityId });
+      });
+    });
+    const parent = container.closest('.nav-parent');
+    if (parent && activities.length) {
+      const savedState = localStorage.getItem('kegiatan_expanded');
+      if (savedState === '0') {
+        parent.classList.remove('expanded');
+      } else {
+        parent.classList.add('expanded');
+      }
+    }
+  }
+
+  function updateNavActive() {
+    document.querySelectorAll('.nav-item').forEach(button => {
+      let isActive = false;
+      if (button.id === 'nav-dashboard') {
+        isActive = (state.view === 'dashboard');
+      } else if (button.id === 'nav-kegiatan') {
+        isActive = isKegiatanView();
+      } else {
+        isActive = (button.dataset.view === state.view);
+      }
+      button.classList.toggle('active', isActive);
+    });
+    document.querySelectorAll('.nav-child-item').forEach(item => {
+      item.classList.toggle('active',
+        isKegiatanView() && item.dataset.activityId === state.selectedActivityId
+      );
+    });
+    const parent = document.getElementById('nav-kegiatan-group');
+    if (parent) {
+      const savedState = localStorage.getItem('kegiatan_expanded');
+      if (isKegiatanView()) {
+        parent.classList.add('expanded');
+      } else if (savedState === '0') {
+        parent.classList.remove('expanded');
+      } else if (savedState === '1') {
+        parent.classList.add('expanded');
+      }
+    }
+  }
+
+  function onLocationChange(location) {
+    const params = location.parameter || {};
+    
+    if (!state.initialUrlProcessed) {
+      state.initialUrlProcessed = true;
+      if (state.userNavigated) return;
+    } else {
+      const locView = params.view || 'dashboard';
+      if (locView === state.view &&
+          (params.activityId || null) === state.selectedActivityId &&
+          (params.subActivityId || null) === state.selectedSubActivityId &&
+          (params.folderId || null) === state.selectedFolderId) {
+        return;
+      }
+    }
+
+    const view = params.view || 'dashboard';
+    state.view = view;
+    state.selectedActivityId = params.activityId || null;
+    state.selectedSubActivityId = params.subActivityId || null;
+    state.selectedFolderId = params.folderId || null;
+    state.selectedFolderName = params.folderName || null;
+    state.selectedFolderBreadcrumb = params.folderBreadcrumb ? String(params.folderBreadcrumb).split('|').filter(Boolean) : [];
+    state.preselectedActivityId = params.preselectedActivityId || null;
+    state.preselectedSubActivityId = params.preselectedSubActivityId || null;
+    state.preselectedTargetFolderId = params.targetFolderId || null;
+    state.preselectedTargetFolderName = params.targetFolderName || null;
+    state.preselectedFolderBreadcrumb = params.folderBreadcrumb ? String(params.folderBreadcrumb).split('|').filter(Boolean) : [];
+
+    try {
+      updateNavActive();
+    } catch (e) {
+      console.error('nav error:', e);
+    }
+
+    if (!state.bootstrap) {
+      loadBootstrap();
+    } else {
+      render();
+    }
+  }
+
+  function setView(view, extraParams = {}) {
+    state.userNavigated = true;
+    state.view = view;
+
+    if (view !== 'process') {
+      state.editMode = false;
+      state.editReturnFolder = null;
+    }
+
+    if (extraParams.activityId) {
+      state.selectedActivityId = extraParams.activityId;
+    } else if (!isKegiatanView()) {
+      state.selectedActivityId = null;
+    }
+
+    if (extraParams.subActivityId) {
+      state.selectedSubActivityId = extraParams.subActivityId;
+    } else if (view !== 'archive_folder') {
+      state.selectedSubActivityId = null;
+    }
+
+    if (extraParams.folderId) {
+      state.selectedFolderId = extraParams.folderId;
+      state.selectedFolderName = extraParams.folderName || '';
+      state.selectedFolderBreadcrumb = extraParams.folderBreadcrumb || [];
+    } else if (view !== 'archive_folder') {
+      state.selectedFolderId = null;
+      state.selectedFolderName = null;
+      state.selectedFolderBreadcrumb = [];
+    }
+
+    if (extraParams.preselectedActivityId) {
+      state.preselectedActivityId = extraParams.preselectedActivityId;
+    } else if (view === 'process' || view === 'document_process') {
+      state.preselectedActivityId = null;
+    }
+    if (extraParams.preselectedSubActivityId) {
+      state.preselectedSubActivityId = extraParams.preselectedSubActivityId;
+    } else if (view === 'process' || view === 'document_process') {
+      state.preselectedSubActivityId = null;
+    }
+    if (extraParams.targetFolderId) {
+      state.preselectedTargetFolderId = extraParams.targetFolderId;
+      state.preselectedTargetFolderName = extraParams.targetFolderName || '';
+      state.preselectedFolderBreadcrumb = extraParams.folderBreadcrumb || [];
+    } else if (view !== 'process' || !extraParams.targetFolderId) {
+      state.preselectedTargetFolderId = null;
+      state.preselectedTargetFolderName = null;
+      state.preselectedFolderBreadcrumb = [];
+    }
+
+    try {
+      updateNavActive();
+    } catch (e) {
+      console.error('nav error:', e);
+    }
+    render();
+
+    if (window.google && google.script && google.script.history) {
+      const queryParams = { view: view };
+      if (state.selectedActivityId) queryParams.activityId = state.selectedActivityId;
+      if (state.selectedSubActivityId) queryParams.subActivityId = state.selectedSubActivityId;
+      if (state.selectedFolderId) queryParams.folderId = state.selectedFolderId;
+      if (state.selectedFolderName) queryParams.folderName = state.selectedFolderName;
+      if (state.preselectedActivityId) queryParams.preselectedActivityId = state.preselectedActivityId;
+      if (state.preselectedSubActivityId) queryParams.preselectedSubActivityId = state.preselectedSubActivityId;
+      if (state.preselectedTargetFolderId) queryParams.targetFolderId = state.preselectedTargetFolderId;
+      if (state.preselectedTargetFolderName) queryParams.targetFolderName = state.preselectedTargetFolderName;
+      const breadcrumb = state.selectedFolderBreadcrumb && state.selectedFolderBreadcrumb.length
+        ? state.selectedFolderBreadcrumb
+        : state.preselectedFolderBreadcrumb;
+      if (breadcrumb && breadcrumb.length) queryParams.folderBreadcrumb = breadcrumb.join('|');
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          google.script.history.push(null, queryParams, null);
+        }, 50);
+      });
+    }
+  }
+
+  let bootstrapPromise = null;
+  async function loadBootstrap() {
+    if (state.bootstrap) return;
+    if (bootstrapPromise) {
+      await bootstrapPromise;
+      return;
+    }
+    showLoading('Memuat konfigurasi aplikasi...');
+    const timeoutMs = (typeof BOOTSTRAP_TIMEOUT_MS !== 'undefined') ? BOOTSTRAP_TIMEOUT_MS : 15000;
+    bootstrapPromise = Promise.race([
+      api('getBootstrap'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('GAS tidak merespon dalam 15 detik. Muat ulang halaman.')), timeoutMs))
+    ]);
+    try {
+      state.bootstrap = await bootstrapPromise;
+      document.getElementById('app').classList.remove('loading');
+      populateDashboardNav();
+      render();
+      startVersionTracker();
+      prefetchTemplatesData();
+      if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
+        showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);
+      }
+    } catch (error) {
+      setContent(`<div class="error">${esc(errorMessage(error))}</div>`);
+    } finally {
+      bootstrapPromise = null;
+    }
+  }
+
+  function render() {
+    window._renderId++;
+    applyRoleVisibility();
+    renderLogoutBar();
+
+    updateHeader();
+    if (!state.bootstrap || !state.bootstrap.configured) {
+      renderUnconfigured();
+      return;
+    }
+
+    const role = state.currentUser ? state.currentUser.role : 'guest';
+
+    if (isRestrictedForGuest(state.view)) {
+      if (!state._loginPromptShown) {
+        state._loginPromptShown = true;
+        showLoginModal();
+      }
+      if (role === 'guest') {
+        state.view = 'dashboard';
+      }
+    }
+
+    if (isAdminView()) {
+      if (role !== 'admin') {
+        setContent(`<div class="panel panel-pad"><div class="empty">Akses ditolak. Halaman ini hanya untuk admin.</div></div>`);
+        updateHeader();
+        return;
+      }
+    }
+
+    populateDashboardNav();
+    updateNavActive();
+
+    if (state.view === 'process') renderProcess();
+    else if (state.view === 'document_process') renderDocumentProcess();
+    else if (state.view === 'templates') renderTemplates();
+    else if (state.view === 'history') renderHistory();
+    else if (state.view === 'inactive') renderInactiveSubActivities();
+    else if (state.view === 'audit') renderAuditLog();
+    else if (state.view === 'accounts') renderAccounts();
+    else if (state.view === 'settings') renderSettings();
+    else if (state.view === 'activity_detail') renderActivityDetail();
+    else if (state.view === 'archive_folder') renderArchiveFolder();
+    else renderDashboard();
+  }
+
+  function updateHeader() {
+    let title = {
+      dashboard:        'Dasbor',
+      process:          'Arsipkan Surat',
+      document_process: 'Arsipkan Dokumen',
+      templates:        'Templat Surat',
+      history:          'Riwayat & Draf Arsip',
+      inactive:         'Arsip Nonaktif',
+      audit:            'Catatan Aktivitas',
+      accounts:         'Manajemen Akun',
+      settings:         'Pengaturan Ruang Kerja',
+      archive_folder:   'Ruang Kerja Arsip'
+    }[state.view] || 'Portal Arsip PUSJARSKPP';
+
+    if (state.view === 'activity_detail') {
+      const activity = getActivity(state.selectedActivityId);
+      title = activity ? activity.activity_name : 'Detail Kegiatan';
+    }
+
+    document.getElementById('page-title').textContent = title;
+    const settings = state.bootstrap && state.bootstrap.settings;
+    const year = settings ? (settings.currentYear || '-') : '-';
+    const yearText = document.getElementById('year-pill-text');
+    if (yearText) yearText.textContent = 'Tahun ' + year;
+
+    renderYearDropdown();
+  }
+
+  function renderYearDropdown() {
+    const dropdown = document.getElementById('year-dropdown-menu');
+    if (!dropdown || !state.bootstrap || !state.bootstrap.years) return;
+    
+    const currentYear = state.bootstrap.settings.currentYear;
+    const years = state.bootstrap.years.map(y => Number(y.year)).sort((a,b) => b - a);
+    
+    let html = '';
+    if (years.length === 0) {
+       html = '<div class="search-dropdown-empty">Belum ada tahun</div>';
+    } else {
+       html = years.map(y => 
+         '<div class="search-dropdown-item" data-year="' + y + '">' +
+           '<div class="search-dropdown-label">Tahun ' + y + (y === currentYear ? ' (Aktif)' : '') + '</div>' +
+         '</div>'
+       ).join('');
+    }
+    dropdown.innerHTML = html;
+
+    dropdown.querySelectorAll('.search-dropdown-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const selectedYear = Number(item.dataset.year);
+        if (selectedYear === currentYear) return;
+        dropdown.classList.remove('open');
+        showYearLoading(selectedYear);
+        try {
+          state.bootstrap = await api('saveSettings', { currentYear: selectedYear });
+          state.selectedFolderId = null;
+          state.selectedFolderName = null;
+          state.selectedFolderBreadcrumb = [];
+          state.preselectedTargetFolderId = null;
+          state.preselectedTargetFolderName = null;
+          state.preselectedFolderBreadcrumb = [];
+          invalidateViewCache();
+          _versionTracker.version = (await api('getSystemVersion')).version;
+          populateDashboardNav();
+          render();
+        } catch (e) {
+          showToast('Gagal mengganti tahun: ' + errorMessage(e));
+          render();
+        } finally {
+          hideYearLoading();
+        }
+      });
+    });
+  }
+
+  function performSearch(query) {
+    const dropdown = document.getElementById('search-dropdown');
+    if (!dropdown || !query || query.length < 2 || !state.bootstrap) {
+      if (dropdown) dropdown.classList.remove('open');
+      return [];
+    }
+
+    const q = query.toLowerCase();
+    const results = [];
+    const isGuest = state.currentUser && state.currentUser.role === 'guest';
+    const seen = new Set();
+
+    if (!isGuest) {
+      const history = state.bootstrap.history || [];
+      const activities = state.bootstrap.activities || [];
+
+      history.forEach(function(item) {
+        const name = item.final_file_name || '';
+        if (name.toLowerCase().indexOf(q) !== -1 && !seen.has(name)) {
+          seen.add(name);
+          results.push({
+            type: 'dokumen',
+            label: name,
+            sublabel: getActivityName(item.activity_id) || 'Arsip',
+            go: function() { setView('history'); }
+          });
+        }
+      });
+
+      activities.forEach(function(act) {
+        const an = act.activity_name || '';
+        if (an.toLowerCase().indexOf(q) !== -1) {
+          results.push({
+            type: 'kegiatan',
+            label: an,
+            sublabel: 'Kegiatan',
+            go: function() { setView('activity_detail', { activityId: act.activity_id }); }
+          });
+        }
+        (act.subActivities || []).forEach(function(sub) {
+          const sn = sub.sub_activity_name || '';
+          if (sn.toLowerCase().indexOf(q) !== -1) {
+            results.push({
+              type: 'subkegiatan',
+              label: sn,
+              sublabel: an || 'Sub-kegiatan',
+              go: function() { setView('activity_detail', { activityId: act.activity_id }); }
+            });
+          }
+        });
+      });
+    }
+
+    if (typeof _templatesData !== 'undefined' && _templatesData) {
+      if (_templatesData.categories) {
+        _templatesData.categories.forEach(function(cat) {
+          const cn = cat.name || '';
+          if (cn.toLowerCase().indexOf(q) !== -1) {
+            results.push({
+              type: 'kategori template',
+              label: cn,
+              sublabel: 'Kategori Templat',
+              go: function() {
+                state.templateActiveCategoryId = cat.id;
+                setView('templates');
+              }
+            });
+          }
+          (cat.files || []).forEach(function(file) {
+            const fn = file.name || '';
+            if (fn.toLowerCase().indexOf(q) !== -1 && !seen.has(fn)) {
+              seen.add(fn);
+              results.push({
+                type: 'template',
+                label: fn,
+                sublabel: cat.name || 'Templat',
+                go: function() {
+                  state.templateActiveCategoryId = cat.id;
+                  setView('templates');
+                }
+              });
+            }
+          });
+        });
+      }
+
+      if (_templatesData.uncategorized) {
+        _templatesData.uncategorized.forEach(function(file) {
+          const fn = file.name || '';
+          if (fn.toLowerCase().indexOf(q) !== -1 && !seen.has(fn)) {
+            seen.add(fn);
+            results.push({
+              type: 'template',
+              label: fn,
+              sublabel: 'Tanpa Kategori',
+              go: function() {
+                state.templateActiveCategoryId = '';
+                setView('templates');
+              }
+            });
+          }
+        });
+      }
+    }
+
+    return results;
+  }
+
+  function renderSearchResults(results) {
+    const dropdown = document.getElementById('search-dropdown');
+    if (!dropdown) return;
+
+    if (results.length === 0) {
+      const q = document.getElementById('search-input') ? document.getElementById('search-input').value : '';
+      dropdown.innerHTML = '<div class="search-dropdown-empty">Tidak ada hasil untuk &lsquo;' + esc(q) + '&rsquo;</div>';
+      dropdown.classList.add('open');
+      return;
+    }
+
+    const groups = {
+      'Surat Arsip': [],
+      'Kegiatan': [],
+      'Templat Surat': []
+    };
+
+    results.forEach(function(r) {
+      if (r.type === 'dokumen') {
+        groups['Surat Arsip'].push(r);
+      } else if (r.type === 'kegiatan' || r.type === 'subkegiatan') {
+        groups['Kegiatan'].push(r);
+      } else if (r.type === 'template' || r.type === 'kategori template') {
+        groups['Templat Surat'].push(r);
+      }
+    });
+
+    let html = '';
+    let count = 0;
+    const clickActions = [];
+
+    for (const groupName in groups) {
+      const items = groups[groupName];
+      if (items.length > 0) {
+        let groupHtml = '<div class="search-dropdown-group-header">' + esc(groupName) + '</div>';
+        let itemAdded = false;
+
+        items.forEach(function(r) {
+          if (count >= 10) return;
+          count++;
+          itemAdded = true;
+
+          const idx = clickActions.length;
+          clickActions.push(r.go);
+
+          let iconSvg = '';
+          if (r.type === 'dokumen') {
+            iconSvg = '<svg class="search-item-type-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>';
+          } else if (r.type === 'kegiatan' || r.type === 'subkegiatan') {
+            iconSvg = '<svg class="search-item-type-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+          } else {
+            iconSvg = '<svg class="search-item-type-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>';
+          }
+
+          groupHtml += '<div class="search-dropdown-item" data-index="' + idx + '" data-type="' + esc(r.type) + '">' +
+            '<div class="search-dropdown-item-content">' +
+              iconSvg +
+              '<div class="search-dropdown-text-group">' +
+                '<div class="search-dropdown-label">' + esc(r.label) + '</div>' +
+                '<div class="search-dropdown-sublabel">' + esc(r.sublabel) + '</div>' +
+              '</div>' +
+            '</div>' +
+            '</div>';
+        });
+
+        if (itemAdded) {
+          html += groupHtml;
+        }
+      }
+    }
+
+    dropdown.innerHTML = html;
+    dropdown.classList.add('open');
+
+    dropdown.querySelectorAll('.search-dropdown-item').forEach(function(el) {
+      el.addEventListener('click', function() {
+        dropdown.classList.remove('open');
+        const idx = parseInt(el.dataset.index, 10);
+        if (clickActions[idx]) {
+          clickActions[idx]();
+        }
+      });
+    });
+  }
+
+  function bindSearchBar() {
+    const input = document.getElementById('search-input');
+    const dropdown = document.getElementById('search-dropdown');
+    if (!input || !dropdown) return;
+
+    let searchTimeout;
+    input.addEventListener('input', function() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(function() {
+        const results = performSearch(input.value);
+        renderSearchResults(results);
+      }, 250);
+    });
+
+    input.addEventListener('focus', function() {
+      if (input.value.length >= 2) {
+        const results = performSearch(input.value);
+        renderSearchResults(results);
+      }
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.search-bar')) {
+        dropdown.classList.remove('open');
+      }
+    });
+
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        dropdown.classList.remove('open');
+        input.blur();
+      }
+    });
+  }
+
+  function renderUnconfigured() {
+    setContent(`
+      <div class="panel panel-pad stack">
+        <h2 class="section-title">Pilih Ruang Kerja Arsip</h2>
+        <p class="muted">Pilih tahun kerja dan Folder Ruang Kerja. Aplikasi akan mengecek struktur arsip tahun itu, membuat bagian yang belum ada, lalu memakai folder yang sudah tersedia.</p>
+        ${settingsForm(state.bootstrap ? state.bootstrap.settings : {})}
+        ${workspaceSetupHtml(state.workspaceSetup || (state.bootstrap && state.bootstrap.workspaceSetup))}
+      </div>
+    `);
+    bindSettingsForm();
+    bindWorkspaceInit();
+    bindFolderPickerButtons();
+  }
+
+  /* ── Version Tracker (near-realtime sync) ── */
+
+  const _versionTracker = { version: 0, intervalId: null, fetching: false, pendingRefresh: false, modalObserver: null, flushScheduled: false };
+
+  function startVersionTracker() {
+    stopVersionTracker();
+    getVersionAsync();
+    _versionTracker.intervalId = setInterval(getVersionAsync, VERSION_POLL_INTERVAL_MS);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    setupModalObserver();
+  }
+
+  function stopVersionTracker() {
+    if (_versionTracker.intervalId) {
+      clearInterval(_versionTracker.intervalId);
+      _versionTracker.intervalId = null;
+    }
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    if (_versionTracker.modalObserver) {
+      _versionTracker.modalObserver.disconnect();
+      _versionTracker.modalObserver = null;
+    }
+  }
+
+  /* Observer terpusat: begitu modal/dialog ditutup (style/class berubah atau
+     node-nya dilepas dari DOM), langsung coba jalankan refresh yang tertunda.
+     Tanpa ini, refresh baru jalan pada poll berikutnya (delay sampai 10 detik).
+     Debounce 150ms supaya tidak terpicu berkali-kali saat ada burst perubahan DOM. */
+  function setupModalObserver() {
+    if (_versionTracker.modalObserver || typeof MutationObserver === 'undefined') return;
+    _versionTracker.modalObserver = new MutationObserver(function () {
+      if (_versionTracker.flushScheduled) return;
+      _versionTracker.flushScheduled = true;
+      setTimeout(function () {
+        _versionTracker.flushScheduled = false;
+        flushPendingRefreshIfIdle();
+      }, 150);
+    });
+    _versionTracker.modalObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['style', 'class'],
+      subtree: true,
+      childList: true
+    });
+  }
+
+  function onVisibilityChange() {
+    if (document.hidden) {
+      if (_versionTracker.intervalId) {
+        clearInterval(_versionTracker.intervalId);
+        _versionTracker.intervalId = null;
+      }
+    } else {
+      if (!_versionTracker.intervalId) {
+        getVersionAsync();
+        _versionTracker.intervalId = setInterval(getVersionAsync, VERSION_POLL_INTERVAL_MS);
+      }
+    }
+  }
+
+  async function getVersionAsync() {
+    if (_versionTracker.fetching) return;
+    _versionTracker.fetching = true;
+    try {
+      const v = await api('getSystemVersion');
+      if (!_versionTracker.version) { _versionTracker.version = v.version; return; }
+      if (v.version !== _versionTracker.version) {
+        _versionTracker.version = v.version;
+        _versionTracker.pendingRefresh = true;
+      }
+      await flushPendingRefreshIfIdle();
+    } catch (e) { /* silent */ }
+    finally { _versionTracker.fetching = false; }
+  }
+
+  /* Jalankan refresh yang tertunda HANYA saat tidak ada modal/dialog terbuka,
+     supaya form/scroll user tidak terganggu. Dipanggil oleh version poll dan
+     oleh MutationObserver (saat modal ditutup). Aman dipanggil berkali-kali:
+     pendingRefresh di-clear sebelum smartRefresh sehingga tidak dobel jalan. */
+  async function flushPendingRefreshIfIdle() {
+    if (!_versionTracker.pendingRefresh) return;
+    if (typeof isAnyModalOpen === 'function' && isAnyModalOpen()) return;
+    _versionTracker.pendingRefresh = false;
+    invalidateViewCache();
+    await smartRefresh();
+  }
+
+  /* ── Cache-aware data fetch ──
+     Returns { data, source: 'cache' | 'fresh' | 'stale-revalidated' }
+     - source='cache': hit, instant, do not refetch
+     - source='fresh': no cache, fetched from server
+     - source='stale-revalidated': cache was stale (>30s), returned cached, refetched in background
+  */
+  async function getCachedOrFetch(viewName, params, fetchFn) {
+    const entry = getCachedView(viewName, params);
+    const currentVersion = getCurrentDataVersion();
+    const versionOk = isCacheVersionValid(entry, currentVersion);
+
+    // Kasus 1: Cache ada, masih segar (di bawah 30s) DAN versinya valid.
+    // Langsung gunakan cache tanpa memanggil server di latar belakang.
+    if (entry && versionOk && isCacheFresh(entry)) {
+      return { data: entry.data, source: 'cache' };
+    }
+
+    // Kasus 2: Cache ada (baik stale, atau versinya sudah tidak valid).
+    // Tampilkan data cache lama secara instan, namun tetap lakukan revalidasi asinkron di background.
+    if (entry) {
+      if (!hasInflightFetch(viewName, params)) {
+        setInflightFetch(viewName, params);
+        fetchFn()
+          .then(function (data) {
+            setCachedView(viewName, params, data, currentVersion);
+            if (state.view === viewName && paramsMatchCurrent(viewName, params)) {
+              rerenderCurrentView(viewName);
+            }
+          })
+          .catch(function () { /* silent — tetap pertahankan data lama */ })
+          .finally(function () { clearInflightFetch(viewName, params); });
+      }
+      return { data: entry.data, source: 'stale-revalidated' };
+    }
+
+    // Kasus 3: Tidak ada cache sama sekali (kunjungan pertama kali).
+    // Jalankan fetch sinkron di foreground (pengguna melihat spinner pemuatan).
+    if (hasInflightFetch(viewName, params)) {
+      const inflight = getCachedView(viewName, params);
+      if (inflight) return { data: inflight.data, source: 'cache' };
+    }
+    setInflightFetch(viewName, params);
+    try {
+      const data = await fetchFn();
+      setCachedView(viewName, params, data, currentVersion);
+      return { data: data, source: 'fresh' };
+    } finally {
+      clearInflightFetch(viewName, params);
+    }
+  }
+
+  function paramsMatchCurrent(viewName, params) {
+    if (!params) return true;
+    if (viewName === 'activity_detail') {
+      return (params.activityId || null) === state.selectedActivityId;
+    }
+    if (viewName === 'archive_folder') {
+      return (params.folderId || null) === state.selectedFolderId;
+    }
+    if (viewName === 'process') {
+      return true;
+    }
+    return true;
+  }
+
+  function rerenderCurrentView(viewName) {
+    if (state.view !== viewName) return;
+
+    if (viewName === 'archive_folder') {
+      const container = document.getElementById('archive-folder-content');
+      if (container) {
+        if (typeof loadArchiveFolderContent === 'function' && typeof getArchiveFolderContext === 'function') {
+          const context = getArchiveFolderContext();
+          loadArchiveFolderContent(context);
+        }
+        return;
+      }
+    }
+    
+    // Jangan hancurkan form jika pengguna berada di pengaturan
+    if (viewName === 'settings') {
+      if (typeof updateSettingsInPlace === 'function') {
+        updateSettingsInPlace();
+      }
+      return; 
+    }
+
+    if (viewName === 'accounts') {
+      if (typeof renderAccounts === 'function') {
+        renderAccounts(true); // Akan dimodifikasi untuk SWR in-place di file ClientAccounts
+        return;
+      }
+    }
+
+    if (viewName === 'process' || viewName === 'document_process') {
+      // Form sedang aktif, jangan render ulang agar input & scroll tidak terganggu
+      return;
+    }
+
+    if (typeof render === 'function') {
+      // Jaga posisi scroll agar refresh background tidak melompatkan user ke atas.
+      const contentEl = document.getElementById('content');
+      const prevScroll = contentEl ? contentEl.scrollTop : 0;
+      render();
+      const newContentEl = document.getElementById('content');
+      if (newContentEl && prevScroll) newContentEl.scrollTop = prevScroll;
+    }
+  }
+
+  function showGlobalLoading(titleText, subtitleHtml) {
+    const overlay = document.getElementById('year-loading-overlay');
+    const titleEl = document.querySelector('.year-loading-text');
+    const sub = document.getElementById('year-loading-sub');
+    if (overlay) overlay.classList.add('active');
+    if (titleEl) titleEl.textContent = titleText || 'Memproses...';
+    if (sub) {
+      if (subtitleHtml !== undefined) {
+        sub.style.display = subtitleHtml ? '' : 'none';
+        sub.innerHTML = subtitleHtml || '';
+      } else {
+        sub.style.display = 'none';
+      }
+    }
+  }
+
+  function hideGlobalLoading() {
+    const overlay = document.getElementById('year-loading-overlay');
+    if (overlay) overlay.classList.remove('active');
+  }
+
+  function showYearLoading(year) {
+    state.yearSwitchLoading = true;
+    showGlobalLoading('Mengganti ruang kerja tahun...', 'Memuat data tahun <span id="year-loading-year">' + esc(year) + '</span>');
+  }
+
+  function hideYearLoading() {
+    state.yearSwitchLoading = false;
+    hideGlobalLoading();
+  }
+
+  function prefetchTemplatesData() {
+    if (typeof api !== 'function') return;
+    // Jangan prefetch sebelum ruang kerja dibangun — config spreadsheet belum ada,
+    // pemanggilan template akan gagal dengan "CONFIG_SPREADSHEET_ID belum diisi".
+    if (!state.bootstrap || !state.bootstrap.configured) return;
+    if (typeof ensureTemplatesData === 'function') {
+      ensureTemplatesData().catch(function () {});
+    }
+  }
+
+  async function smartRefresh() {
+    try {
+      if (state.view === 'templates') {
+        if (typeof reloadTpl === 'function') reloadTpl(null, true); // true = silent background SWR
+        return;
+      }
+      state.bootstrap = await api('getBootstrap');
+      populateDashboardNav();
+    } catch (e) { /* silent */ }
+    rerenderCurrentView(state.view);
+  }
+</script>

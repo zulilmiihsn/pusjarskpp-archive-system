@@ -1,0 +1,174 @@
+<script>
+  window._renderId = 0;
+
+  function currentRenderId() { return window._renderId; }
+
+  /* ── View cache (UX vs realtime balance) ──
+     Goal: once a view loaded, future visits hit cache instantly.
+     - Cache valid for VIEW_FRESHNESS_MS (10s) OR until data version changes.
+     - If cache exists but stale (10s passed): show cached, refetch in background.
+     - If cache exists but version changed: invalidate, refetch synchronously.
+  */
+  var VIEW_FRESHNESS_MS = 10000;
+  var VIEW_CACHE_MAX_ENTRIES = 200;
+  var VERSION_POLL_INTERVAL_MS = 10000;
+  var BOOTSTRAP_TIMEOUT_MS = 15000;
+  const viewCache = Object.create(null);
+
+  function cacheKey(viewName, params) {
+    if (!params) return viewName;
+    const keys = Object.keys(params)
+      .filter(k => params[k] !== null && params[k] !== undefined && params[k] !== '')
+      .sort();
+    return viewName + ':' + keys.map(k => k + '=' + String(params[k])).join('&');
+  }
+
+  function getCachedView(viewName, params) {
+    return viewCache[cacheKey(viewName, params)] || null;
+  }
+
+  function setCachedView(viewName, params, data, version) {
+    viewCache[cacheKey(viewName, params)] = {
+      data: data,
+      version: version,
+      params: params || null,
+      ts: Date.now()
+    };
+    trimViewCache(VIEW_CACHE_MAX_ENTRIES);
+  }
+
+  function isCacheFresh(entry) {
+    if (!entry) return false;
+    return (Date.now() - entry.ts) < VIEW_FRESHNESS_MS;
+  }
+
+  function isCacheVersionValid(entry, currentVersion) {
+    if (!entry) return false;
+    if (currentVersion == null) return true;
+    return entry.version === currentVersion;
+  }
+
+  function isViewCacheValid(viewName, params) {
+    const entry = getCachedView(viewName, params);
+    if (!entry) return false;
+    return isCacheVersionValid(entry, getCurrentDataVersion());
+  }
+
+  const _inflightFetches = Object.create(null);
+
+  function hasInflightFetch(viewName, params) {
+    return !!_inflightFetches[cacheKey(viewName, params)];
+  }
+
+  function setInflightFetch(viewName, params) {
+    _inflightFetches[cacheKey(viewName, params)] = true;
+  }
+
+  function clearInflightFetch(viewName, params) {
+    delete _inflightFetches[cacheKey(viewName, params)];
+  }
+
+  function trimViewCache(maxEntries) {
+    const keys = Object.keys(viewCache);
+    if (keys.length <= maxEntries) return;
+    keys
+      .map(k => ({ k, ts: viewCache[k].ts }))
+      .sort((a, b) => a.ts - b.ts)
+      .slice(0, keys.length - maxEntries)
+      .forEach(x => delete viewCache[x.k]);
+  }
+
+  function invalidateViewCache(viewName) {
+    if (!viewName) {
+      for (const k of Object.keys(viewCache)) delete viewCache[k];
+      return;
+    }
+    const prefix = viewName + ':';
+    for (const k of Object.keys(viewCache)) {
+      if (k === viewName || k.indexOf(prefix) === 0) delete viewCache[k];
+    }
+  }
+
+  function getCurrentDataVersion() {
+    return _versionTracker && _versionTracker.version ? _versionTracker.version : null;
+  }
+
+  const state = {
+    view: 'dashboard',
+    bootstrap: null,
+    draft: null,
+    selectedFile: null,
+    workspaceSetup: null,
+    folderPicker: null,
+    workspaceInitLoading: false,
+    workspaceInitTargetYear: null,
+    selectedActivityId: null,
+    selectedSubActivityId: null,
+    selectedFolderId: null,
+    selectedFolderName: null,
+    selectedFolderBreadcrumb: [],
+    preselectedActivityId: null,
+    preselectedSubActivityId: null,
+    preselectedTargetFolderId: null,
+    preselectedTargetFolderName: null,
+    preselectedFolderBreadcrumb: [],
+    templateActiveCategoryId: '',
+    editMode: false,
+    editReturnFolder: null,
+    userNavigated: false,
+    initialUrlProcessed: false,
+    yearSwitchLoading: false,
+    draftPrompted: false
+  };
+
+  const STATUS_ENUM = { DRAFT: 'DRAFT', COMPLETED: 'COMPLETED', FAILED: 'FAILED', SUCCESS: 'SUCCESS', ERROR: 'ERROR' };
+
+  const METADATA_LABELS = {
+    no_berkas: 'Nomor Berkas',
+    nomor_item_arsip: 'Nomor Item Arsip',
+    nomor_surat: 'Nomor Surat',
+    kode_klasifikasi: 'Kode Klasifikasi',
+    uraian_informasi_berkas: 'Uraian Informasi Berkas',
+    tanggal: 'Tanggal',
+    tingkat_perkembangan: 'Tingkat Perkembangan',
+    jumlah: 'Jumlah',
+    satuan: 'Satuan',
+    no_filing_cabinet: 'Nomor Filing Cabinet',
+    no_laci: 'Nomor Laci',
+    no_folder: 'Nomor Folder',
+    klasifikasi_akses: 'Klasifikasi Keamanan & Akses Arsip',
+    ket: 'Keterangan',
+    lokasi_simpan: 'Lokasi Simpan'
+  };
+
+  const SELECT_OPTIONS = {
+    tingkat_perkembangan: ['Srikandi', 'Asli', 'Salinan', 'Cetak'],
+    klasifikasi_akses: ['Biasa', 'Terbatas', 'Rahasia'],
+    satuan: ['Lembar', 'Dokumen', 'Berkas', 'Paket']
+  };
+
+  /* ── State accessor helpers (single source of truth) ── */
+  function getSettings() { return state.bootstrap && state.bootstrap.settings; }
+  function getCurrentYear() { const s = getSettings(); return s ? s.currentYear : null; }
+  function getActivities() { return state.bootstrap ? state.bootstrap.activities || [] : []; }
+  function getHistory() { return state.bootstrap ? state.bootstrap.history || [] : []; }
+  function getProgress() { return state.bootstrap ? state.bootstrap.progress || {} : {}; }
+  function getDraft() { return state.draft; }
+  function setDraft(val) { state.draft = val; }
+  function isGuest() { return state.currentUser && state.currentUser.role === 'guest'; }
+  function isAdmin() { return state.currentUser && state.currentUser.role === 'admin'; }
+  function isKegiatanView() { return state.view === 'activity_detail' || state.view === 'archive_folder'; }
+  function isAdminView() { return ['accounts', 'settings', 'audit', 'inactive'].indexOf(state.view) !== -1; }
+
+  /* True jika ada modal/dialog yang sedang terbuka. Dipakai untuk menunda
+     auto-refresh dari version poll agar modal tidak tertutup & scroll tidak reset.
+     Pakai computed style supaya tahan terhadap modal inline-style maupun CSS-driven
+     (mis. confirm dialog yang tidak set style.display sendiri). */
+  function isAnyModalOpen() {
+    return Array.from(document.querySelectorAll('.modal-backdrop')).some(function (el) {
+      if (!el) return false;
+      var cs = window.getComputedStyle(el);
+      return cs.display !== 'none' && cs.visibility !== 'hidden';
+    });
+  }
+</script>

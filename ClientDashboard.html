@@ -1,0 +1,254 @@
+<script>
+  function renderDashboard() {
+    const data = state.bootstrap;
+    const progress = data.progress || { total: 0, completed: 0, failed: 0, byActivity: {} };
+    const activities = data.activities || [];
+    const recent = data.history || [];
+
+    setContent(`
+      <!-- HERO: Program & Kegiatan (Occupies top 80%) -->
+      <div class="activities-section">
+        <h2 class="activities-heading">Pilih Kegiatan</h2>
+        <p class="activities-sub">Pilih kegiatan untuk melihat daftar sub-kegiatan dan mengarsipkan surat.</p>
+        <div class="activities-grid">
+          ${activities.map(activityCard).join('')}
+        </div>
+      </div>
+
+      <!-- Bottom Split Section (Occupies remaining 20%) -->
+      <div class="dashboard-bottom-row">
+        
+        <!-- Left: Progress / Total & Completed Stats -->
+        <div class="dashboard-stats-panel panel panel-pad">
+          <h3 class="panel-subtitle">Ringkasan Progres</h3>
+
+          <!-- Primary KPI row -->
+          <div class="progress-kpi-row">
+            <div class="progress-kpi-main">
+              <div class="progress-kpi-ring">
+                <svg viewBox="0 0 72 72" class="kpi-ring-svg">
+                  <circle cx="36" cy="36" r="30" fill="none" stroke="var(--line)" stroke-width="5"/>
+                  <circle cx="36" cy="36" r="30" fill="none" stroke="var(--ok)" stroke-width="5"
+                    stroke-dasharray="${Math.round(188.5 * progress.completionRate / 100)} 188.5"
+                    stroke-linecap="round" transform="rotate(-90 36 36)"
+                    style="transition: stroke-dasharray 0.6s ease;"/>
+                </svg>
+                <span class="kpi-ring-pct">${progress.completionRate}%</span>
+              </div>
+              <div class="kpi-ring-caption">
+                <span class="kpi-ring-title">Tingkat Keberhasilan</span>
+                <span class="kpi-ring-detail">${progress.completed} berhasil dari ${progress.completed + progress.failed} proses</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stat chips -->
+          <div class="progress-chips">
+            <div class="progress-chip">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              <div class="chip-data">
+                <span class="chip-val">${progress.total}</span>
+                <span class="chip-lbl">Total Arsip</span>
+              </div>
+            </div>
+            <div class="progress-chip chip-ok">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              <div class="chip-data">
+                <span class="chip-val">${progress.completed}</span>
+                <span class="chip-lbl">Selesai</span>
+              </div>
+            </div>
+            <div class="progress-chip chip-warn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <div class="chip-data">
+                <span class="chip-val">${progress.draft || 0}</span>
+                <span class="chip-lbl">Draft</span>
+              </div>
+            </div>
+            <div class="progress-chip chip-error">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              <div class="chip-data">
+                <span class="chip-val">${progress.failed || 0}</span>
+                <span class="chip-lbl">Gagal</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Activity breakdown mini-bars -->
+          <div class="progress-breakdown">
+            <div class="breakdown-title">Per Kegiatan</div>
+            ${Object.keys(progress.byActivity).map(function(key) {
+              const act = progress.byActivity[key];
+              const pct = act.total > 0 ? Math.round((act.completed / act.total) * 100) : 0;
+              const barColor = { 
+                kepemimpinan: 'linear-gradient(90deg, var(--color-kepemimpinan-start), var(--color-kepemimpinan-end))', 
+                latsar_cpns: 'linear-gradient(90deg, var(--color-latsar-start), var(--color-latsar-end))', 
+                teknis: 'linear-gradient(90deg, var(--color-teknis-start), var(--color-teknis-end))', 
+                lain_lain: 'linear-gradient(90deg, var(--color-lain-start), var(--color-lain-end))' 
+              }[key] || 'var(--accent)';
+              return '<div class="breakdown-row">' +
+                '<div class="breakdown-row-head">' +
+                  '<span class="breakdown-name">' + esc(act.activityName) + '</span>' +
+                  '<span class="breakdown-count">' + act.completed + '/' + act.total + '</span>' +
+                '</div>' +
+                '<div class="breakdown-bar-track"><div class="breakdown-bar-fill" style="width:' + pct + '%; background:' + barColor + ';"></div></div>' +
+              '</div>';
+            }).join('')}
+          </div>
+
+          <!-- Time pulse -->
+          <div class="progress-pulse">
+            <div class="pulse-item">
+              <span class="pulse-val">${progress.today}</span>
+              <span class="pulse-lbl">Hari ini</span>
+            </div>
+            <div class="pulse-divider"></div>
+            <div class="pulse-item">
+              <span class="pulse-val">${progress.thisWeek}</span>
+              <span class="pulse-lbl">7 hari terakhir</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Recent History with Category, Sub-Category, and Status -->
+        <div class="dashboard-history-panel panel panel-pad">
+          <div class="panel-header-row">
+            <h3 class="panel-subtitle">Riwayat Terakhir</h3>
+            <button class="btn-text" id="open-history">Lihat Semua</button>
+          </div>
+          <div class="history-carousel">
+            <div class="recent-list" id="recent-list">
+              ${recent.length > 0 ? recent.map(function(item) {
+                const s = String(item.status || '').toUpperCase();
+                const isDraft = s === STATUS_ENUM.DRAFT;
+                const dateStr = formatDateStr(item.created_at);
+                const timeStr = formatTimeStr(item.created_at);
+                const statusText = isDraft ? 'Draft' : (s === STATUS_ENUM.COMPLETED ? 'Selesai' : 'Gagal');
+                const badgeClass = isDraft ? 'status-warn' : (s === STATUS_ENUM.COMPLETED ? 'status-ok' : 'status-error');
+                
+                // Format date as "30 MEI"
+                const dateParts = dateStr.split(' ');
+                const dateDayMonth = dateParts[0] + ' ' + (dateParts[1] || '').toUpperCase();
+                
+                return '<div class="recent-item">' +
+                  '<div class="recent-item-date-block">' +
+                    '<span class="recent-item-time-large">' + esc(timeStr) + '</span>' +
+                    '<span class="recent-item-date-small">' + esc(dateDayMonth) + '</span>' +
+                  '</div>' +
+                  '<div class="recent-item-body">' +
+                    '<div class="recent-item-body-top">' +
+                      '<span class="recent-item-cat">' + esc(getActivityName(item.activity_id)) + '</span>' +
+                      '<span class="status ' + badgeClass + '">' + statusText + '</span>' +
+                    '</div>' +
+                    '<span class="recent-item-sub">' + esc(getSubActivityName(item.activity_id, item.sub_activity_id)) + '</span>' +
+                    '<span class="recent-item-file">' +
+                      '<svg class="recent-file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>' +
+                      '<span>' + esc(item.final_file_name || '-') + '</span>' +
+                    '</span>' +
+                    (isDraft ? '<div class="recent-item-actions"><button class="btn btn-outline btn-sm resume-draft-btn" data-row=\'' + esc(encodeURIComponent(JSON.stringify(item))) + '\'>Lanjutkan</button><button class="btn btn-sm btn-danger delete-draft-btn" data-row=\'' + esc(encodeURIComponent(JSON.stringify(item))) + '\'>Hapus</button></div>' : '') +
+                  '</div>' +
+                '</div>';
+              }).join('') : `
+                <div class="empty empty-sm">
+                  Belum ada riwayat arsip
+                </div>
+              `}
+            </div>
+          </div>
+        </div>
+
+      </div>
+    `);
+
+    document.getElementById('open-history')?.addEventListener('click', () => setView('history'));
+
+    document.querySelectorAll('[data-action="view-activity"]').forEach(card => {
+      card.addEventListener('click', () => {
+        setView('activity_detail', { activityId: card.dataset.id });
+      });
+    });
+
+    startHistoryCarousel();
+    if (typeof bindResumeButtons === 'function') {
+      bindResumeButtons();
+    }
+  }
+
+  function startHistoryCarousel() {
+    const list = document.getElementById('recent-list');
+    if (!list) return;
+    const items = list.querySelectorAll('.recent-item');
+    const V = 4; const N = items.length;
+    if (N <= V) return;
+
+    const itemH = items[0].offsetHeight + 1;
+    const pageH = V * itemH;
+    const pages = Math.ceil(N / V);
+
+    const carousel = list.parentElement;
+    carousel.style.height = pageH + 'px';
+    carousel.style.overflow = 'hidden';
+
+    let pos = 0;
+
+    function slideTo(next, opts) {
+      opts = opts || {};
+      next = ((next % pages) + pages) % pages;
+      if (next === pos) return;
+
+      const isDown = next > pos || (next === 0 && pos === pages - 1);
+      const downDur = Math.max(0.5, Math.min(2.5, 3.2 / pages));
+      const dur = isDown ? (opts.fast ? 0.3 : downDur) : 0.3;
+
+      list.style.transition = 'transform ' + dur + 's cubic-bezier(.25,.1,.25,1)';
+      list.style.transform = 'translateY(' + (-next * pageH) + 'px)';
+      pos = next;
+    }
+
+    let intervalId = setInterval(function() { slideTo(pos + 1); }, 4200);
+
+    function restartInterval() {
+      clearInterval(intervalId);
+      intervalId = setInterval(function() { slideTo(pos + 1); }, 4200);
+    }
+
+    carousel.addEventListener('wheel', function(e) {
+      e.preventDefault();
+      if (e.deltaY > 0) slideTo(pos + 1);
+      else if (e.deltaY < 0) slideTo(pos - 1, { fast: true });
+      restartInterval();
+    }, { passive: false });
+  }
+
+  function activityCard(activity) {
+    const subs = activity.subActivities || [];
+    const stats = (state.bootstrap.progress.byActivity || {})[activity.activity_id] || { total: 0, completed: 0 };
+
+    return `
+      <div class="tall-card tall-card-${esc(activity.activity_id)}" data-action="view-activity" data-id="${esc(activity.activity_id)}" role="button" tabindex="0" aria-label="Buka ${esc(activity.activity_name)}">
+        <div class="tall-card-bg"></div>
+        <div class="tall-card-top">
+          <div class="tall-card-header-row">
+            <span class="tall-card-badge">Laci ${esc(activity.laci_no)}</span>
+            <span class="tall-card-metadata">Folder ${esc(activity.folder_no || '-')}</span>
+          </div>
+        </div>
+        
+        <div class="tall-card-middle">
+          <div class="tall-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="10" y1="7.5" x2="14" y2="7.5"></line>
+              <line x1="10" y1="16.5" x2="14" y2="16.5"></line>
+            </svg>
+          </div>
+          <h3 class="tall-card-title">${esc(activity.activity_name)}</h3>
+          <div class="tall-card-desc">
+            ${subs.length} sub-kegiatan &bull; ${stats.completed} berkas diarsipkan
+          </div>
+        </div>
+      </div>
+    `;
+  }
+</script>

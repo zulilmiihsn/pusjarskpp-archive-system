@@ -1,0 +1,224 @@
+<script>
+  const FOLDER_PICKER_CLIENT_PAGE_SIZE = 80;
+
+  function bindFolderPickerButtons() {
+    document.querySelectorAll('[data-folder-picker]').forEach(button => {
+      button.addEventListener('click', () => {
+        const targetInputId = button.dataset.targetInput;
+        const targetInput = document.getElementById(targetInputId);
+        const startFolderId = targetInput && targetInput.value ? targetInput.value.trim() : 'root';
+        openFolderPicker(targetInputId, button.dataset.title || 'Pilih folder', startFolderId);
+      });
+    });
+  }
+
+  async function openFolderPicker(targetInputId, title, startFolderId) {
+    state.folderPicker = {
+      targetInputId: targetInputId,
+      title: title,
+      loading: true,
+      current: null,
+      parent: null,
+      folders: [],
+      nextPageToken: '',
+      loadingMore: false
+    };
+    renderFolderPicker();
+    try {
+      await loadFolderPicker(startFolderId || 'root');
+    } catch (error) {
+      showToast('Folder tidak bisa dibuka, menampilkan Drive Saya.');
+      await loadFolderPicker('root');
+    }
+  }
+
+  async function loadFolderPicker(parentFolderId, options) {
+    if (!state.folderPicker) return;
+    options = options || {};
+    const append = !!options.append;
+    if (append) {
+      state.folderPicker.loadingMore = true;
+    } else {
+      state.folderPicker.loading = true;
+      state.folderPicker.folders = [];
+      state.folderPicker.nextPageToken = '';
+    }
+    renderFolderPicker();
+    const result = await api('listDriveFolders', {
+      parentFolderId: parentFolderId || 'root',
+      pageSize: FOLDER_PICKER_CLIENT_PAGE_SIZE,
+      pageToken: options.pageToken || ''
+    }, { timeoutMs: 45000 });
+    state.folderPicker.loading = false;
+    state.folderPicker.loadingMore = false;
+    state.folderPicker.current = result.current;
+    state.folderPicker.parent = result.parent;
+    state.folderPicker.folders = append
+      ? (state.folderPicker.folders || []).concat(result.folders || [])
+      : (result.folders || []);
+    state.folderPicker.nextPageToken = result.nextPageToken || '';
+    renderFolderPicker();
+  }
+
+  function renderFolderPicker() {
+    const host = ensureFolderPickerHost();
+    const picker = state.folderPicker;
+    if (!picker) {
+      host.innerHTML = '';
+      return;
+    }
+
+    const current = picker.current || {};
+    const canSelectCurrent = current.id && !current.isRoot;
+    host.innerHTML = `
+      <div class="modal-backdrop" data-folder-close>
+        <div class="modal-card folder-picker" role="dialog" aria-modal="true" aria-label="${esc(picker.title)}">
+          <div class="folder-picker-topbar">
+            <div class="folder-picker-title">
+              <span class="folder-picker-drive-icon" aria-hidden="true">${folderDriveIconSvg()}</span>
+              <div>
+                <div class="small muted">Google Drive</div>
+                <h2>${esc(picker.title)}</h2>
+              </div>
+            </div>
+            <button class="btn icon-btn" data-folder-close aria-label="Tutup">x</button>
+          </div>
+          <div class="folder-picker-toolbar">
+            <button class="folder-back-button" data-folder-back ${picker.parent ? '' : 'disabled'} aria-label="Kembali ke folder sebelumnya">
+              ${folderArrowLeftIconSvg()}
+              <span>Kembali</span>
+            </button>
+            <div class="folder-address" title="${esc(current.name || 'Drive Saya')}">
+              <span class="folder-address-icon" aria-hidden="true">${folderIconSvg()}</span>
+              <span class="folder-address-label">${esc(current.name || 'Drive Saya')}</span>
+            </div>
+          </div>
+          <div class="folder-picker-body">
+            ${picker.loading ? folderPickerLoadingHtml() : folderListHtml(picker)}
+          </div>
+          <div class="folder-picker-footer">
+            <div class="folder-selected-summary">
+              <span class="folder-selected-label">Folder dipilih</span>
+              <strong>${esc(canSelectCurrent ? current.name : 'Pilih folder tujuan')}</strong>
+            </div>
+            <button class="btn btn-primary folder-select-button" data-folder-select ${canSelectCurrent ? '' : 'disabled'}>Pilih Folder</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    host.querySelectorAll('[data-folder-close]').forEach(element => {
+      element.addEventListener('click', event => {
+        if (event.target === element || element.tagName === 'BUTTON') closeFolderPicker();
+      });
+    });
+    const backButton = host.querySelector('[data-folder-back]');
+    if (backButton && picker.parent) {
+      backButton.addEventListener('click', () => loadFolderPicker(picker.parent.id));
+    }
+    const selectButton = host.querySelector('[data-folder-select]');
+    if (selectButton && current.id && !current.isRoot) {
+      selectButton.addEventListener('click', selectCurrentFolder);
+    }
+    host.querySelectorAll('[data-folder-open]').forEach(button => {
+      button.addEventListener('click', () => loadFolderPicker(button.dataset.folderId));
+    });
+    const moreButton = host.querySelector('[data-folder-load-more]');
+    if (moreButton && picker.nextPageToken) {
+      moreButton.addEventListener('click', () => {
+        loadFolderPicker(current.id || 'root', { append: true, pageToken: picker.nextPageToken });
+      });
+    }
+  }
+
+  function folderListHtml(picker) {
+    const folders = picker.folders || [];
+    if (!folders || !folders.length) {
+      return `
+        <div class="folder-empty-state">
+          <span class="folder-empty-icon" aria-hidden="true">${folderIconSvg()}</span>
+          <strong>Folder ini kosong</strong>
+          <span>Tidak ada folder lain di dalam lokasi ini.</span>
+        </div>
+      `;
+    }
+    return `
+      <div class="folder-list">
+        ${folders.map(folder => `
+          <button class="folder-row" data-folder-open data-folder-id="${esc(folder.id)}" title="Buka ${esc(folder.name)}">
+            <span class="folder-row-icon" aria-hidden="true">${folderIconSvg()}</span>
+            <div class="folder-row-copy">
+              <strong>${esc(folder.name)}</strong>
+              <span>Folder</span>
+            </div>
+            <span class="folder-row-open" aria-hidden="true">${folderChevronRightIconSvg()}</span>
+          </button>
+        `).join('')}
+      </div>
+      ${picker.nextPageToken ? `
+        <div class="button-row justify-center mt-12">
+          <button class="btn" data-folder-load-more ${picker.loadingMore ? 'disabled' : ''}>
+            ${picker.loadingMore ? 'Memuat...' : 'Muat folder lainnya'}
+          </button>
+        </div>
+      ` : ''}
+    `;
+  }
+
+  function folderPickerLoadingHtml() {
+    return `
+      <div class="folder-list" aria-live="polite">
+        ${[1, 2, 3, 4].map(() => `
+          <div class="folder-row folder-row-skeleton">
+            <span class="skeleton folder-skeleton-icon"></span>
+            <span class="skeleton folder-skeleton-name"></span>
+            <span class="skeleton folder-skeleton-action"></span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  function folderDriveIconSvg() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="#1A73E8" d="M8.9 4h6.2l6 10.4-3.1 5.4L12 9.4 6 19.8l-3.1-5.4L8.9 4Z"/><path fill="#34A853" d="M2.9 14.4 6 19.8h12l3.1-5.4H2.9Z"/><path fill="#FBBC04" d="M8.9 4 2.9 14.4H15L8.9 4Z"/></svg>';
+  }
+
+  function folderIconSvg() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 6.75A2.25 2.25 0 0 1 5.75 4.5h4.4c.6 0 1.17.24 1.59.66l1.09 1.09h5.42a2.25 2.25 0 0 1 2.25 2.25v8.75a2.25 2.25 0 0 1-2.25 2.25H5.75a2.25 2.25 0 0 1-2.25-2.25V6.75Z" fill="currentColor"/></svg>';
+  }
+
+  function folderArrowLeftIconSvg() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14.7 6.3a1 1 0 0 1 0 1.4L11.41 11H19a1 1 0 1 1 0 2h-7.59l3.3 3.3a1 1 0 0 1-1.42 1.4l-5-5a1 1 0 0 1 0-1.4l5-5a1 1 0 0 1 1.42 0Z" fill="currentColor"/></svg>';
+  }
+
+  function folderChevronRightIconSvg() {
+    return '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.3 6.3a1 1 0 0 1 1.4 0l5 5a1 1 0 0 1 0 1.4l-5 5a1 1 0 1 1-1.4-1.4l4.29-4.3L9.3 7.7a1 1 0 0 1 0-1.4Z" fill="currentColor"/></svg>';
+  }
+
+  function selectCurrentFolder() {
+    const picker = state.folderPicker;
+    if (!picker || !picker.current) return;
+    const input = document.getElementById(picker.targetInputId);
+    if (input) input.value = picker.current.id;
+    const name = picker.current.name || 'folder terpilih';
+    const label = document.querySelector(`[data-folder-label-for="${picker.targetInputId}"]`);
+    if (label) label.textContent = name;
+    closeFolderPicker();
+    showToast('Folder dipilih: ' + name);
+  }
+
+  function closeFolderPicker() {
+    state.folderPicker = null;
+    renderFolderPicker();
+  }
+
+  function ensureFolderPickerHost() {
+    let host = document.getElementById('folder-picker-root');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'folder-picker-root';
+      document.body.appendChild(host);
+    }
+    return host;
+  }
+</script>

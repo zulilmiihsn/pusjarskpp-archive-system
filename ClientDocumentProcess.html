@@ -1,0 +1,364 @@
+<script>
+  function renderDocumentProcess() {
+    const data = state.bootstrap;
+    if (!data) {
+      setContent('<div class="error">Konfigurasi data aplikasi belum termuat. Silakan muat ulang halaman.</div>');
+      return;
+    }
+
+    const activities = data.activities || [];
+    const first = activities[0];
+    const activityId = state.preselectedActivityId || (first ? first.activity_id : '');
+    const activity = activities.find(a => a.activity_id === activityId);
+
+    let subId = state.preselectedSubActivityId;
+    if (!subId && activity && activity.subActivities && activity.subActivities.length) {
+      subId = activity.subActivities[0].sub_activity_id;
+    }
+    const sub = activity ? (activity.subActivities || []).find(s => s.sub_activity_id === subId) : null;
+
+    const activityOptions = activities.map(a => {
+      const sel = activityId === a.activity_id ? 'selected' : '';
+      return `<option value="${esc(a.activity_id)}" ${sel}>${esc(a.activity_name)}</option>`;
+    }).join('');
+
+    const hasBack = !!state.preselectedTargetFolderId || !!sub;
+
+    setContent(`
+      ${hasBack ? `
+        <div class="toolbar mb-16">
+          <button class="btn" id="doc-back-to-archive-folder" type="button">
+            <svg class="svg-inline-btn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Kembali ke Folder
+          </button>
+        </div>
+      ` : ''}
+
+      <div class="process-layout">
+
+        <div class="process-card">
+          <div class="process-card-header">
+            <div class="process-card-step">1</div>
+            <div class="process-card-title">Info Kegiatan</div>
+            <div class="process-card-desc">Pilih kegiatan dan sub-kegiatan tujuan</div>
+          </div>
+
+          <div class="process-selectors">
+            <div class="form-field">
+              <label for="doc-activity-id">Kegiatan</label>
+              <select id="doc-activity-id">${activityOptions}</select>
+            </div>
+            <div class="form-field">
+              <label for="doc-sub-activity-id">Sub-kegiatan</label>
+              <select id="doc-sub-activity-id"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="process-card">
+          <div class="process-card-header">
+            <div class="process-card-step">2</div>
+            <div class="process-card-title">Tautan Dokumen</div>
+            <div class="process-card-desc">Tempel tautan Google Drive untuk setiap kategori (isi yang ada)</div>
+          </div>
+          <div class="form-grid" style="grid-template-columns: 1fr;">
+            <div class="form-field drive-link-field">
+              <label for="doc-url-dfp">Data Fix Peserta</label>
+              <div class="drive-link-input">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
+                  <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
+                </svg>
+                <input id="doc-url-dfp" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Contoh: drive.google.com/...">
+              </div>
+            </div>
+            <div class="form-field drive-link-field">
+              <label for="doc-url-materi">Kumpulan Materi</label>
+              <div class="drive-link-input">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
+                  <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
+                </svg>
+                <input id="doc-url-materi" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Contoh: drive.google.com/...">
+              </div>
+            </div>
+            <div class="form-field drive-link-field">
+              <label for="doc-url-laporan">Laporan Aktualisasi/Inovasi</label>
+              <div class="drive-link-input">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
+                  <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
+                </svg>
+                <input id="doc-url-laporan" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Contoh: drive.google.com/...">
+              </div>
+            </div>
+            <div class="form-field drive-link-field">
+              <label for="doc-url-sertifikat">Sertifikat</label>
+              <div class="drive-link-input">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
+                  <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
+                </svg>
+                <input id="doc-url-sertifikat" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Contoh: drive.google.com/...">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="process-sticky-bar" id="doc-finalize-bar">
+          <div class="preview-section">
+            <div class="preview-label">Tautan terisi</div>
+            <div class="preview-name" id="doc-selected-tab">0 dari 4</div>
+          </div>
+          <div class="action-group">
+            <button class="btn btn-primary" id="doc-submit-btn" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              Simpan Dokumen ke Folder <span class="kbd-badge">Ctrl+Enter</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    `);
+
+    bindDocumentProcessForm();
+  }
+
+  function docProcessContextHtml(activity, sub) {
+    if (!activity) return '';
+    const breadcrumb = [activity.activity_name, sub ? sub.sub_activity_name : ''].filter(Boolean);
+    const target = sub ? sub.sub_activity_name : 'Pilih sub-kegiatan';
+    return `
+      <div>
+        <div class="small muted">Lokasi dokumen</div>
+        <div class="breadcrumb-line">${breadcrumb.map(i => '<span>' + esc(i) + '</span>').join('<span class="breadcrumb-sep">/</span>')}</div>
+        <strong>${esc(target)}</strong>
+        ${sub ? `
+          <div class="small muted mt-8">
+            Tautan dokumen pendukung disimpan sebagai pintasan di folder Dokumen, lalu dicatat ke kolom rangkuman sub-kegiatan ini.
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  function bindDocumentProcessForm() {
+    const actSel = document.getElementById('doc-activity-id');
+    const subSel = document.getElementById('doc-sub-activity-id');
+    const submitBtn = document.getElementById('doc-submit-btn');
+    const preview = document.getElementById('doc-selected-tab');
+
+    const categories = [
+      { id: 'doc-url-dfp', name: 'Data Fix Peserta' },
+      { id: 'doc-url-materi', name: 'Kumpulan Materi' },
+      { id: 'doc-url-laporan', name: 'Laporan Aktualisasi/Inovasi' },
+      { id: 'doc-url-sertifikat', name: 'Sertifikat' }
+    ];
+    const urlInputs = categories.map(c => ({ ...c, el: document.getElementById(c.id) }));
+
+    const backBtn = document.getElementById('doc-back-to-archive-folder');
+    if (backBtn) {
+      backBtn.addEventListener('click', () => {
+        if (state.preselectedTargetFolderId) {
+          setView('archive_folder', {
+            activityId: state.preselectedActivityId,
+            subActivityId: state.preselectedSubActivityId,
+            folderId: state.preselectedTargetFolderId,
+            folderName: state.preselectedTargetFolderName,
+            folderBreadcrumb: state.preselectedFolderBreadcrumb
+          });
+        } else {
+          const data = state.bootstrap;
+          if (!data || !actSel || !subSel) return;
+          const activity = (data.activities || []).find(a => a.activity_id === actSel.value);
+          const sub = activity ? (activity.subActivities || []).find(s => s.sub_activity_id === subSel.value) : null;
+          if (sub && sub.folder_id) {
+            setView('archive_folder', {
+              activityId: activity.activity_id,
+              subActivityId: sub.sub_activity_id,
+              folderId: sub.folder_id,
+              folderName: sub.sub_activity_name,
+              folderBreadcrumb: [activity.activity_name, sub.sub_activity_name]
+            });
+          } else {
+            setView('dashboard');
+          }
+        }
+      });
+    }
+
+    let _docLinkFocusedField = null;
+    let _docLinkLoading = false;
+    let _prevActValue = null;
+    let _prevSubValue = null;
+
+    function setDocLinkInputsDisabled_(disabled) {
+      if (_docLinkFocusedField && disabled) return;
+      urlInputs.forEach(function (u) {
+        if (!u.el) return;
+        u.el.disabled = disabled;
+      });
+      var section = urlInputs[0] && urlInputs[0].el && urlInputs[0].el.closest('.process-card');
+      if (section) section.classList.toggle('loading', disabled);
+    }
+
+    function setDocLinkFocusTracking_() {
+      var allFields = urlInputs.map(function (u) { return u.el; });
+      allFields.forEach(function (el) {
+        if (!el) return;
+        el.addEventListener('focus', function () { _docLinkFocusedField = el; });
+        el.addEventListener('blur', function () {
+          if (_docLinkFocusedField === el) _docLinkFocusedField = null;
+        });
+      });
+    }
+
+    const fillSubs = () => {
+      const data = state.bootstrap;
+      if (!data || !actSel) return;
+      const newActValue = actSel.value;
+      const changed = newActValue !== _prevActValue;
+      _prevActValue = newActValue;
+      if (!changed) return;
+      const activity = (data.activities || []).find(a => a.activity_id === newActValue);
+      const subs = activity ? (activity.subActivities || []) : [];
+      const selectedId = state.preselectedSubActivityId || (subs.length ? subs[0].sub_activity_id : '');
+      subSel.innerHTML = subs.map(s =>
+        `<option value="${esc(s.sub_activity_id)}"${s.sub_activity_id === selectedId ? ' selected' : ''}>${esc(s.sub_activity_name)}</option>`
+      ).join('');
+      setDocLinkInputsDisabled_(true);
+      updateDocContext();
+    };
+
+    const updateDocContext = () => {
+      const data = state.bootstrap;
+      if (!data || !actSel || !subSel) return;
+      const newSubValue = subSel.value;
+      const changed = newSubValue !== _prevSubValue;
+      _prevSubValue = newSubValue;
+      if (!changed) return;
+      const activity = (data.activities || []).find(a => a.activity_id === actSel.value);
+      const sub = activity ? (activity.subActivities || []).find(s => s.sub_activity_id === newSubValue) : null;
+      const ctx = document.getElementById('doc-target-context');
+      if (ctx) ctx.innerHTML = docProcessContextHtml(activity, sub);
+      checkDocSubmit();
+      setDocLinkInputsDisabled_(true);
+      loadDocumentProcessDefaults_(activity, sub);
+    };
+
+    const getFilledCount = () => urlInputs.filter(u => u.el && u.el.value.trim()).length;
+
+    const checkDocSubmit = () => {
+      if (!submitBtn) return;
+      const count = getFilledCount();
+      submitBtn.disabled = !(count > 0 && subSel && subSel.value);
+      if (preview) preview.textContent = count > 0 ? count + ' dari 4' : '0 dari 4';
+    };
+
+    let defaultsRequestId = 0;
+    async function loadDocumentProcessDefaults_(activity, sub) {
+      if (!activity || !sub) return;
+      if (state.editMode) return;
+      const requestId = ++defaultsRequestId;
+      _docLinkLoading = true;
+      try {
+        const result = await api('getArchiveMetadataDefaults', {
+          year: (state.bootstrap.settings && state.bootstrap.settings.currentYear) || state.bootstrap.selectedYear || '',
+          activityId: activity.activity_id,
+          subActivityId: sub.sub_activity_id
+        });
+        if (requestId !== defaultsRequestId) return;
+        const meta = result && result.metadata ? result.metadata : {};
+
+        urlInputs.forEach(u => {
+          if (!u.el) return;
+          if (u.id === 'doc-url-dfp') u.el.value = meta.url_dfp || '';
+          if (u.id === 'doc-url-materi') u.el.value = meta.url_materi || '';
+          if (u.id === 'doc-url-laporan') u.el.value = meta.url_laporan || '';
+          if (u.id === 'doc-url-sertifikat') u.el.value = meta.url_sertifikat || '';
+        });
+        checkDocSubmit();
+      } catch (error) {
+        console.warn('Gagal memuat default metadata dokumen: ' + (error.message || error));
+      } finally {
+        if (requestId === defaultsRequestId) {
+          _docLinkLoading = false;
+          setDocLinkInputsDisabled_(false);
+        }
+      }
+    }
+
+    if (actSel) actSel.addEventListener('change', fillSubs);
+    if (subSel) subSel.addEventListener('change', updateDocContext);
+    urlInputs.forEach(u => { if (u.el) u.el.addEventListener('input', checkDocSubmit); });
+
+
+    fillSubs();
+    setDocLinkFocusTracking_();
+
+    if (submitBtn) submitBtn.addEventListener('click', async () => {
+      const data = state.bootstrap;
+      if (!data || !actSel || !subSel) return;
+      const activity = (data.activities || []).find(a => a.activity_id === actSel.value);
+      const sub = activity ? (activity.subActivities || []).find(s => s.sub_activity_id === subSel.value) : null;
+      if (!sub || !sub.folder_id) {
+        showToast('Sub-kegiatan tidak memiliki folder tujuan. Pastikan sudah dikonfigurasi.');
+        return;
+      }
+
+      const filled = urlInputs.filter(u => u.el && u.el.value.trim());
+      if (filled.length === 0) return;
+
+      const originalBtnHtml = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = 'Menyimpan...';
+      const filledNames = filled.map(item => item.name).join(', ');
+      const loadingToast = showToast('Menyimpan ' + filledNames + '...', true);
+
+      let successCount = 0;
+      let failCount = 0;
+
+      const payloadItems = filled.map(item => ({
+        parentFolderId: sub.folder_id,
+        name: item.name,
+        url: item.el.value.trim()
+      }));
+
+      try {
+        const result = await api('bulkAddArchiveDocumentLinks', {
+          year: data.selectedYear || (data.settings && data.settings.currentYear) || '',
+          activityId: activity.activity_id,
+          subActivityId: sub.sub_activity_id,
+          items: payloadItems
+        });
+        successCount = result.successCount || 0;
+        failCount = result.failCount || 0;
+        if (result.errors && result.errors.length) {
+          console.error('Beberapa dokumen gagal ditambahkan:', result.errors);
+        }
+      } catch (error) {
+        failCount = filled.length;
+        console.error('Gagal memproses dokumen massal:', errorMessage(error));
+      }
+
+      removeToast(loadingToast);
+      if (successCount > 0) invalidateViewCache('archive_folder');
+
+      if (failCount === 0) {
+        showToast(successCount + ' dokumen berhasil ditautkan ke ' + sub.sub_activity_name + '.');
+        filled.forEach(u => { if (u.el) u.el.value = ''; });
+        checkDocSubmit();
+        loadDocumentProcessDefaults_(activity, sub);
+        submitBtn.innerHTML = originalBtnHtml;
+      } else {
+        showToast(successCount + ' berhasil, ' + failCount + ' gagal. Cek log konsol untuk detail.');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnHtml;
+      }
+    });
+  }
+
+</script>

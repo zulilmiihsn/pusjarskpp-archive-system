@@ -1,0 +1,170 @@
+<script>
+  function renderHistory() {
+    setContent(`
+      ${pageCardHtml({
+        title: 'Riwayat Arsip',
+        subtitle: 'Dokumen yang diproses melalui sistem akan tercatat di sini.',
+        icon: iconSvg('history'),
+        actions: '<button class="btn" id="refresh-history">' + iconSvg('refresh') + 'Segarkan</button>',
+        body: historyTable(state.bootstrap.history || []),
+        extraClass: 'history-page-card'
+      })}
+    `);
+    document.getElementById('refresh-history').addEventListener('click', loadBootstrap);
+    bindResumeButtons();
+  }
+
+  function bindResumeButtons() {
+    document.querySelectorAll('.resume-draft-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rowStr = btn.dataset.row;
+        try {
+          const row = JSON.parse(decodeURIComponent(rowStr));
+          if (row.metadata_json) {
+             state.draft = JSON.parse(row.metadata_json);
+             try {
+                localStorage.setItem(typeof getProcessStateKey === 'function' ? getProcessStateKey() : ('portal_arsip_' + (state.currentYear || 'default_year') + '_process_state_general'), JSON.stringify({ draft: state.draft, inputState: {} }));
+              } catch(e) { console.warn('localStorage set failed:', e); }
+              setView('process');
+             showToast('Melanjutkan draf...');
+          } else {
+             showToast('Data draf kosong.');
+          }
+        } catch (e) {
+          showToast('Gagal memuat draf: ' + e.message);
+        }
+      });
+    });
+
+    document.querySelectorAll('.delete-draft-btn').forEach(button => {
+      button.addEventListener('click', async () => {
+        if (!await showConfirmModal('Hapus draf ini selamanya?')) return;
+        const rowStr = button.dataset.row;
+        const row = JSON.parse(decodeURIComponent(rowStr));
+        button.disabled = true;
+        var delDraftToast = showToast('Menghapus draf...', true);
+        try {
+          await api('deleteDraft', { archiveId: row.archive_id, year: row.year });
+          if (delDraftToast) removeToast(delDraftToast);
+          showToast('Draf berhasil dihapus.');
+          loadBootstrap();
+        } catch (e) {
+          if (delDraftToast) removeToast(delDraftToast);
+          showToast('Gagal menghapus draf: ' + (e.message || String(e)));
+          button.disabled = false;
+        }
+      });
+    });
+
+    document.querySelectorAll('.edit-metadata-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const rowStr = btn.dataset.row;
+        try {
+          const row = JSON.parse(decodeURIComponent(rowStr));
+          btn.disabled = true;
+          showToast('Mengambil data metadata...');
+          try {
+            const draftObj = await api('getArchiveMetadata', { archiveId: row.archive_id, year: row.year, logData: row });
+            state.draft = draftObj;
+            state.editMode = true;
+            setView('process');
+            showToast('Memasuki mode edit metadata...');
+          } catch (e) {
+            showToast('Gagal memuat metadata: ' + (e.message || e));
+          }
+          btn.disabled = false;
+        } catch (e) {
+          showToast('Gagal memuat data arsip: ' + e.message);
+        }
+      });
+    });
+
+    document.querySelectorAll('.delete-archive-btn').forEach(button => {
+      button.addEventListener('click', async () => {
+        if (!await showConfirmModal('Hapus arsip ini selamanya? Surat akan dipindah ke Tempat Sampah Drive, dan baris spreadsheet akan dihapus beserta pengurutan ulang nomor item.')) return;
+        const rowStr = button.dataset.row;
+        const row = JSON.parse(decodeURIComponent(rowStr));
+        button.disabled = true;
+        var delArchiveToast = showToast('Menghapus arsip...', true);
+        try {
+          await api('trashArchiveFile', { fileId: row.final_file_id, year: row.year });
+          if (delArchiveToast) removeToast(delArchiveToast);
+          showToast('Arsip berhasil dihapus.');
+          loadBootstrap();
+        } catch (e) {
+          if (delArchiveToast) removeToast(delArchiveToast);
+          showToast('Gagal menghapus arsip: ' + (e.message || String(e)));
+          button.disabled = false;
+        }
+      });
+    });
+  }
+
+  function historyTable(rows, isSimplified = false) {
+    if (!rows || !rows.length) {
+      return `
+        <div class="empty-state-container">
+          <div class="empty-state-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <h3>Semua Arsip Rapi</h3>
+          <p>Dokumen yang Anda proses melalui sistem ini akan muncul di sini sebagai log riwayat aktivitas.</p>
+        </div>
+      `;
+    }
+    return `
+      <div class="overflow-auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Waktu</th>
+              ${isSimplified ? '' : '<th>Kegiatan</th>'}
+              <th>Berkas Akhir</th>
+              ${isSimplified ? '' : '<th>Folder Tujuan</th>'}
+              ${isSimplified ? '' : '<th>Baris <span class="form-hint-inline">(no. baris di lembar kerja)</span></th>'}
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr>
+                <td>${esc(formatDateTime(row.created_at))}</td>
+                ${isSimplified ? '' : `<td>${esc(getActivityName(row.activity_id))}<br><span class="muted small">${esc(getSubActivityName(row.activity_id, row.sub_activity_id))}</span></td>`}
+                <td>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <svg class="recent-file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="width: 13px; height: 13px; color: var(--muted); flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    <span>${esc(row.final_file_name || '-')}</span>
+                  </div>
+                </td>
+                ${isSimplified ? '' : `<td><span class="small">${esc(row.target_folder_name || '-')}</span>${row.target_folder_path ? `<br><span class="muted small">${esc(row.target_folder_path)}</span>` : ''}</td>`}
+                ${isSimplified ? '' : `<td>${esc(row.spreadsheet_row_number || '-')}</td>`}
+                <td>
+                  ${statusBadge(row.status)}
+                  ${String(row.status || '').toUpperCase() === STATUS_ENUM.DRAFT ? `<div class="mt-6 flex gap-4"><button class="btn btn-sm btn-outline resume-draft-btn" data-row='${esc(encodeURIComponent(JSON.stringify(row)))}'>Lanjutkan</button><button class="btn btn-sm btn-danger delete-draft-btn" data-row='${esc(encodeURIComponent(JSON.stringify(row)))}'>Hapus</button></div>` : ''}
+                  ${(String(row.status || '').toUpperCase() === STATUS_ENUM.COMPLETED || String(row.status || '').toUpperCase() === STATUS_ENUM.SUCCESS) ? `<div class="mt-6 flex gap-4"><button class="btn btn-sm btn-outline edit-metadata-btn" data-row='${esc(encodeURIComponent(JSON.stringify(row)))}'>Edit Metadata</button><button class="btn btn-sm btn-danger delete-archive-btn" data-row='${esc(encodeURIComponent(JSON.stringify(row)))}'>Hapus Arsip</button></div>` : ''}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function statusBadge(status) {
+    const s = String(status || '').toUpperCase();
+    let cls = '';
+    let label = status || '-';
+    if (s === STATUS_ENUM.COMPLETED || s === STATUS_ENUM.SUCCESS) { cls = 'status-ok'; label = 'Selesai'; }
+    else if (s === STATUS_ENUM.FAILED || s === STATUS_ENUM.ERROR) { cls = 'status-error'; label = 'Gagal'; }
+    else if (s === 'REVIEW') { cls = 'status-warn'; label = 'Perlu Tinjauan'; }
+    else if (s === STATUS_ENUM.DRAFT) { cls = 'status-warn'; label = 'Draf'; }
+    return `<span class="status ${cls}">${esc(label)}</span>`;
+  }
+</script>

@@ -1,0 +1,1029 @@
+<script>
+  let _templatesData = null;
+  let _templateReloadModalTarget = '';
+
+  const DEFAULT_TEMPLATE_CATEGORY_COLOR = '#2563EB';
+  const TEMPLATE_CATEGORY_COLORS = [
+    { hex: '#2563EB', name: 'Biru Arsip' },
+    { hex: '#0F766E', name: 'Hijau Tertib' },
+    { hex: '#C2410C', name: 'Oranye Kerja' },
+    { hex: '#7C3AED', name: 'Ungu Formal' },
+    { hex: '#BE123C', name: 'Merah Wibawa' },
+    { hex: '#0369A1', name: 'Biru Laut' },
+    { hex: '#4F46E5', name: 'Nila' },
+    { hex: '#475569', name: 'Batu Tulis Netral' }
+  ];
+
+  let _templatesPromise = null;
+
+  async function ensureTemplatesData() {
+    if (_templatesData) {
+      return _templatesData;
+    }
+    if (_templatesPromise) {
+      return _templatesPromise;
+    }
+    _templatesPromise = (async function () {
+      try {
+        const result = await getCachedOrFetch('templates', null, function () {
+          return api('getTemplatesData');
+        });
+        _templatesData = result.data;
+        return result.data;
+      } catch (e) {
+        if (!_templatesData) _templatesData = { categories: [], uncategorized: [] };
+        return _templatesData;
+      } finally {
+        _templatesPromise = null;
+      }
+    })();
+    return _templatesPromise;
+  }
+
+  function normalizeTemplateCategoryColor(color) {
+    const candidate = String(color || '').trim().toUpperCase();
+    if (/^#[0-9A-F]{6}$/.test(candidate)) return candidate;
+    return DEFAULT_TEMPLATE_CATEGORY_COLOR;
+  }
+
+  function hexToRgbParts_(hex) {
+    const clean = normalizeTemplateCategoryColor(hex).slice(1);
+    return [
+      parseInt(clean.slice(0, 2), 16),
+      parseInt(clean.slice(2, 4), 16),
+      parseInt(clean.slice(4, 6), 16)
+    ].join(', ');
+  }
+
+  function mixHex_(baseHex, targetHex, ratio) {
+    const source = normalizeTemplateCategoryColor(baseHex).slice(1);
+    const target = normalizeTemplateCategoryColor(targetHex || '#FFFFFF').slice(1);
+    const mixed = [0, 2, 4].map(function (offset) {
+      const s = parseInt(source.slice(offset, offset + 2), 16);
+      const t = parseInt(target.slice(offset, offset + 2), 16);
+      const value = Math.round(s + ((t - s) * ratio));
+      return value.toString(16).padStart(2, '0');
+    }).join('');
+    return '#' + mixed.toUpperCase();
+  }
+
+  function colorLabelByHex_(hex) {
+    const normalized = normalizeTemplateCategoryColor(hex);
+    const matched = TEMPLATE_CATEGORY_COLORS.find(function (item) { return item.hex === normalized; });
+    return matched ? matched.name : 'Warna Kustom';
+  }
+
+  function buildTemplateThemeStyle(color, mode) {
+    const base = normalizeTemplateCategoryColor(color);
+    const soft = mixHex_(base, '#FFFFFF', mode === 'neutral' ? 0.78 : 0.50);
+    const mid = mixHex_(base, '#FFFFFF', mode === 'neutral' ? 0.54 : 0.20);
+    const deep = mixHex_(base, '#000000', mode === 'neutral' ? 0.22 : 0.14);
+    const textDark = mixHex_(base, '#000000', 0.58);
+    return [
+      '--tc-primary:' + base,
+      '--tc-primary-rgb:' + hexToRgbParts_(base),
+      '--tc-text-dark:' + textDark,
+      '--template-surface-soft:' + soft,
+      '--template-surface-mid:' + mid,
+      '--template-surface-deep:' + deep,
+      '--template-outline:' + mixHex_(base, '#FFFFFF', 0.18),
+      'background:linear-gradient(135deg, ' + soft + ' 0%, ' + mid + ' 56%, ' + base + ' 100%)',
+      'border-color:' + deep
+    ].join('; ');
+  }
+
+  function getCatCount(data) {
+    let total = (data.uncategorized || []).length;
+    (data.categories || []).forEach(function (category) {
+      total += (category.files || []).length;
+    });
+    return total;
+  }
+
+  function getRealTemplateCategories(data) {
+    return (data.categories || []).map(function (category) {
+      return Object.assign({}, category, {
+        color: normalizeTemplateCategoryColor(category.color),
+        fileCount: (category.files || []).length,
+        kind: 'category'
+      });
+    });
+  }
+
+  function buildTemplateCategoryList(data) {
+    return getRealTemplateCategories(data);
+  }
+
+  function getActiveTemplateCategoryId(data, prebuiltCategories) {
+    const availableIds = (prebuiltCategories || buildTemplateCategoryList(data)).map(function (item) { return item.id; });
+    if (state.templateActiveCategoryId && availableIds.indexOf(state.templateActiveCategoryId) === -1) {
+      state.templateActiveCategoryId = '';
+    }
+    return state.templateActiveCategoryId;
+  }
+
+  function getVisibleTemplateSections(data, prebuiltCategories, activeId) {
+    if (!activeId) return [];
+    const selected = (prebuiltCategories || getRealTemplateCategories(data)).find(function (category) { return category.id === activeId; });
+    return selected ? [{
+      id: selected.id,
+      name: selected.name,
+      color: selected.color,
+      files: selected.files || [],
+      kind: 'category'
+    }] : [];
+  }
+
+  const _themeStyleCache = {};
+
+  function cachedBuildTemplateThemeStyle(color, mode) {
+    const key = (color || '#2563EB') + '|' + (mode || 'default');
+    if (_themeStyleCache[key]) return _themeStyleCache[key];
+    _themeStyleCache[key] = buildTemplateThemeStyle(color, mode);
+    return _themeStyleCache[key];
+  }
+
+  async function renderTemplates(isSilentUpdate) {
+    const rid = currentRenderId();
+
+    // Show loading skeleton immediately if data isn't ready
+    if (!_templatesData) {
+      showLoading('Memuat template surat...');
+    }
+
+    // Deteksi jika pengguna sedang membuka modal, agar SWR tidak merusak input mereka
+    const isAnyModalOpen = !isSilentUpdate ? false : Array.from(document.querySelectorAll('.modal-backdrop')).some(el => el && el.style.display !== 'none' && el.style.display !== '');
+
+    await ensureTemplatesData();
+    if (rid !== currentRenderId()) return;
+    
+    // Jangan lakukan render DOM penuh yang dapat menghapus form jika update ini adalah silent SWR dan ada interaksi form modal.
+    if (isSilentUpdate && isAnyModalOpen) return;
+
+    const data = _templatesData || { categories: [], uncategorized: [] };
+    const categoryCards = buildTemplateCategoryList(data);
+    const activeId = getActiveTemplateCategoryId(data, categoryCards);
+    const visibleSections = getVisibleTemplateSections(data, categoryCards, activeId);
+    const total = getCatCount(data);
+    const hasCategories = (data.categories || []).length > 0;
+
+    let toolbarHtml = '';
+    let bodyHtml = '';
+    let cardTitle = 'Template Surat';
+    let cardSubtitle = 'Kelola template surat dan kategori folder.';
+    let cardIcon = iconSvg('template');
+
+    if (!hasCategories && total === 0) {
+      bodyHtml = `
+        <div class="empty-state-container">
+          <div class="empty-state-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+          </div>
+          <h3>Belum Ada Templat Surat</h3>
+          <p>Buat kategori lebih dulu atau langsung unggah berkas agar tim punya referensi dokumen yang siap dipakai ulang.</p>
+          ${state.currentUser.role === 'admin' ? '<div class="button-row mt-16 justify-center"><button class="btn btn-primary" id="tpl-upload-btn-empty">Unggah Templat</button><button class="btn" id="tpl-add-category-empty">Tambah Kategori</button></div>' : ''}
+        </div>
+      `;
+    } else if (!activeId) {
+      bodyHtml = `
+        <div class="template-category-grid app-page-card-section">
+          ${categoryCards.map(function (category) {
+            return templateCategoryCardHtml(category, false);
+          }).join('')}
+          ${state.currentUser.role === 'admin' ? templateCategoryAddCardHtml() : ''}
+        </div>
+
+        ${data.uncategorized && data.uncategorized.length ? `
+          <div style="margin-top: 24px;">
+            <div class="template-grid">
+              ${data.uncategorized.map(function (file) {
+                return fileCardHtml(file);
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+      `;
+    } else {
+      const selected = categoryCards.find(function (category) { return category.id === activeId; });
+      if (selected) {
+        cardTitle = selected.name;
+        cardSubtitle = (selected.fileCount || 0) + ' berkas templat';
+        cardIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;color:var(--accent-mid);"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
+      }
+
+      toolbarHtml = `
+        <div class="toolbar mb-20">
+          <button class="btn" id="btn-back-categories" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Kembali ke Kategori
+          </button>
+        </div>
+      `;
+
+      bodyHtml = `
+        <div id="tpl-body">
+          ${templateSectionsHtml(visibleSections, total, true)}
+        </div>
+      `;
+    }
+
+    setContent(`
+      <div class="template-page-stack">
+        ${toolbarHtml}
+        ${pageCardHtml({
+          title: cardTitle,
+          subtitle: cardSubtitle,
+          icon: cardIcon,
+          actions: '<button class="btn" id="tpl-refresh">' + iconSvg('refresh') + 'Segarkan</button>' + (state.currentUser.role === 'admin' ? '<button class="btn btn-primary" id="tpl-upload-btn">' + iconSvg('upload') + 'Unggah Templat</button>' : ''),
+          body: bodyHtml,
+          extraClass: 'template-page-card'
+        })}
+      </div>
+
+      <div id="tpl-upload-modal" class="modal-backdrop" style="display:none;">
+        <div class="modal-card template-modal-card">
+          <div class="modal-header">
+            <h3 class="section-title">Unggah Templat</h3>
+            <button class="btn icon-btn" id="tpl-upload-close" aria-label="Tutup">x</button>
+          </div>
+          <div class="panel-pad">
+            <div class="form-field">
+              <label>Pilih Berkas</label>
+              <div class="dropzone" id="tpl-upload-dropzone" style="min-height: 140px; padding: 20px;">
+                <input id="tpl-upload-file" type="file" accept=".pdf,.doc,.docx" style="display: none;">
+                <div class="dropzone-content" style="pointer-events: none;">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 12px; color: var(--accent);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  <div style="font-size: 14px; font-weight: 600; color: var(--text);">Klik atau seret berkas ke sini</div>
+                  <div style="font-size: 12px; color: var(--muted); margin-top: 6px;" id="tpl-upload-filename-display">Mendukung: PDF, DOC, DOCX. Maks: 50 MB (lebih besar otomatis).</div>
+                </div>
+              </div>
+            </div>
+            <div class="form-field mt-12">
+              <label for="tpl-upload-name">Nama Templat</label>
+              <input id="tpl-upload-name" type="text" placeholder="Contoh: Template Surat Undangan Narasumber">
+            </div>
+            <div class="form-field mt-12">
+              <div class="template-inline-label-row">
+                <label for="tpl-upload-cat">Kategori</label>
+                <button class="template-link-btn" id="tpl-upload-create-cat" type="button">Buat kategori baru</button>
+              </div>
+              <select id="tpl-upload-cat">
+                <option value="">Tanpa Kategori</option>
+                ${getRealTemplateCategories(data).map(function (category) {
+                  return '<option value="' + esc(category.id) + '">' + esc(category.name) + '</option>';
+                }).join('')}
+              </select>
+            </div>
+            <div class="button-row mt-20 justify-end">
+              <button class="btn" id="tpl-upload-cancel">Batal</button>
+              <button class="btn btn-primary" id="tpl-upload-submit" disabled>Unggah</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tpl-cat-modal" class="modal-backdrop" style="display:none;">
+        <div class="modal-card template-modal-card">
+          <div class="modal-header">
+            <h3 class="section-title">Atur Kategori Template</h3>
+            <button class="btn icon-btn" id="tpl-cat-close" aria-label="Tutup">x</button>
+          </div>
+          <div class="panel-pad">
+            <div id="tpl-cat-list" class="cat-list">
+              ${getRealTemplateCategories(data).length ? getRealTemplateCategories(data).map(function (category) {
+                return catRowHtml(category);
+              }).join('') : '<div class="cat-empty muted">Belum ada kategori. Tambahkan kategori pertama untuk mulai merapikan template.</div>'}
+            </div>
+            <div class="button-row justify-end">
+              <button class="btn btn-primary" id="tpl-cat-add-btn" type="button">Tambah Kategori</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tpl-cat-form-modal" class="modal-backdrop" style="display:none;">
+        <div class="modal-card template-modal-card template-color-modal-card">
+          <div class="modal-header">
+            <h3 class="section-title" id="tpl-cat-form-title">Kategori Baru</h3>
+            <button class="btn icon-btn" id="tpl-cat-form-close" aria-label="Tutup">x</button>
+          </div>
+          <div class="panel-pad">
+            <div class="form-grid">
+              <div class="form-field full">
+                <label for="tpl-cat-form-name">Nama Kategori</label>
+                <input id="tpl-cat-form-name" type="text" autocomplete="off" placeholder="Contoh: Undangan, SK, Berita Acara">
+              </div>
+              <div class="form-field full">
+                <label>Warna Kategori</label>
+                <div class="template-color-picker" id="tpl-cat-color-picker">
+                  ${TEMPLATE_CATEGORY_COLORS.map(function (color) {
+                    return templateColorOptionHtml(color);
+                  }).join('')}
+                </div>
+                <input id="tpl-cat-form-color" type="hidden" value="${DEFAULT_TEMPLATE_CATEGORY_COLOR}">
+              </div>
+              <div class="form-field full">
+                <label>Pratinjau</label>
+                <div id="tpl-cat-form-preview"></div>
+              </div>
+            </div>
+            <div class="button-row mt-20 justify-end">
+              <button class="btn" id="tpl-cat-form-cancel" type="button">Batal</button>
+              <button class="btn btn-primary" id="tpl-cat-form-submit" type="button">Simpan Kategori</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+
+    bindTplEvents(getRealTemplateCategories(data));
+    bindUploadEvents(getRealTemplateCategories(data));
+    bindCatManagerEvents(getRealTemplateCategories(data));
+    bindCategoryFormEvents();
+    restoreTemplateModalAfterReload();
+  }
+
+  function templateCategoryCardHtml(category, isActive) {
+    const themeStyle = cachedBuildTemplateThemeStyle(
+      category.color,
+      category.kind === 'uncategorized' ? 'neutral' : 'default'
+    );
+    const icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>';
+    const desc = category.fileCount
+      ? category.fileCount + ' template'
+      : '0 template';
+
+    return `
+      <div class="tall-card tall-card-template-cat${isActive ? ' is-active' : ''}" data-template-cat-id="${esc(category.id)}" data-template-cat-kind="${esc(category.kind)}" role="button" tabindex="0" aria-label="Buka kategori ${esc(category.name)}" style="${themeStyle}">
+        <div class="tall-card-bg"></div>
+        <div class="tall-card-top">
+          <div class="tall-card-header-row">
+            <span class="tall-card-badge">${esc(String(category.fileCount || 0))}</span>
+          </div>
+          ${category.kind === 'category' && state.currentUser.role === 'admin' ? `
+            <div class="tall-card-actions-top">
+              <div class="dropdown-container">
+                <button class="sub-action-btn" data-action="toggle-dropdown" aria-label="Opsi Kategori">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="12" cy="5" r="1"></circle><circle cx="12" cy="19" r="1"></circle></svg>
+                </button>
+                <div class="sub-dropdown-menu">
+                  <button class="sub-dropdown-item template-cat-edit-btn" data-category-id="${esc(category.id)}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+                    Edit Kategori
+                  </button>
+                  <button class="sub-dropdown-item sub-dropdown-danger template-cat-delete-btn" data-category-id="${esc(category.id)}" data-category-name="${esc(category.name)}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
+                    Hapus Kategori
+                  </button>
+                </div>
+              </div>
+            </div>
+          ` : ''}
+        </div>
+        <div class="tall-card-middle">
+          <div class="tall-card-icon">${icon}</div>
+          <h3 class="tall-card-title">${esc(category.name)}</h3>
+          <div class="tall-card-desc">${esc(desc)}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function templateCategoryAddCardHtml() {
+    return `
+      <div class="tall-card tall-card-add" id="tpl-add-category-card" role="button" tabindex="0" aria-label="Tambah kategori template baru">
+        <div class="tall-card-add-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </div>
+        <span>Tambah Kategori</span>
+      </div>
+    `;
+  }
+
+  function templateSectionsHtml(sections, total, hideHeader) {
+    if (!sections.length && !total) {
+      return `
+        <div class="empty-state-container">
+          <div class="empty-state-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+          </div>
+          <h3>Belum Ada Templat Surat</h3>
+          <p>Buat kategori lebih dulu atau langsung unggah berkas agar tim punya referensi dokumen yang siap dipakai ulang.</p>
+          ${state.currentUser.role === 'admin' ? '<div class="button-row mt-16 justify-center"><button class="btn btn-primary" id="tpl-upload-btn-empty">Unggah Templat</button><button class="btn" id="tpl-add-category-empty">Tambah Kategori</button></div>' : ''}
+        </div>
+      `;
+    }
+
+    if (!sections.length) {
+      return '<div class="empty">Kategori ini belum memiliki berkas templat.</div>';
+    }
+
+    return sections.map(function (section) {
+      return templateSectionHtml(section, hideHeader);
+    }).join('');
+  }
+
+  function templateSectionHtml(section, hideHeader) {
+    return `
+      <div style="margin-top: 12px;">
+        ${!hideHeader ? `
+          <div style="display: flex; align-items: baseline; gap: 10px; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 1px solid rgba(148, 163, 184, 0.18);">
+            <h3 class="section-title" style="font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 8px; margin: 0;">
+              <span class="template-section-color-dot" style="background:${esc(section.color)};"></span>
+              ${esc(section.name)}
+            </h3>
+            <span class="small muted" style="font-size: 12px;">${esc(String(section.files.length))} berkas</span>
+          </div>
+        ` : ''}
+        <div class="template-grid">
+          ${section.files.map(function (file) {
+            return fileCardHtml(file);
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  function catRowHtml(category) {
+    return `
+      <div class="cat-row" data-category-id="${esc(category.id)}">
+        <div class="cat-row-main">
+          <span class="template-category-color-dot template-category-color-dot-lg" style="background:${esc(category.color)};"></span>
+          <div class="cat-row-copy">
+            <span class="cat-row-name">${esc(category.name)}</span>
+            <span class="cat-row-meta">${esc(colorLabelByHex_(category.color))} | ${esc(String(category.fileCount || 0))} berkas</span>
+          </div>
+        </div>
+        <div class="cat-row-actions">
+          <button class="cat-rename-btn" data-category-id="${esc(category.id)}" title="Edit kategori ${esc(category.name)}" aria-label="Edit kategori ${esc(category.name)}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+            </svg>
+          </button>
+          <button class="cat-delete-btn" data-category-id="${esc(category.id)}" data-category-name="${esc(category.name)}" title="Hapus kategori ${esc(category.name)}" aria-label="Hapus kategori ${esc(category.name)}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 6h18"></path>
+              <path d="M8 6V4h8v2"></path>
+              <path d="M19 6l-1 14H6L5 6"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function fileCardHtml(file) {
+    const ext = file.name.match(/\.[a-z0-9]+$/i);
+    const label = ext ? ext[0].toUpperCase().replace('.', '') : 'FILE';
+    const typeClass = label === 'PDF' ? 'pdf' : label === 'DOC' ? 'doc' : label === 'DOCX' ? 'docx' : 'generic';
+    const displayName = ext ? file.name.slice(0, -ext[0].length) : file.name;
+    
+    return '<div class="file-list-card flc-' + typeClass + '" data-file-url="' + esc(file.url) + '">'
+      + '<div class="flc-icon">'
+      + '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>'
+      + '</div>'
+      + '<div class="flc-body">'
+      + '<h3 class="flc-title" title="' + esc(displayName) + '">' + esc(displayName) + '</h3>'
+      + '<div class="flc-meta">' + (file.size ? (file.size / 1024).toFixed(1) + ' KB' : '') + ' &bull; ' + esc(label) + '</div>'
+      + '</div>'
+      + '<div class="flc-actions">'
+      + '<a class="flc-action-btn" href="' + esc(file.url) + '" target="_blank" title="Buka berkas di tab baru"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>'
+      + '<a class="flc-action-btn flc-action-btn-primary" href="' + esc(file.downloadUrl || file.url) + '" target="_blank" title="Unduh berkas"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></a>'
+      + (state.currentUser.role === 'admin' ? 
+        '<button class="flc-action-btn rename-template-btn" data-file-id="' + esc(file.id) + '" data-file-name="' + esc(file.name) + '" title="Ganti Nama Berkas"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg></button>'
+        + '<button class="flc-action-btn flc-action-btn-danger delete-template-btn" data-file-id="' + esc(file.id) + '" data-file-name="' + esc(file.name) + '" title="Hapus Berkas"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg></button>'
+        : '')
+      + '</div>'
+      + '</div>';
+  }
+
+  function templateColorOptionHtml(color) {
+    return `
+      <button class="template-color-option${color.hex === DEFAULT_TEMPLATE_CATEGORY_COLOR ? ' active' : ''}" data-template-color="${esc(color.hex)}" type="button" aria-label="Pilih warna ${esc(color.name)}">
+        <span class="template-color-swatch" style="background:${esc(color.hex)};"></span>
+        <span class="template-color-name">${esc(color.name)}</span>
+      </button>
+    `;
+  }
+
+  function bindTplEvents(categories) {
+    document.getElementById('tpl-refresh')?.addEventListener('click', function () {
+      reloadTpl();
+    });
+
+    document.getElementById('btn-back-categories')?.addEventListener('click', function () {
+      state.templateActiveCategoryId = '';
+      renderTemplates();
+    });
+
+    document.querySelectorAll('#tpl-upload-btn, #tpl-upload-btn-empty').forEach(function (button) {
+      button.addEventListener('click', function () {
+        openUploadModal(state.templateActiveCategoryId || '');
+      });
+    });
+
+    document.querySelectorAll('#tpl-add-category-empty, #tpl-add-category-card').forEach(function (button) {
+      button.addEventListener('click', function () {
+        openCategoryFormModal(null, '');
+      });
+    });
+
+    document.getElementById('tpl-manage-cats')?.addEventListener('click', function () {
+      openCategoryManager();
+    });
+
+    document.querySelectorAll('[data-template-cat-id]').forEach(function (card) {
+      card.addEventListener('click', function (event) {
+        if (event && event.target && event.target.closest && event.target.closest('.dropdown-container')) return;
+        state.templateActiveCategoryId = state.templateActiveCategoryId === card.dataset.templateCatId
+          ? ''
+          : card.dataset.templateCatId;
+        renderTemplates();
+      });
+      card.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          state.templateActiveCategoryId = state.templateActiveCategoryId === card.dataset.templateCatId
+            ? ''
+            : card.dataset.templateCatId;
+          renderTemplates();
+        }
+      });
+    });
+
+    document.querySelectorAll('.template-cat-edit-btn').forEach(function (button) {
+      button.addEventListener('click', function (event) {
+        event.stopPropagation();
+        const category = categories.find(function (item) { return item.id === button.dataset.categoryId; });
+        if (category) openCategoryFormModal(category, '');
+      });
+    });
+
+    document.querySelectorAll('.template-cat-delete-btn').forEach(function (button) {
+      button.addEventListener('click', function (event) {
+        event.stopPropagation();
+        const id = button.dataset.categoryId;
+        const name = button.dataset.categoryName;
+        showConfirmModal('Hapus folder kategori "' + name + '" ke Tempat Sampah?\n\nBerkas di dalamnya tidak akan terhapus, tapi akan dipindah ke Tidak Terkategori.').then(function (confirmed) {
+          if (!confirmed) return;
+          button.disabled = true;
+          showToast('Menghapus kategori "' + name + '"...');
+          api('deleteTemplateCategory', { categoryId: id })
+            .then(function () {
+              showToast('Kategori "' + name + '" berhasil dihapus.');
+              if (state.templateActiveCategoryId === id) {
+                state.templateActiveCategoryId = '';
+              }
+              reloadTpl();
+            })
+            .catch(function (error) {
+              showToast('Gagal hapus: ' + (error.message || error));
+            });
+        });
+      });
+    });
+
+    bindTemplateFileActions();
+  }
+
+  function bindTemplateFileActions() {
+    document.querySelectorAll('.file-list-card').forEach(function (card) {
+      card.addEventListener('click', function (e) {
+        if (e.target.closest('.flc-actions')) return;
+        window.open(this.dataset.fileUrl, '_blank');
+      });
+    });
+
+    document.querySelectorAll('.rename-template-btn').forEach(function (button) {
+      button.addEventListener('click', function () {
+        openFileRenameModal(this.dataset.fileId, this.dataset.fileName);
+      });
+    });
+
+    document.querySelectorAll('.delete-template-btn').forEach(function (button) {
+      button.addEventListener('click', async function () {
+        const fileId = this.dataset.fileId;
+        const fileName = this.dataset.fileName;
+        if (!await showConfirmModal('Hapus templat "' + fileName + '" ke Tempat Sampah Google Drive?')) return;
+        button.disabled = true;
+        try {
+          showToast('Menghapus templat...');
+          await api('deleteTemplate', { fileId: fileId });
+          showToast('Templat dihapus.');
+          await reloadTpl();
+        } catch (e) {
+          showToast('Gagal hapus: ' + (e.message || String(e)));
+          button.disabled = false;
+        }
+      });
+    });
+  }
+
+  function openUploadModal(preselectedCategoryId) {
+    const modal = document.getElementById('tpl-upload-modal');
+    if (!modal) return;
+    modal.style.display = 'grid';
+    document.getElementById('tpl-upload-file').value = '';
+    document.getElementById('tpl-upload-name').value = '';
+    document.getElementById('tpl-upload-cat').value = preselectedCategoryId || '';
+    document.getElementById('tpl-upload-submit').disabled = true;
+    document.getElementById('tpl-upload-name').focus();
+  }
+
+  function closeUploadModal() {
+    const modal = document.getElementById('tpl-upload-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function bindUploadEvents(categories) {
+    const modal = document.getElementById('tpl-upload-modal');
+    if (!modal) return;
+
+    document.getElementById('tpl-upload-close').onclick = closeUploadModal;
+    document.getElementById('tpl-upload-cancel').onclick = closeUploadModal;
+    modal.onclick = function (event) { if (event.target === modal) closeUploadModal(); };
+
+    const fileInput = document.getElementById('tpl-upload-file');
+    const nameInput = document.getElementById('tpl-upload-name');
+    const catSelect = document.getElementById('tpl-upload-cat');
+    const submitBtn = document.getElementById('tpl-upload-submit');
+
+    const dropzone = document.getElementById('tpl-upload-dropzone');
+    const filenameDisplay = document.getElementById('tpl-upload-filename-display');
+
+    if (dropzone) {
+      dropzone.onclick = function() { fileInput.click(); };
+      dropzone.ondragover = function(e) { e.preventDefault(); dropzone.classList.add('dropzone-over'); };
+      dropzone.ondragleave = function(e) { e.preventDefault(); dropzone.classList.remove('dropzone-over'); };
+      dropzone.ondrop = function(e) {
+        e.preventDefault();
+        dropzone.classList.remove('dropzone-over');
+        if (e.dataTransfer.files && e.dataTransfer.files.length) {
+          fileInput.files = e.dataTransfer.files;
+          fileInput.dispatchEvent(new Event('change'));
+        }
+      };
+    }
+
+    fileInput.addEventListener('change', function () {
+      if (fileInput.files && fileInput.files[0]) {
+        if (!nameInput.value) nameInput.value = fileInput.files[0].name;
+        if (filenameDisplay) filenameDisplay.textContent = fileInput.files[0].name;
+      } else {
+        if (filenameDisplay) filenameDisplay.textContent = 'Mendukung: PDF, DOC, DOCX. Di atas 10 MB otomatis diupload bertahap.';
+      }
+      submitBtn.disabled = !(fileInput.files && fileInput.files[0]);
+    });
+
+    document.getElementById('tpl-upload-create-cat')?.addEventListener('click', function () {
+      closeUploadModal();
+      openCategoryFormModal(null, 'upload');
+    });
+
+    async function uploadTemplateResumable(file, targetName, catFolderId) {
+      const totalSize = file.size;
+      showToast('Menyiapkan upload besar (' + (totalSize / 1024 / 1024).toFixed(1) + ' MB)...');
+
+      const session = await api('initTemplateResumableUpload', {
+        name: targetName,
+        mimeType: file.type || '',
+        totalSize: totalSize,
+        categoryFolderId: catFolderId || ''
+      });
+
+      const CHUNK = 8 * 1024 * 1024;
+      let startByte = 0;
+
+      while (startByte < totalSize) {
+        const endByte = Math.min(startByte + CHUNK, totalSize);
+        const chunk = file.slice(startByte, endByte);
+
+        const chunkBase64 = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => {
+            const d = r.result;
+            resolve(d.indexOf(',') >= 0 ? d.split(',')[1] : d);
+          };
+          r.onerror = reject;
+          r.readAsDataURL(chunk);
+        });
+
+        const result = await api('uploadResumableChunk', {
+          sessionUrl: session.sessionUrl,
+          chunk: chunkBase64,
+          startByte: startByte,
+          totalSize: totalSize
+        });
+
+        if (result.done) {
+          return result;
+        }
+        startByte = result.nextByte;
+        const pct = Math.round(startByte / totalSize * 100);
+        showToast('Mengunggah... ' + pct + '%');
+      }
+      throw new Error('Upload besar gagal.');
+    }
+
+    submitBtn.addEventListener('click', async function () {
+      if (!fileInput.files || !fileInput.files[0]) {
+        showToast('Pilih berkas terlebih dahulu.');
+        return;
+      }
+      const file = fileInput.files[0];
+
+      let targetName = nameInput.value.trim() || file.name;
+      const origExt = (file.name.match(/\.[a-z0-9]+$/i) || [''])[0];
+      if (origExt && !targetName.match(/\.[a-z0-9]+$/i)) targetName += origExt;
+      const catFolderId = catSelect.value;
+
+      submitBtn.disabled = true;
+      try {
+        if (file.size > 10 * 1024 * 1024) {
+          await uploadTemplateResumable(file, targetName, catFolderId);
+          showToast('Templat berhasil diupload.');
+          closeUploadModal();
+          await reloadTpl();
+          return;
+        }
+
+        showToast('Mengupload...');
+        const reader = new FileReader();
+        reader.onload = async function () {
+          try {
+            const payload = {
+              name: targetName,
+              mimeType: file.type || '',
+              dataUrl: reader.result
+            };
+            if (catFolderId) payload.categoryFolderId = catFolderId;
+            const result = await api('uploadTemplate', payload);
+            showToast('Templat "' + result.name + '" berhasil diupload.');
+            closeUploadModal();
+            await reloadTpl();
+          } catch (e) {
+            showToast('Gagal upload: ' + (e.message || String(e)));
+            submitBtn.disabled = false;
+          }
+        };
+        reader.onerror = function () {
+          showToast('Gagal baca berkas.');
+          submitBtn.disabled = false;
+        };
+        reader.readAsDataURL(file);
+      } catch (e) {
+        showToast('Gagal: ' + (e.message || String(e)));
+        submitBtn.disabled = false;
+      }
+    });
+  }
+
+  function openCategoryManager() {
+    const modal = document.getElementById('tpl-cat-modal');
+    if (modal) modal.style.display = 'grid';
+  }
+
+  function closeCategoryManager() {
+    const modal = document.getElementById('tpl-cat-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function bindCatManagerEvents(categories) {
+    const modal = document.getElementById('tpl-cat-modal');
+    if (!modal) return;
+
+    document.getElementById('tpl-cat-close').onclick = closeCategoryManager;
+    modal.onclick = function (event) { if (event.target === modal) closeCategoryManager(); };
+
+    document.getElementById('tpl-cat-add-btn')?.addEventListener('click', function () {
+      closeCategoryManager();
+      openCategoryFormModal(null, 'manager');
+    });
+
+    document.querySelectorAll('.cat-rename-btn').forEach(function (button) {
+      button.addEventListener('click', function () {
+        const category = categories.find(function (item) { return item.id === button.dataset.categoryId; });
+        closeCategoryManager();
+        if (category) openCategoryFormModal(category, 'manager');
+      });
+    });
+
+    document.querySelectorAll('.cat-delete-btn').forEach(function (button) {
+      button.addEventListener('click', async function () {
+        const categoryName = button.dataset.categoryName;
+        if (!await showConfirmModal('Hapus folder kategori "' + categoryName + '" ke Tempat Sampah? Berkas di dalamnya ikut ke Tempat Sampah.')) return;
+        button.disabled = true;
+        showToast('Menghapus kategori "' + categoryName + '"...');
+        try {
+          await api('deleteTemplateCategory', { categoryId: button.dataset.categoryId });
+          showToast('Kategori "' + categoryName + '" dipindahkan ke Tempat Sampah.');
+          await reloadTpl('manager');
+        } catch (err) {
+          showToast('Gagal: ' + (err.message || String(err)));
+        }
+      });
+    });
+  }
+
+  function openCategoryFormModal(category, returnTarget) {
+    const modal = document.getElementById('tpl-cat-form-modal');
+    if (!modal) return;
+
+    modal.dataset.returnTarget = returnTarget || '';
+    modal.dataset.editCategoryId = category ? category.id : '';
+
+    document.getElementById('tpl-cat-form-title').textContent = category ? 'Edit Kategori' : 'Kategori Baru';
+    document.getElementById('tpl-cat-form-name').value = category ? category.name : '';
+    document.getElementById('tpl-cat-form-color').value = category ? normalizeTemplateCategoryColor(category.color) : DEFAULT_TEMPLATE_CATEGORY_COLOR;
+
+    modal.style.display = 'grid';
+    syncTemplateColorPickerState();
+    updateCategoryFormPreview();
+    window.setTimeout(function () {
+      document.getElementById('tpl-cat-form-name').focus();
+    }, 30);
+  }
+
+  function closeCategoryFormModal() {
+    const modal = document.getElementById('tpl-cat-form-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  function syncTemplateColorPickerState() {
+    const activeColor = document.getElementById('tpl-cat-form-color')?.value || DEFAULT_TEMPLATE_CATEGORY_COLOR;
+    document.querySelectorAll('.template-color-option').forEach(function (option) {
+      option.classList.toggle('active', option.dataset.templateColor === activeColor);
+    });
+  }
+
+  function updateCategoryFormPreview() {
+    const name = document.getElementById('tpl-cat-form-name')?.value.trim() || 'Nama Kategori';
+    const color = document.getElementById('tpl-cat-form-color')?.value || DEFAULT_TEMPLATE_CATEGORY_COLOR;
+    const preview = document.getElementById('tpl-cat-form-preview');
+    if (!preview) return;
+    preview.innerHTML = `
+      <div class="template-preview-card" style="${cachedBuildTemplateThemeStyle(color, 'default')}">
+        <div class="template-preview-copy">
+          <span class="template-preview-badge">${esc(colorLabelByHex_(color))}</span>
+          <strong>${esc(name)}</strong>
+          <span>Pratinjau blok kategori yang akan tampil di halaman Template Surat.</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindCategoryFormEvents() {
+    const modal = document.getElementById('tpl-cat-form-modal');
+    if (!modal) return;
+
+    document.getElementById('tpl-cat-form-close').onclick = closeCategoryFormModal;
+    document.getElementById('tpl-cat-form-cancel').onclick = closeCategoryFormModal;
+    modal.onclick = function (event) { if (event.target === modal) closeCategoryFormModal(); };
+
+    document.getElementById('tpl-cat-form-name')?.addEventListener('input', updateCategoryFormPreview);
+    document.querySelectorAll('.template-color-option').forEach(function (option) {
+      option.addEventListener('click', function () {
+        document.getElementById('tpl-cat-form-color').value = option.dataset.templateColor;
+        syncTemplateColorPickerState();
+        updateCategoryFormPreview();
+      });
+    });
+
+    document.getElementById('tpl-cat-form-submit')?.addEventListener('click', async function () {
+      const submit = this;
+      const name = document.getElementById('tpl-cat-form-name').value.trim();
+      const color = document.getElementById('tpl-cat-form-color').value;
+      const categoryId = modal.dataset.editCategoryId || '';
+      const returnTarget = modal.dataset.returnTarget || '';
+
+      if (!name) {
+        showToast('Nama kategori wajib diisi.');
+        return;
+      }
+
+      submit.disabled = true;
+      try {
+        let result;
+        if (categoryId) {
+          result = await api('renameTemplateCategory', {
+            categoryId: categoryId,
+            name: name,
+            color: color
+          });
+          showToast('Kategori diperbarui.');
+        } else {
+          result = await api('saveTemplateCategory', {
+            year: getCurrentYear(),
+            name: name,
+            color: color
+          });
+          showToast('Kategori baru ditambahkan.');
+        }
+        closeCategoryFormModal();
+        await reloadTpl(returnTarget === 'upload' ? ('upload:' + (result.id || '')) : returnTarget);
+      } catch (error) {
+        showToast('Gagal menyimpan kategori: ' + (errorMessage(error)));
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  }
+
+  function restoreTemplateModalAfterReload() {
+    if (!_templateReloadModalTarget) return;
+    const target = _templateReloadModalTarget;
+    _templateReloadModalTarget = '';
+
+    if (target === 'manager') {
+      openCategoryManager();
+      return;
+    }
+
+    if (target.indexOf('upload:') === 0) {
+      openUploadModal(target.slice('upload:'.length));
+      return;
+    }
+
+    if (target === 'upload') {
+      openUploadModal('');
+    }
+  }
+
+  function openFileRenameModal(fileId, currentName) {
+    const backdrop = document.createElement('div');
+    backdrop.className = 'modal-backdrop';
+    backdrop.innerHTML = '<div class="modal-card" style="max-width:440px;">'
+      + '<div class="modal-header">'
+      + '<h3 class="section-title">Ganti Nama Berkas</h3>'
+      + '<button class="btn icon-btn" id="tpl-rename-close">x</button>'
+      + '</div>'
+      + '<div class="panel-pad">'
+      + '<div class="form-field">'
+      + '<label for="tpl-rename-input">Nama baru</label>'
+      + '<input id="tpl-rename-input" type="text" value="' + esc(currentName) + '" autocomplete="off">'
+      + '</div>'
+      + '<div class="button-row mt-20 justify-end">'
+      + '<button class="btn" id="tpl-rename-cancel">Batal</button>'
+      + '<button class="btn btn-primary" id="tpl-rename-submit">Simpan</button>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+    backdrop.id = 'tpl-rename-backdrop';
+    document.body.appendChild(backdrop);
+
+    const input = document.getElementById('tpl-rename-input');
+    const submit = document.getElementById('tpl-rename-submit');
+    const close = function () { backdrop.remove(); };
+    document.getElementById('tpl-rename-close').onclick = close;
+    document.getElementById('tpl-rename-cancel').onclick = close;
+    backdrop.onclick = function (event) { if (event.target === backdrop) close(); };
+    submit.onclick = async function () {
+      const newName = input.value.trim();
+      if (!newName) {
+        showToast('Nama wajib diisi.');
+        return;
+      }
+      submit.disabled = true;
+      try {
+        await api('renameDriveItem', { itemId: fileId, name: newName, type: 'file' });
+        showToast('Nama berkas diubah.');
+        close();
+        await reloadTpl();
+      } catch (e) {
+        showToast('Gagal: ' + (e.message || String(e)));
+      } finally {
+        submit.disabled = false;
+      }
+    };
+    window.setTimeout(function () { input.focus(); }, 50);
+  }
+
+  async function reloadTpl(modalTarget, isSilentUpdate) {
+    _templateReloadModalTarget = modalTarget || '';
+    if (!isSilentUpdate) {
+      _templatesData = null;
+      _templatesPromise = null;
+    } else {
+      _templatesPromise = null;
+    }
+    invalidateViewCache('templates', null);
+    await renderTemplates(isSilentUpdate);
+  }
+</script>

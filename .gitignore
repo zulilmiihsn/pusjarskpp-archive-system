@@ -1,0 +1,21 @@
+node_modules/
+package-lock.json
+.clasprc.json
+.clasp.deleted-project.json
+*.local.*
+.DS_Store
+*.log
+.codegraph/
+.agents/
+skills-lock.json
+
+# IDE / tooling artifacts
+.claw.json
+.claw/
+.qoder/
+.vscode/
+
+# Stray documents (jangan commit arsip/dokumen nyata)
+/*.pdf
+*.xlsx
+*.docx

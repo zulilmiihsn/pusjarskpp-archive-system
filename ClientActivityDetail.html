@@ -1,0 +1,655 @@
+<script>
+  function closeAllDropdowns_(e) {
+    if (!e.target.closest('.dropdown')) {
+      document.querySelectorAll('.sub-dropdown-menu.open').forEach(m => {
+        m.classList.remove('open');
+        const c = m.closest('.tall-card');
+        if (c) c.classList.remove('dropdown-open');
+      });
+    }
+  }
+  if (!window._dropdownListenerInstalled) {
+    document.addEventListener('click', closeAllDropdowns_);
+    window._dropdownListenerInstalled = true;
+  }
+
+  function openModal_(modalId) {
+    const el = document.getElementById(modalId);
+    if (el) el.style.display = 'grid';
+  }
+
+  function closeModal_(modalId) {
+    const el = document.getElementById(modalId);
+    if (el) el.style.display = 'none';
+  }
+
+  window._navigateToFolder = function(folderName) {
+    state.currentParentFolderView = folderName;
+    renderActivityDetail();
+  };
+
+
+  let _syncing = false;
+
+  async function syncDrive_(activity, isSilent = false) {
+    if (_syncing) return;
+    _syncing = true;
+
+    const syncBtn = document.getElementById('btn-sync-drive');
+    const syncIcon = document.getElementById('sync-icon');
+    const syncText = document.getElementById('sync-text');
+
+    if (!isSilent && syncBtn) {
+      syncBtn.disabled = true;
+      if (syncIcon) syncIcon.style.animation = 'spin 1s linear infinite';
+      if (syncText) syncText.textContent = 'Menyinkronkan...';
+      showToast('Memindai folder Google Drive...');
+    }
+
+    try {
+      const result = await api('syncSubActivities', {
+        activityId: activity.activity_id,
+        year: state.bootstrap.settings.currentYear
+      });
+
+      if (result.updated) {
+        state.bootstrap = result.bootstrap;
+        populateDashboardNav();
+        const stillViewing = state.view === 'activity_detail' && state.selectedActivityId === activity.activity_id;
+
+        if (stillViewing) {
+          const hasInteraction = document.querySelector('.sub-dropdown-menu.open') ||
+            Array.from(document.querySelectorAll('[id$="-modal"]')).some(m => m.style.display === 'flex');
+
+          if (isSilent && hasInteraction) {
+            showToast('Folder baru disinkronkan di latar belakang.');
+          } else {
+            renderActivityDetail();
+            showToast('Folder baru berhasil disinkronkan dari Drive!');
+          }
+        } else if (!isSilent) {
+          showToast('Sinkronisasi selesai. Data aplikasi sudah diperbarui.');
+        }
+      } else if (!isSilent) {
+        showToast('Folder Drive sudah up-to-date.');
+      }
+    } catch (error) {
+      if (!isSilent) {
+        showToast('Gagal sinkronisasi: ' + (errorMessage(error)));
+      }
+    } finally {
+      _syncing = false;
+      if (!isSilent && syncBtn) {
+        syncBtn.disabled = false;
+        if (syncIcon) syncIcon.style.animation = '';
+        if (syncText) syncText.textContent = 'Sinkronkan Drive';
+      }
+    }
+  }
+
+
+  async function submitDeleteSub_(deleteModal, deleteSubmitBtn, currentDeleteSubId) {
+    deleteSubmitBtn.disabled = true;
+    deleteSubmitBtn.textContent = 'Menonaktifkan...';
+    var deleteSubToast = showToast('Menonaktifkan sub-kegiatan...', true);
+    try {
+      const result = await api('deleteSubActivity', {
+        activityId: getActivity(state.selectedActivityId).activity_id,
+        subActivityId: currentDeleteSubId,
+        year: state.bootstrap.settings.currentYear
+      });
+      if (deleteSubToast) removeToast(deleteSubToast);
+      state.bootstrap = result.bootstrap;
+      deleteModal.style.display = 'none';
+      renderActivityDetail();
+      showToast('Sub-kegiatan dinonaktifkan dari menu aktif.');
+    } catch (error) {
+      if (deleteSubToast) removeToast(deleteSubToast);
+      showToast('Gagal menonaktifkan: ' + (errorMessage(error)));
+    } finally {
+      deleteSubmitBtn.disabled = false;
+      deleteSubmitBtn.textContent = 'Ya, Nonaktifkan';
+    }
+  }
+
+  async function submitTrashSub_(trashModal, trashSubmitBtn, currentTrashSubId) {
+    trashSubmitBtn.disabled = true;
+    trashSubmitBtn.textContent = 'Memindahkan...';
+    var trashSubToast = showToast('Memindahkan folder ke Tempat Sampah...', true);
+    try {
+      const result = await api('trashSubActivityFolder', {
+        activityId: getActivity(state.selectedActivityId).activity_id,
+        subActivityId: currentTrashSubId,
+        year: state.bootstrap.settings.currentYear
+      });
+      if (trashSubToast) removeToast(trashSubToast);
+      state.bootstrap = result.bootstrap;
+      trashModal.style.display = 'none';
+      renderActivityDetail();
+      showToast('Sub-kegiatan dihapus.');
+    } catch (error) {
+      if (trashSubToast) removeToast(trashSubToast);
+      showToast('Gagal memindahkan folder: ' + (errorMessage(error)));
+    } finally {
+      trashSubmitBtn.disabled = false;
+      trashSubmitBtn.textContent = 'Ya, Hapus';
+    }
+  }
+
+  function bindActivityDetailEvents(activity, colorTheme) {
+    document.getElementById('btn-back-dashboard').addEventListener('click', () => {
+      if (state.currentParentFolderView) {
+        window._navigateToFolder('');
+      } else {
+        setView('dashboard');
+      }
+    });
+
+    document.querySelectorAll('[data-action="open-archive-folder"]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        if (e.target.closest('.tall-card-actions') || e.target.closest('.sub-dropdown-menu') || e.target.closest('[data-action="toggle-dropdown"]')) return;
+        const folderId = btn.dataset.folderId;
+        if (!folderId) {
+          showToast('Sub-kegiatan ini belum punya folder Drive.');
+          return;
+        }
+        const activityName = activity.activity_name;
+        const folderName = btn.dataset.folderName || getSubActivityName(btn.dataset.activityId, btn.dataset.subId);
+        setView('archive_folder', {
+          activityId: btn.dataset.activityId,
+          subActivityId: btn.dataset.subId,
+          folderId,
+          folderName,
+          folderBreadcrumb: [activityName, folderName]
+        });
+      });
+    });
+
+
+
+    document.querySelectorAll('[data-action="rename-sub"]').forEach(btn => {
+      btn.addEventListener('click', function (e) {
+        var menu = e.target.closest('.sub-dropdown-menu');
+        if (menu) {
+          menu.classList.remove('open');
+          var c = menu.closest('.tall-card');
+          if (c) c.classList.remove('dropdown-open');
+        }
+        var subId = btn.dataset.subId;
+        var sub = (activity.subActivities || []).find(function (item) { return item.sub_activity_id === subId; }) || {};
+        if (typeof openEditSubModal === 'function') {
+          openEditSubModal(activity, sub);
+        }
+      });
+    });
+
+    const deleteModal = document.getElementById('delete-sub-modal');
+    const deleteSubmitBtn = document.getElementById('btn-submit-delete-sub');
+    const deleteNameDisplay = document.getElementById('delete-sub-name-display');
+    let currentDeleteSubId = null;
+
+    document.querySelectorAll('[data-action="delete-sub"]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const menu = e.target.closest('.sub-dropdown-menu');
+        if (menu) {
+          menu.classList.remove('open');
+          const c = menu.closest('.tall-card');
+          if (c) c.classList.remove('dropdown-open');
+        }
+        currentDeleteSubId = btn.dataset.subId;
+        deleteNameDisplay.textContent = btn.dataset.subName;
+        openModal_('delete-sub-modal');
+      });
+    });
+
+    document.getElementById('btn-cancel-delete-sub')?.addEventListener('click', () => closeModal_('delete-sub-modal'));
+    document.getElementById('btn-cancel-delete-sub-icon')?.addEventListener('click', () => closeModal_('delete-sub-modal'));
+    deleteModal?.addEventListener('click', e => { if (e.target === deleteModal) closeModal_('delete-sub-modal'); });
+    deleteSubmitBtn?.addEventListener('click', () => submitDeleteSub_(deleteModal, deleteSubmitBtn, currentDeleteSubId));
+
+    const trashModal = document.getElementById('trash-sub-modal');
+    const trashSubmitBtn = document.getElementById('btn-submit-trash-sub');
+    const trashNameDisplay = document.getElementById('trash-sub-name-display');
+    let currentTrashSubId = null;
+
+    document.querySelectorAll('[data-action="trash-sub-folder"]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        const menu = e.target.closest('.sub-dropdown-menu');
+        if (menu) {
+          menu.classList.remove('open');
+          const c = menu.closest('.tall-card');
+          if (c) c.classList.remove('dropdown-open');
+        }
+        currentTrashSubId = btn.dataset.subId;
+        trashNameDisplay.textContent = btn.dataset.subName;
+        openModal_('trash-sub-modal');
+      });
+    });
+
+    document.getElementById('btn-cancel-trash-sub')?.addEventListener('click', () => closeModal_('trash-sub-modal'));
+    document.getElementById('btn-cancel-trash-sub-icon')?.addEventListener('click', () => closeModal_('trash-sub-modal'));
+    trashModal?.addEventListener('click', e => { if (e.target === trashModal) closeModal_('trash-sub-modal'); });
+    trashSubmitBtn?.addEventListener('click', () => submitTrashSub_(trashModal, trashSubmitBtn, currentTrashSubId));
+
+    document.getElementById('btn-sync-drive')?.addEventListener('click', () => syncDrive_(activity, false));
+    syncDrive_(activity, true);
+
+    document.querySelector('[data-action="add-activity-sub"]')?.addEventListener('click', (e) => {
+      var menu = e.target.closest('.sub-dropdown-menu');
+      if (menu) menu.classList.remove('open');
+      if (typeof openEditSubModal === 'function') {
+        openEditSubModal(activity, null, state.currentParentFolderView);
+      }
+    });
+
+    document.querySelector('[data-action="add-parent-folder"]')?.addEventListener('click', (e) => {
+      var menu = e.target.closest('.sub-dropdown-menu');
+      if (menu) menu.classList.remove('open');
+      
+      const container = document.getElementById('add-parent-folder-subs-list');
+      if (container) {
+        container.innerHTML = `
+          <style>
+            .folder-cb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+            .premium-cb-card {
+              display: flex; align-items: center; gap: 12px; padding: 12px 16px; 
+              border-radius: var(--radius-md); border: 2px solid transparent; 
+              background: var(--bg-alt); cursor: pointer; position: relative;
+              transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            .premium-cb-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); background: var(--bg); border-color: var(--border); }
+            .premium-cb-card:active { transform: scale(0.98); }
+            .premium-cb-card input[type="checkbox"] {
+              width: 20px; height: 20px; margin: 0; accent-color: var(--primary); cursor: pointer;
+            }
+            .premium-cb-card.checked { border-color: var(--primary); background: var(--primary-light, rgba(59, 130, 246, 0.05)); }
+            .premium-cb-label { font-size: 14px; font-weight: 500; color: var(--text); flex: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; line-height: 1.4; }
+          </style>
+          <div class="folder-cb-grid"></div>
+        `;
+        const grid = container.querySelector('.folder-cb-grid');
+        const rootSubs = (activity.subActivities || []).filter(s => !s.parent_folder_name);
+        
+        if (rootSubs.length === 0) {
+          container.innerHTML = `
+            <div style="text-align:center; padding: 32px 24px; background: var(--bg-alt); border-radius: var(--radius-md); border: 1px dashed var(--border);">
+              <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px;">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+              </svg>
+              <p class="small muted" style="margin:0;">Tidak ada sub-kegiatan di root yang bisa dipindahkan.</p>
+            </div>`;
+        } else {
+          rootSubs.forEach(s => {
+            const lbl = document.createElement('label');
+            lbl.className = 'premium-cb-card';
+            lbl.innerHTML = `
+              <input type="checkbox" name="sub-to-move" value="${esc(s.sub_activity_id)}">
+              <span class="premium-cb-label" title="${esc(s.sub_activity_name)}">${esc(s.sub_activity_name)}</span>
+            `;
+            const cb = lbl.querySelector('input');
+            cb.addEventListener('change', () => {
+              if (cb.checked) lbl.classList.add('checked');
+              else lbl.classList.remove('checked');
+            });
+            grid.appendChild(lbl);
+          });
+        }
+      }
+      
+      openModal_('add-parent-folder-modal');
+      const input = document.getElementById('new-parent-folder-name');
+      if (input) { input.value = ''; input.focus(); }
+    });
+
+    document.getElementById('btn-cancel-add-parent')?.addEventListener('click', () => closeModal_('add-parent-folder-modal'));
+    document.getElementById('btn-cancel-add-parent-icon')?.addEventListener('click', () => closeModal_('add-parent-folder-modal'));
+    
+    document.getElementById('btn-submit-add-parent')?.addEventListener('click', () => {
+      const inputName = document.getElementById('new-parent-folder-name');
+      const folderName = inputName ? inputName.value.trim() : '';
+      if (!folderName) {
+        showToast('Nama folder utama tidak boleh kosong.');
+        inputName?.focus();
+        return;
+      }
+      const checkboxes = document.querySelectorAll('input[name="sub-to-move"]:checked');
+      const selectedSubs = Array.from(checkboxes).map(cb => cb.value);
+      
+      const btn = document.getElementById('btn-submit-add-parent');
+      const cancelBtn = document.getElementById('btn-cancel-add-parent');
+      const closeIcon = document.getElementById('btn-cancel-add-parent-icon');
+      const origText = btn.innerHTML;
+      
+      btn.innerHTML = '<span class="spinner" style="margin-right: 8px;"></span> Mengatur Drive & Sinkronisasi...';
+      btn.disabled = true;
+      if (cancelBtn) cancelBtn.disabled = true;
+      if (closeIcon) closeIcon.style.pointerEvents = 'none';
+
+      api('createParentFolder', {
+        year: state.bootstrap.settings.currentYear,
+        activityId: activity.activity_id,
+        folderName: folderName,
+        subActivityIds: selectedSubs
+      })
+      .then(async res => {
+        if (res && res.bootstrap) {
+          state.bootstrap = res.bootstrap;
+        }
+        
+        btn.innerHTML = '<span class="spinner" style="margin-right: 8px;"></span> Memverifikasi Sinkronisasi...';
+        showToast('Folder berhasil dibuat di Drive. Menyelaraskan data...', true);
+        
+        // Wait for the drive sync to complete before closing
+        try {
+          await syncDrive_(activity, true);
+        } catch (syncErr) {
+          console.warn('Silent sync error after parent folder creation:', syncErr);
+        }
+
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        if (cancelBtn) cancelBtn.disabled = false;
+        if (closeIcon) closeIcon.style.pointerEvents = 'auto';
+        
+        closeModal_('add-parent-folder-modal');
+        showToast('Folder berhasil dibuat dan tersinkronisasi!');
+        
+        window._navigateToFolder(folderName);
+      })
+      .catch(err => {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        if (cancelBtn) cancelBtn.disabled = false;
+        if (closeIcon) closeIcon.style.pointerEvents = 'auto';
+        
+        showToast('Gagal memproses folder: ' + errorMessage(err));
+      });
+    });
+  }
+
+  function renderActivityDetail() {
+    const activity = getActivity(state.selectedActivityId);
+    if (!activity) {
+      setView('dashboard');
+      return;
+    }
+
+    const subs = activity.subActivities || [];
+    const activityHistory = (state.bootstrap.history || []).filter(item => item.activity_id === activity.activity_id);
+    const colorTheme = getActivityColor(activity.activity_id);
+    const firstSubFolderUrl = subs.reduce((acc, s) => acc || (s.folder && s.folder.url ? s.folder.url : null), null) || activity.targetFolder.url;
+
+    setContent(`
+      <div class="toolbar mb-20">
+        <button class="btn" id="btn-back-dashboard">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-4">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          ${state.currentParentFolderView ? 'Kembali ke Induk' : 'Kembali ke Dasbor'}
+        </button>
+      </div>
+
+      <div class="panel panel-pad stack relative mb-24 tall-card-${esc(activity.activity_id)}" style="overflow: visible;">
+        <div class="panel-ornamen-bg"></div>
+        <div style="position: absolute; top:0; left:0; right:0; height:6px; border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: ${colorTheme};"></div>
+        <div class="flex justify-between items-start flex-wrap gap-16">
+          <div>
+            <div class="breadcrumb-line eyebrow mb-4">
+              <span>Detail Kegiatan</span>
+              ${state.currentParentFolderView ? `<span class="breadcrumb-sep">/</span> <span>${esc(activity.activity_name)}</span>` : ''}
+            </div>
+            <h2 class="section-title mt-4 mb-8">${state.currentParentFolderView ? esc(state.currentParentFolderView) : esc(activity.activity_name)}</h2>
+            <p class="section-subtitle muted small mb-12">
+              Laci ${esc(activity.laci_no)} &bull; Folder Induk ${esc(activity.folder_no)}
+            </p>
+            ${activity.spreadsheetFile.url && !isGuest() && !state.currentParentFolderView ? `
+            <div class="button-row mt-16">
+              <a href="${esc(activity.spreadsheetFile.url)}" target="_blank" class="btn" title="Buka Spreadsheet Laci">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="mr-4" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="9" y1="3" x2="9" y2="21"/>
+                  <line x1="15" y1="3" x2="15" y2="21"/>
+                  <line x1="3" y1="9" x2="21" y2="9"/>
+                  <line x1="3" y1="15" x2="21" y2="15"/>
+                </svg>
+                <span class="small">Buka Spreadsheet Laci</span>
+              </a>
+            </div>
+            ` : ''}
+          </div>
+          <div class="flex items-center gap-4 shrink-0">
+            ${!isGuest() && !state.currentParentFolderView && (activity.laciFolder.url || firstSubFolderUrl) ? `
+              <div class="dropdown">
+                <button class="sub-action-btn" data-action="toggle-dropdown" title="Buka Folder">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </button>
+                <div class="sub-dropdown-menu">
+                  ${activity.laciFolder.url ? `<a href="${esc(activity.laciFolder.url)}" target="_blank" class="sub-dropdown-item" style="text-decoration:none;">Buka Folder Laci</a>` : ''}
+                  ${firstSubFolderUrl ? `<a href="${esc(firstSubFolderUrl)}" target="_blank" class="sub-dropdown-item" style="text-decoration:none;">Buka Folder Persuratan</a>` : ''}
+                </div>
+              </div>
+            ` : ''}
+            ${!isGuest() ? `
+            <div class="dropdown">
+              <button class="sub-action-btn" data-action="toggle-dropdown" title="Opsi lainnya">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+                </svg>
+              </button>
+              <div class="sub-dropdown-menu">
+                <button class="sub-dropdown-item" data-action="add-parent-folder">Tambah Folder</button>
+                <button class="sub-dropdown-item" data-action="add-activity-sub">Tambah Sub Kegiatan</button>
+              </div>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Pilih Sub-kegiatan</h2>
+        </div>
+        ${isGuest() ? '' : `
+        <button class="btn" id="btn-sync-drive" title="Sinkronkan dengan folder Google Drive">
+          <svg id="sync-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          <span id="sync-text">Sinkronkan Drive</span>
+        </button>
+        `}
+      </div>
+
+      ${(function() {
+        const currentParentView = state.currentParentFolderView || '';
+        const groups = { '': [] };
+        subs.forEach(sub => {
+          const p = sub.parent_folder_name || '';
+          if (!groups[p]) groups[p] = [];
+          groups[p].push(sub);
+        });
+
+        const renderCard = (sub) => {
+          const folderUrl = sub.folder ? sub.folder.url : '';
+          return `
+            <div class="tall-card tall-card-sub tall-card-${esc(activity.activity_id)}" data-action="open-archive-folder" data-activity-id="${esc(activity.activity_id)}" data-sub-id="${esc(sub.sub_activity_id)}" data-folder-id="${esc(sub.folder_id || '')}" data-folder-name="${esc(sub.sub_activity_name)}" role="button" tabindex="0" aria-label="Buka ruang arsip ${esc(sub.sub_activity_name)}">
+              <div class="tall-card-bg"></div>
+              <div class="tall-card-top">
+                <div class="tall-card-header-row">
+                  <span class="tall-card-badge">${esc(sub.default_kode_klasifikasi || '')}</span>
+                  <span class="tall-card-metadata">Sub-kegiatan</span>
+                </div>
+                <div class="tall-card-actions tall-card-actions-top">
+                  ${folderUrl && !isGuest() ? `
+                  <a href="${esc(folderUrl)}" target="_blank" class="sub-action-btn" title="Buka Folder Drive" aria-label="Buka folder ${esc(sub.sub_activity_name)} di Google Drive">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                      <polyline points="15 3 21 3 21 9"/>
+                      <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                  </a>` : ''}
+                  <div class="dropdown" style="display: ${isGuest() ? 'none' : 'block'}">
+                    <button class="sub-action-btn" data-action="toggle-dropdown" title="Opsi lainnya" aria-label="Opsi untuk ${esc(sub.sub_activity_name)}">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+                      </svg>
+                    </button>
+                    <div class="sub-dropdown-menu">
+                      <button class="sub-dropdown-item" data-action="rename-sub" data-activity-id="${esc(activity.activity_id)}" data-sub-id="${esc(sub.sub_activity_id)}" data-sub-name="${esc(sub.sub_activity_name)}">Edit Sub-kegiatan</button>
+                      <button class="sub-dropdown-item sub-dropdown-danger" data-action="delete-sub" data-activity-id="${esc(activity.activity_id)}" data-sub-id="${esc(sub.sub_activity_id)}" data-sub-name="${esc(sub.sub_activity_name)}">Nonaktifkan</button>
+                      <button class="sub-dropdown-item sub-dropdown-danger" data-action="trash-sub-folder" data-activity-id="${esc(activity.activity_id)}" data-sub-id="${esc(sub.sub_activity_id)}" data-sub-name="${esc(sub.sub_activity_name)}">Hapus</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tall-card-middle">
+                <div class="tall-card-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                </div>
+                <h3 class="tall-card-title">${esc(sub.sub_activity_name)}</h3>
+                <div class="tall-card-desc">
+                  Buka untuk mengarsipkan surat atau melihat folder
+                </div>
+              </div>
+            </div>
+          `;
+        };
+
+        const renderFolderGroup = (parentName) => {
+          return `
+            <div class="tall-card tall-card-sub tall-card-${esc(activity.activity_id)}" onclick="window._navigateToFolder('${esc(parentName)}')" role="button" tabindex="0" aria-label="Buka folder ${esc(parentName)}">
+              <div class="tall-card-bg"></div>
+              <div class="tall-card-top">
+                <div class="tall-card-header-row">
+                  <span class="tall-card-badge">Folder Utama</span>
+                </div>
+              </div>
+
+              <div class="tall-card-middle">
+                <div class="tall-card-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                  </svg>
+                </div>
+                <h3 class="tall-card-title">${esc(parentName)}</h3>
+                <div class="tall-card-desc">
+                  ${groups[parentName].length} sub-kegiatan di dalamnya
+                </div>
+              </div>
+            </div>
+          `;
+        };
+
+        let html = '';
+
+        if (currentParentView === '') {
+          // Root View
+          html += '<div class="subs-grid">';
+          
+          // Render folder groups
+          const parentNames = Object.keys(groups).filter(k => k !== '').sort();
+          parentNames.forEach(p => {
+            html += renderFolderGroup(p);
+          });
+
+          // Render root items
+          if (groups[''].length > 0) {
+            html += groups[''].map(renderCard).join('');
+          }
+          
+          html += '</div>';
+
+        } else {
+          // Drill-down View
+          html += `
+            <div class="subs-grid">
+              ${(groups[currentParentView] || []).map(renderCard).join('')}
+            </div>
+          `;
+        }
+
+        return html;
+      })()}
+
+      ${isGuest() ? '' : `
+      <div class="panel panel-pad mt-28">
+        <h2 class="section-title mb-16">Riwayat Arsip Terbaru &mdash; ${esc(activity.activity_name)}</h2>
+        ${historyTable(activityHistory.slice(0, 10), true)}
+      </div>
+      `}
+
+
+      <div id="delete-sub-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card" style="width: min(440px, 100%);">
+          <div class="modal-header">
+            <h3 class="section-title" style="color: #DC2626;">Nonaktifkan Sub-kegiatan</h3>
+            <button class="btn icon-btn" id="btn-cancel-delete-sub-icon" aria-label="Tutup">x</button>
+          </div>
+          <div class="panel-pad">
+            <p class="small muted mb-12">Anda yakin ingin menonaktifkan <strong id="delete-sub-name-display"></strong>?</p>
+            <p class="small muted mb-16">Folder Google Drive dan sheet arsip tidak dihapus. Item ini hanya disembunyikan dari menu aktif agar data arsip tetap aman.</p>
+            <div class="button-row mt-24 justify-end">
+              <button class="btn" id="btn-cancel-delete-sub">Batal</button>
+              <button class="btn btn-primary" id="btn-submit-delete-sub" style="background: #DC2626; border-color: #DC2626;">Ya, Nonaktifkan</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="trash-sub-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card" style="width: min(440px, 100%);">
+          <div class="modal-header">
+            <h3 class="section-title" style="color: #991B1B;">Hapus Sub-kegiatan</h3>
+            <button class="btn icon-btn" id="btn-cancel-trash-sub-icon" aria-label="Tutup">x</button>
+          </div>
+          <div class="panel-pad">
+            <p class="small muted mb-12">Anda yakin ingin menghapus <strong id="trash-sub-name-display"></strong>?</p>
+            <p class="small muted mb-16">Konfigurasi akan dinonaktifkan. Jika folder dipulihkan dari Google Drive lalu Anda menjalankan Sinkronkan Drive, sub-kegiatan ini akan muncul lagi di menu aktif.</p>
+            <div class="button-row mt-24 justify-end">
+              <button class="btn" id="btn-cancel-trash-sub">Batal</button>
+              <button class="btn btn-primary" id="btn-submit-trash-sub" style="background: #991B1B; border-color: #991B1B;">Ya, Hapus</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="add-parent-folder-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h3 class="section-title">Tambah Folder</h3>
+            <button class="btn icon-btn" id="btn-cancel-add-parent-icon" aria-label="Tutup">x</button>
+          </div>
+          <div class="panel-pad">
+            <p class="small muted mb-16">Buat folder baru untuk mengelompokkan sub-kegiatan.</p>
+            <div class="form-field">
+              <label for="new-parent-folder-name">Nama Folder Utama</label>
+              <input type="text" id="new-parent-folder-name" placeholder="Contoh: 01. Coaching Bagi ASN">
+            </div>
+            <div class="form-field mt-16">
+              <label>Pilih Sub-kegiatan yang akan dipindahkan ke dalam folder ini:</label>
+              <div id="add-parent-folder-subs-list" style="max-height: 200px; overflow-y: auto; background: var(--bg); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); margin-top: 8px;">
+                <!-- rendered dynamically -->
+              </div>
+            </div>
+            <div class="button-row mt-24 justify-end">
+              <button class="btn" id="btn-cancel-add-parent">Batal</button>
+              <button class="btn btn-primary" id="btn-submit-add-parent" style="background: ${colorTheme}; border-color: ${colorTheme};">Buat Folder & Pindahkan</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
+ 
+    bindActivityDetailEvents(activity, colorTheme);
+  }
+</script>

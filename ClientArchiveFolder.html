@@ -1,0 +1,1053 @@
+<script>
+  var DOC_CATEGORIES = [
+    { id: 'doc-url-dfp', name: 'Data Fix Peserta' },
+    { id: 'doc-url-materi', name: 'Kumpulan Materi' },
+    { id: 'doc-url-laporan', name: 'Laporan Aktualisasi/Inovasi' },
+    { id: 'doc-url-sertifikat', name: 'Sertifikat' }
+  ];
+  function getUnfilledDocCategories_(existingFiles) {
+    var existingNames = (existingFiles || []).map(function(f) { return (f.name || '').toLowerCase(); });
+    return DOC_CATEGORIES.filter(function(cat) {
+      return existingNames.indexOf(cat.name.toLowerCase()) === -1;
+    });
+  }
+
+  const ARCHIVE_FOLDER_PAGE_SIZE = 60;
+
+  function renderArchiveFolder() {
+    const context = getArchiveFolderContext();
+    if (!context.activity || !context.subActivity || !context.folderId) {
+      setView(context.activity ? 'activity_detail' : 'dashboard', context.activity ? { activityId: context.activity.activity_id } : {});
+      return;
+    }
+
+    const crumb = buildArchiveBreadcrumb(context);
+    const colorTheme = getActivityColor(context.activity ? context.activity.activity_id : '');
+    setContent(`
+      <div class="toolbar mb-20">
+        <button class="btn" id="archive-back">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-4">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          Kembali ke Detail Kegiatan
+        </button>
+      </div>
+
+      <div class="panel panel-pad stack relative mb-24" style="overflow: visible;">
+        <div style="position: absolute; top:0; left:0; right:0; height:6px; border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: ${colorTheme};"></div>
+        <div class="flex justify-between items-start flex-wrap gap-16">
+          <div>
+            <div class="breadcrumb-line eyebrow mb-4">${crumb.map(item => `<span>${esc(item)}</span>`).join('<span class="breadcrumb-sep">/</span>')}</div>
+            <h2 class="section-title mt-4 mb-8">${esc(context.folderName || context.subActivity.sub_activity_name)}</h2>
+            <p class="section-subtitle muted small mb-12">
+              Laci ${esc(context.activity.laci_no)} &bull; Folder Induk ${esc(context.activity.folder_no)} ${context.subActivity && context.subActivity.no_folder ? `&bull; Folder ${esc(context.subActivity.no_folder)}` : ''} ${context.subActivity && context.subActivity.default_kode_klasifikasi ? `&bull; Klasifikasi ${esc(context.subActivity.default_kode_klasifikasi)}` : ''}
+            </p>
+          </div>
+          <div class="flex items-center gap-4 shrink-0">
+            ${context.folderId && !isGuest() ? `
+              <a href="https://drive.google.com/drive/folders/${esc(context.folderId)}" target="_blank" class="sub-action-btn" title="Buka Folder Persuratan">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                  <polyline points="15 3 21 3 21 9"/>
+                  <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </a>
+            ` : ''}
+            ${!isGuest() ? `
+            <div class="dropdown">
+              <button class="sub-action-btn" data-action="toggle-dropdown" title="Opsi lainnya">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+                </svg>
+              </button>
+              <div class="sub-dropdown-menu">
+                <button class="sub-dropdown-item" id="archive-edit-sub-metadata">Edit Sub-kegiatan</button>
+                <button class="sub-dropdown-item" id="archive-convert-to-parent">Ubah Jadi Induk & Tambah Sub</button>
+              </div>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+        ${!isGuest() ? `
+        <div class="flex items-center gap-8 flex-wrap" style="margin-top:0;">
+          <button class="btn btn-primary" id="archive-add-document">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="mr-4" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="18" x2="12" y2="12"/>
+              <polyline points="9 15 12 12 15 15"/>
+            </svg>
+            <span class="small">Tambah Surat</span>
+          </button>
+          <div class="dropdown">
+            <button class="btn btn-primary" data-action="toggle-dropdown" aria-label="Tambah Dokumen">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="mr-4" aria-hidden="true">
+                <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
+                <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
+              </svg>
+              <span class="small">Tambah Dokumen</span>
+            </button>
+            <div class="sub-dropdown-menu" id="doc-add-dropdown-menu"></div>
+        </div>
+        ` : ''}
+      </div>
+      </div>
+
+      <div id="convert-parent-modal" class="modal-backdrop" style="display: none;">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h3 class="section-title">Ubah Menjadi Folder Induk</h3>
+            <button class="btn icon-btn" id="btn-cancel-convert-icon" aria-label="Tutup">x</button>
+          </div>
+          <div class="panel-pad">
+            <div style="background: #FEF2F2; color: #991B1B; padding: 12px; border-radius: var(--radius-sm); border: 1px solid #F87171; margin-bottom: 16px;" class="small">
+              <strong>Peringatan!</strong> Melakukan ini akan membuat <strong>${esc(context.subActivity.sub_activity_name)}</strong> menjadi folder induk biasa. Seluruh arsip, dokumen, dan data sheet miliknya saat ini akan <strong>dipindahtangankan</strong> ke sub-kegiatan baru di bawah ini.
+            </div>
+            <p class="small muted mb-16">Masukkan nama sub-kegiatan penerus (anak baru).</p>
+            <div class="form-field">
+              <label for="new-convert-sub-name">Nama Anak Baru (Penerus)</label>
+              <input type="text" id="new-convert-sub-name" placeholder="Contoh: Sesi Pagi">
+            </div>
+            <div class="button-row mt-24 justify-end">
+              <button class="btn" id="btn-cancel-convert">Batal</button>
+              <button class="btn btn-primary" id="btn-submit-convert" style="background: #DC2626; border-color: #DC2626;">Ya, Lanjutkan</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="archive-folder-content" class="archive-folder-content">
+        <div class="empty" id="archive-folder-loading">${loadingHtml('Memuat isi folder...')}</div>
+      </div>
+
+      ${archiveFolderModalHtml()}
+    `);
+
+    bindArchiveFolderShell(context);
+    loadArchiveFolderContent(context);
+  }
+
+  function getArchiveFolderContext() {
+    const activity = getActivity(state.selectedActivityId || state.preselectedActivityId);
+    const subActivity = activity
+      ? (activity.subActivities || []).find(sub => sub.sub_activity_id === (state.selectedSubActivityId || state.preselectedSubActivityId))
+      : null;
+    const folderId = state.selectedFolderId || (subActivity && subActivity.folder_id) || '';
+    const folderName = state.selectedFolderName || (subActivity && subActivity.sub_activity_name) || '';
+    return { activity, subActivity, folderId, folderName };
+  }
+
+  function buildArchiveBreadcrumb(context) {
+    if (context.activity && context.subActivity && context.subActivity.parent_folder_name) {
+      return [
+        context.activity.activity_name,
+        context.subActivity.parent_folder_name,
+        context.subActivity.sub_activity_name
+      ].filter(Boolean);
+    }
+    const base = [
+      context.activity ? context.activity.activity_name : '',
+      context.subActivity ? context.subActivity.sub_activity_name : ''
+    ].filter(Boolean);
+    const extra = Array.isArray(state.selectedFolderBreadcrumb) ? state.selectedFolderBreadcrumb.slice() : [];
+    if (extra.length > 0) return extra;
+    if (context.folderName && context.subActivity && context.folderName !== context.subActivity.sub_activity_name) {
+      base.push(context.folderName);
+    }
+    return base;
+  }
+
+  function findMappedSubActivityForFolder_(activity, folderId) {
+    if (!activity || !folderId) return null;
+    return (activity.subActivities || []).find(sub => String(sub.folder_id || '') === String(folderId));
+  }
+
+  function breadcrumbForMappedSubActivity_(activity, subActivity, fallbackName) {
+    if (!activity || !subActivity) return [fallbackName].filter(Boolean);
+    const parts = [activity.activity_name];
+    if (subActivity.parent_folder_name) parts.push(subActivity.parent_folder_name);
+    parts.push(subActivity.sub_activity_name || fallbackName);
+    return parts.filter(Boolean);
+  }
+
+  function bindArchiveFolderShell(context) {
+    const back = document.getElementById('archive-back');
+    if (back) {
+      back.addEventListener('click', () => {
+        if (context.subActivity && context.folderId !== context.subActivity.folder_id) {
+          setView('archive_folder', {
+            activityId: context.activity.activity_id,
+            subActivityId: context.subActivity.sub_activity_id,
+            folderId: context.subActivity.folder_id,
+            folderName: context.subActivity.sub_activity_name,
+            folderBreadcrumb: [context.activity.activity_name, context.subActivity.sub_activity_name]
+          });
+        } else {
+          setView('activity_detail', { activityId: context.activity.activity_id });
+        }
+      });
+    }
+
+    document.getElementById('archive-add-document')?.addEventListener('click', () => {
+      state.draft = null;
+      setView('process', {
+        preselectedActivityId: context.activity.activity_id,
+        preselectedSubActivityId: context.subActivity.sub_activity_id,
+        targetFolderId: context.folderId,
+        targetFolderName: context.folderName || context.subActivity.sub_activity_name,
+        folderBreadcrumb: buildArchiveBreadcrumb(context)
+      });
+    });
+    document.getElementById('doc-add-dropdown-menu')?.addEventListener('click', function (e) {
+      var item = e.target.closest('[data-doc-category]');
+      if (!item) return;
+      var categoryId = item.dataset.docCategory;
+      var categoryName = item.dataset.docCategoryName;
+      var category = DOC_CATEGORIES.find(function (c) { return c.id === categoryId; });
+      if (!category) return;
+      e.target.closest('.sub-dropdown-menu')?.classList.remove('open');
+      
+      var availableCats = getUnfilledDocCategories_(window.currentArchiveResultFiles || []);
+      
+      openArchiveDocLinkModal({
+        title: 'Tambah Dokumen',
+        categoryName: categoryName,
+        allCategories: availableCats,
+        contextParts: buildArchiveBreadcrumb(context),
+        currentUrl: '',
+        onSubmit: async function (url, cat) {
+          var catId = cat ? cat.id : categoryId;
+          var catName = cat ? cat.name : categoryName;
+          var loadToast = showToast('Menambahkan dokumen ' + catName + '...', true);
+          try {
+            var res = await api('addArchiveDocumentLink', {
+              parentFolderId: context.folderId,
+              category: catId,
+              name: catName,
+              url: url,
+              activityId: context.activity ? context.activity.activity_id : '',
+              subActivityId: context.subActivity ? context.subActivity.sub_activity_id : '',
+              year: state.bootstrap.settings.currentYear
+            });
+            if (loadToast) removeToast(loadToast);
+            if (res && res.error) { showToast(res.error); return; }
+            showToast('Dokumen ' + catName + ' berhasil ditambahkan!');
+            invalidateViewCache('archive_folder');
+            await loadArchiveFolderContent(context);
+          } catch (err) {
+            if (loadToast) removeToast(loadToast);
+            showToast('Gagal menambahkan ' + catName + ': ' + (err.message || String(err)));
+          }
+        }
+      });
+    });
+
+    document.getElementById('archive-add-folder')?.addEventListener('click', () => {
+      openArchiveFolderModal({
+        mode: 'add-folder',
+        title: 'Tambah Folder Turunan',
+        label: 'Nama folder',
+        value: '',
+        submitText: 'Tambah',
+        payload: { parentFolderId: context.folderId }
+      });
+    });
+    document.getElementById('archive-edit-sub-metadata')?.addEventListener('click', () => {
+      if (typeof openEditSubModal === 'function') {
+        openEditSubModal(context.activity, context.subActivity);
+      }
+    });
+
+    document.getElementById('archive-convert-to-parent')?.addEventListener('click', () => {
+      openModal_('convert-parent-modal');
+      const input = document.getElementById('new-convert-sub-name');
+      if (input) { input.value = ''; input.focus(); }
+    });
+
+    document.getElementById('btn-cancel-convert')?.addEventListener('click', () => closeModal_('convert-parent-modal'));
+    document.getElementById('btn-cancel-convert-icon')?.addEventListener('click', () => closeModal_('convert-parent-modal'));
+
+    document.getElementById('btn-submit-convert')?.addEventListener('click', () => {
+      const input = document.getElementById('new-convert-sub-name');
+      const newSubName = input ? input.value.trim() : '';
+      if (!newSubName) {
+        alert('Nama anak baru (penerus) wajib diisi.');
+        return;
+      }
+      const btn = document.getElementById('btn-submit-convert');
+      const origText = btn.innerHTML;
+      btn.innerHTML = '<span class="spinner"></span> Memproses...';
+      btn.disabled = true;
+
+      google.script.run
+        .withSuccessHandler(res => {
+          btn.innerHTML = origText;
+          btn.disabled = false;
+          closeModal_('convert-parent-modal');
+          if (res && res.bootstrap) {
+            state.bootstrap = res.bootstrap;
+          }
+          // Kembali ke halaman sebelumnya
+          setView('activity_detail', { activityId: context.activity.activity_id });
+        })
+        .withFailureHandler(err => {
+          btn.innerHTML = origText;
+          btn.disabled = false;
+          alert('Error: ' + err.message);
+        })
+        .convertSubActivityToParent({
+          year: state.bootstrap.settings.currentYear,
+          activityId: context.activity.activity_id,
+          subActivityId: context.subActivity.sub_activity_id,
+          newSubActivityName: newSubName
+        });
+    });
+  }
+
+  async function loadArchiveFolderContent(context) {
+    const rid = currentRenderId();
+    const container = document.getElementById('archive-folder-content');
+    if (!container) return;
+    const cacheParams = { folderId: context.folderId, pageSize: ARCHIVE_FOLDER_PAGE_SIZE };
+    const cached = isViewCacheValid('archive_folder', cacheParams) ? getCachedView('archive_folder', cacheParams) : null;
+    if (cached) {
+      state.selectedFolderName = cached.data.current ? cached.data.current.name : context.folderName;
+      container.innerHTML = archiveFolderContentHtml(cached.data, context);
+      bindArchiveFolderContent(cached.data, context);
+    } else {
+      container.innerHTML = loadingHtml('Memuat isi folder...');
+    }
+    try {
+      const wrapped = await getCachedOrFetch('archive_folder', cacheParams, function () {
+        return api('listArchiveFolder', { folderId: context.folderId, pageSize: ARCHIVE_FOLDER_PAGE_SIZE }, { timeoutMs: 45000 });
+      });
+      if (rid !== currentRenderId()) return;
+      if (wrapped.source === 'fresh' || wrapped.source === 'stale-revalidated' || wrapped.source === 'cache') {
+        const result = wrapped.data;
+        state.selectedFolderName = result.current ? result.current.name : context.folderName;
+        container.innerHTML = archiveFolderContentHtml(result, context);
+
+        bindArchiveFolderContent(result, context);
+      }
+
+      // Drive link is rendered synchronously as Buka Folder Persuratan
+    } catch (error) {
+      if (rid !== currentRenderId()) return;
+      container.innerHTML = `<div class="error">${esc(errorMessage(error))}</div>`;
+    }
+  }
+
+  function mergeArchiveFolderPage(base, page) {
+    base = base || {};
+    page = page || {};
+    return {
+      current: page.current || base.current,
+      parent: page.parent || base.parent,
+      folders: (base.folders || []).concat(page.folders || []),
+      files: (base.files || []).concat(page.files || []),
+      nextPageToken: page.nextPageToken || '',
+      pageSize: page.pageSize || base.pageSize || ARCHIVE_FOLDER_PAGE_SIZE,
+      partial: !!page.nextPageToken
+    };
+  }
+
+  async function loadMoreArchiveFolderContent(context, button) {
+    if (!button || button.disabled) return;
+    const cacheParams = { folderId: context.folderId, pageSize: ARCHIVE_FOLDER_PAGE_SIZE };
+    const cached = getCachedView('archive_folder', cacheParams);
+    const currentData = cached && cached.data ? cached.data : null;
+    const nextPageToken = currentData && currentData.nextPageToken;
+    if (!nextPageToken) return;
+
+    button.disabled = true;
+    const oldText = button.textContent;
+    button.textContent = 'Memuat...';
+    try {
+      const page = await api('listArchiveFolder', {
+        folderId: context.folderId,
+        pageSize: ARCHIVE_FOLDER_PAGE_SIZE,
+        pageToken: nextPageToken
+      }, { timeoutMs: 45000 });
+      const merged = mergeArchiveFolderPage(currentData, page);
+      setCachedView('archive_folder', cacheParams, merged, getCurrentDataVersion());
+      const container = document.getElementById('archive-folder-content');
+      if (container) container.innerHTML = archiveFolderContentHtml(merged, context);
+      const countEl = document.getElementById('archive-folder-count');
+      if (countEl) countEl.innerText = `(${merged.folders ? merged.folders.length : 0}${merged.nextPageToken ? '+' : ''})`;
+      bindArchiveFolderContent(merged, context);
+    } catch (error) {
+      showToast('Gagal memuat lanjutan folder: ' + errorMessage(error));
+      button.disabled = false;
+      button.textContent = oldText;
+    }
+  }
+
+  function archiveFolderContentHtml(result, context) {
+    const folders = result.folders || [];
+    const allFiles = result.files || [];
+    const SHORTCUT_MIME = 'application/vnd.google-apps.shortcut';
+    const surat = allFiles.filter(f => f.mimeType !== SHORTCUT_MIME);
+    const dokumen = allFiles.filter(f => f.mimeType === SHORTCUT_MIME);
+    const activityId = context.activity ? context.activity.activity_id : '';
+    const hasMore = !!result.nextPageToken;
+    const suffix = hasMore ? '+' : '';
+    const folderSection = folders.length > 0 ? `
+      <div class="section-header">
+        <div>
+          <h2 class="section-title">Folder Turunan <span id="archive-folder-count">(${folders.length}${suffix})</span></h2>
+        </div>
+      </div>
+      <div class="folders-grid">
+        ${folders.map(folder => archiveChildFolderRow(folder, context)).join('')}
+      </div>
+    ` : '';
+    return `
+      ${folderSection}
+      
+      <div class="archive-folder-grid">
+        <div>
+          <div class="section-header">
+            <div>
+                <h2 class="section-title">Surat <span class="muted" style="font-size:0.85em;font-weight:400;">(${surat.length}${suffix})</span></h2>
+            </div>
+          </div>
+          ${surat.length > 0 ? `
+            <div class="archive-file-list archive-file-list-scrollable">
+              ${surat.map(file => archiveFileRow(file)).join('')}
+            </div>
+          ` : `
+            <div class="archive-empty-block">
+              <strong>Belum ada surat.</strong>
+              <span>Klik <strong>Tambah Surat</strong> di atas untuk mengarsipkan surat pertama di folder ini.</span>
+            </div>
+          `}
+        </div>
+
+        <div>
+          <div class="section-header">
+            <div>
+                <h2 class="section-title">Dokumen <span class="muted" style="font-size:0.85em;font-weight:400;">(${dokumen.length}${suffix})</span></h2>
+            </div>
+          </div>
+          ${dokumen.length > 0 ? `
+            <div class="archive-file-list">
+              ${dokumen.map(file => archiveDokumenRow(file)).join('')}
+            </div>
+          ` : `
+            <div class="archive-empty-block">
+              <strong>Belum ada dokumen.</strong>
+              <span>Klik <strong>Tambah Dokumen</strong> di atas untuk menautkan dokumen Drive ke folder ini.</span>
+            </div>
+          `}
+        </div>
+      </div>
+
+      ${hasMore ? `
+        <div class="button-row justify-center mt-20">
+          <button class="btn" data-load-more-archive-folder>
+            Muat lagi
+          </button>
+        </div>
+      ` : ''}
+    `;
+  }
+
+  function archiveChildFolderRow(folder, context) {
+    const activityId = context.activity ? context.activity.activity_id : '';
+    const mappedSub = findMappedSubActivityForFolder_(context.activity, folder.id);
+    const isMappedSub = !!mappedSub;
+    return `
+      <div class="tall-card tall-card-folder tall-card-${esc(activityId)}" data-open-folder data-folder-id="${esc(folder.id)}" data-folder-name="${esc(folder.name)}" role="button" tabindex="0" aria-label="Buka folder ${esc(folder.name)}">
+        <div class="tall-card-top">
+          <div class="tall-card-header-row">
+            <span class="tall-card-badge">Folder</span>
+            <span class="tall-card-metadata">Folder Turunan</span>
+          </div>
+          <div class="tall-card-actions tall-card-actions-top" style="display: ${isGuest() ? 'none' : 'block'}">
+            <div class="dropdown">
+              <button class="sub-action-btn" data-action="toggle-dropdown" title="Opsi lainnya" aria-label="Opsi untuk folder ${esc(folder.name)}">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>
+                </svg>
+              </button>
+              <div class="sub-dropdown-menu">
+                ${isMappedSub ? `
+                  <button class="sub-dropdown-item" data-edit-sub-folder data-folder-id="${esc(folder.id)}" data-folder-name="${esc(folder.name)}" data-sub-id="${esc(mappedSub.sub_activity_id)}">Edit Sub-kegiatan</button>
+                  <button class="sub-dropdown-item sub-dropdown-danger" data-trash-sub-folder data-folder-id="${esc(folder.id)}" data-folder-name="${esc(folder.name)}" data-sub-id="${esc(mappedSub.sub_activity_id)}">Hapus</button>
+                ` : `
+                  <button class="sub-dropdown-item" data-rename-folder data-folder-id="${esc(folder.id)}" data-folder-name="${esc(folder.name)}">Ganti Nama Folder</button>
+                  <button class="sub-dropdown-item sub-dropdown-danger" data-trash-folder data-folder-id="${esc(folder.id)}" data-folder-name="${esc(folder.name)}">Hapus</button>
+                `}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tall-card-middle">
+          <div class="tall-card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </div>
+          <h3 class="tall-card-title">${esc(folder.name)}</h3>
+          <div class="tall-card-desc">
+            Klik untuk membuka isi folder turunan
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function archiveFileRow(file) {
+    const size = file.size ? (file.size / 1024 / 1024).toFixed(2) + ' MB' : '-';
+    return `
+      <div class="archive-list-row">
+        <a class="archive-row-main" href="${esc(file.url)}" target="_blank">
+          <span class="archive-row-icon archive-row-icon-file">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+          </span>
+          <span class="archive-row-text">
+            <strong title="${esc(file.name)}">${esc(file.name)}</strong>
+            <small>${esc(size)} - diperbarui ${esc(formatDateTime(file.updated))}</small>
+          </span>
+        </a>
+        <div class="archive-row-actions">
+          <button class="icon-btn" data-edit-metadata data-file-id="${esc(file.id)}" data-file-name="${esc(file.name)}" data-file-url="${esc(file.url)}" title="Edit metadata surat" aria-label="Edit metadata surat ${esc(file.name)}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+            </svg>
+          </button>
+          <button class="icon-btn danger" data-trash-file data-file-id="${esc(file.id)}" data-file-name="${esc(file.name)}" title="Hapus surat" aria-label="Hapus surat ${esc(file.name)}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 6h18"/>
+              <path d="M8 6V4h8v2"/>
+              <path d="M19 6l-1 14H6L5 6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function archiveDokumenRow(file) {
+    return `
+      <div class="archive-list-row">
+        <a class="archive-row-main" href="${esc(file.url)}" target="_blank">
+          <span class="archive-row-icon archive-row-icon-link">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
+              <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
+            </svg>
+          </span>
+          <span class="archive-row-text">
+            <strong title="${esc(file.name)}">${esc(file.name)}</strong>
+            <small>Tautan Google Drive</small>
+          </span>
+        </a>
+        <div class="archive-row-actions">
+          <button class="icon-btn" data-edit-shortcut data-file-id="${esc(file.id)}" data-file-name="${esc(file.name)}" title="Edit tautan dokumen" aria-label="Edit tautan ${esc(file.name)}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+            </svg>
+          </button>
+          <button class="icon-btn danger" data-trash-file data-file-id="${esc(file.id)}" data-file-name="${esc(file.name)}" title="Hapus dokumen" aria-label="Hapus dokumen ${esc(file.name)}">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 6h18"/>
+              <path d="M8 6V4h8v2"/>
+              <path d="M19 6l-1 14H6L5 6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindArchiveFolderContent(result, context) {
+    document.querySelector('[data-load-more-archive-folder]')?.addEventListener('click', function () {
+      loadMoreArchiveFolderContent(context, this);
+    });
+
+    var dropdownMenu = document.getElementById('doc-add-dropdown-menu');
+    if (dropdownMenu) {
+      window.currentArchiveResultFiles = result.files || [];
+      var availableCats = getUnfilledDocCategories_(window.currentArchiveResultFiles);
+      if (!availableCats || availableCats.length === 0) {
+        dropdownMenu.innerHTML = '<div class="sub-dropdown-item small muted" style="pointer-events:none;">Semua dokumen sudah ditambahkan</div>';
+      } else {
+        dropdownMenu.innerHTML = availableCats.map(function(cat) {
+          return '<button class="sub-dropdown-item" data-doc-category="' + esc(cat.id) + '" data-doc-category-name="' + esc(cat.name) + '">' + esc(cat.name) + '</button>';
+        }).join('');
+      }
+    }
+
+    document.querySelectorAll('[data-edit-shortcut]').forEach(function (button) {
+      button.addEventListener('click', async function () {
+        var fileId = this.dataset.fileId;
+        var fileName = this.dataset.fileName;
+        this.disabled = true;
+        showToast('Memuat data dokumen...');
+        try {
+          var info = await api('getShortcutTargetInfo', { fileId: fileId });
+          openArchiveDocLinkModal({
+            title: 'Edit Dokumen',
+            categoryName: fileName,
+            allCategories: DOC_CATEGORIES,
+            contextParts: buildArchiveBreadcrumb(context),
+            currentUrl: (info && info.targetUrl) || '',
+            onSubmit: async function (url, cat) {
+              var newCatName = cat ? cat.name : fileName;
+              var loadToast = showToast('Menyimpan perubahan dokumen ' + newCatName + '...', true);
+              try {
+                if (newCatName !== fileName) {
+                  await api('renameArchiveFile', { fileId: fileId, name: newCatName });
+                }
+                await api('updateArchiveDocumentLink', {
+                  fileId: fileId,
+                  url: url,
+                  categoryName: newCatName,
+                  activityId: context.activity.activity_id,
+                  subActivityId: context.subActivity.sub_activity_id,
+                  year: state.bootstrap.settings.currentYear
+                });
+                if (loadToast) removeToast(loadToast);
+                showToast('Dokumen ' + newCatName + ' berhasil diperbarui!');
+                invalidateViewCache('archive_folder');
+                await loadArchiveFolderContent(context);
+              } catch (err) {
+                if (loadToast) removeToast(loadToast);
+                showToast('Gagal mengubah ' + newCatName + ': ' + (err.message || String(err)));
+              }
+            }
+          });
+        } catch (err) {
+          showToast('Gagal memuat info tautan: ' + (err.message || String(err)));
+        }
+        this.disabled = false;
+      });
+    });
+
+    document.querySelectorAll('[data-open-folder]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('.sub-card-actions')) return;
+        if (e.target.closest('.archive-row-actions')) return;
+        if (e.target.closest('.tall-card-actions')) return;
+        const nextName = el.dataset.folderName;
+        const mappedSub = findMappedSubActivityForFolder_(context.activity, el.dataset.folderId);
+        const nextBreadcrumb = mappedSub
+          ? breadcrumbForMappedSubActivity_(context.activity, mappedSub, nextName)
+          : buildArchiveBreadcrumb(context).concat(nextName);
+        setView('archive_folder', {
+          activityId: context.activity.activity_id,
+          subActivityId: mappedSub ? mappedSub.sub_activity_id : context.subActivity.sub_activity_id,
+          folderId: el.dataset.folderId,
+          folderName: nextName,
+          folderBreadcrumb: nextBreadcrumb
+        });
+      });
+    });
+
+    document.querySelectorAll('[data-rename-folder]').forEach(button => {
+      button.addEventListener('click', (e) => {
+        const menu = e.target.closest('.sub-dropdown-menu');
+        if (menu) menu.classList.remove('open');
+        openArchiveFolderModal({
+          mode: 'rename-folder',
+          title: 'Ganti Nama Folder',
+          label: 'Nama folder',
+          value: button.dataset.folderName,
+          submitText: 'Simpan',
+          payload: { folderId: button.dataset.folderId }
+        });
+      });
+    });
+
+    document.querySelectorAll('[data-edit-sub-folder]').forEach(button => {
+      button.addEventListener('click', (e) => {
+        const menu = e.target.closest('.sub-dropdown-menu');
+        if (menu) menu.classList.remove('open');
+        const sub = (context.activity && context.activity.subActivities || [])
+          .find(item => item.sub_activity_id === button.dataset.subId) || {};
+        openArchiveFolderModal({
+          mode: 'edit-sub-activity',
+          title: 'Edit Sub-kegiatan',
+          label: 'Nama folder Drive',
+          value: sub.sub_activity_name || button.dataset.folderName,
+          submitText: 'Simpan Sub-kegiatan',
+          subActivity: sub,
+          payload: {
+            activityId: context.activity.activity_id,
+            subActivityId: button.dataset.subId
+          }
+        });
+      });
+    });
+
+    document.querySelectorAll('[data-edit-metadata]').forEach(button => {
+      button.addEventListener('click', async () => {
+        const fileId = button.dataset.fileId;
+        const fileName = button.dataset.fileName;
+        const fileUrl = button.dataset.fileUrl;
+        button.disabled = true;
+        showToast('Memuat data metadata...');
+        try {
+          const log = await api('getArchiveLogByFileId', { fileId: fileId });
+          if (!log) {
+            showToast('Surat belum tercatat di log. Mengalihkan ke form pendataan arsip...');
+            state.draft = null;
+            state.selectedFile = {
+              id: fileId,
+              name: fileName,
+              url: fileUrl,
+              mimeType: '',
+              fileSize: 0,
+              isJustUploaded: false
+            };
+            state.editMode = false;
+            setView('process', {
+              preselectedActivityId: context.activity ? context.activity.activity_id : '',
+              preselectedSubActivityId: context.subActivity ? context.subActivity.sub_activity_id : '',
+              targetFolderId: context.folderId,
+              targetFolderName: context.folderName || (context.subActivity ? context.subActivity.sub_activity_name : ''),
+              folderBreadcrumb: buildArchiveBreadcrumb(context)
+            });
+            return;
+          }
+          const draftObj = await api('getArchiveMetadata', { archiveId: log.archive_id, year: state.bootstrap.settings.currentYear });
+          state.draft = draftObj;
+          state.editMode = true;
+          state.editReturnFolder = {
+            activityId: context.activity ? context.activity.activity_id : '',
+            subActivityId: context.subActivity ? context.subActivity.sub_activity_id : '',
+            folderId: context.folderId,
+            folderName: context.folderName || (context.subActivity ? context.subActivity.sub_activity_name : ''),
+            folderBreadcrumb: buildArchiveBreadcrumb(context)
+          };
+          setView('process');
+          showToast('Memasuki mode edit metadata...');
+        } catch (e) {
+          showToast('Gagal memuat data arsip: ' + (e.message || String(e)));
+          button.disabled = false;
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-trash-folder]').forEach(button => {
+      button.addEventListener('click', async (e) => {
+        const menu = e.target.closest('.sub-dropdown-menu');
+        if (menu) menu.classList.remove('open');
+        if (!await showConfirmModal('Pindahkan folder "' + button.dataset.folderName + '" ke Tempat Sampah?')) return;
+        button.disabled = true;
+        await archiveFolderAction('trashArchiveFolder', { folderId: button.dataset.folderId }, context, 'Folder dipindahkan ke Tempat Sampah.', 'Menghapus folder "' + button.dataset.folderName + '"...');
+        button.disabled = false;
+      });
+    });
+
+    document.querySelectorAll('[data-trash-sub-folder]').forEach(button => {
+      button.addEventListener('click', async (e) => {
+        const menu = e.target.closest('.sub-dropdown-menu');
+        if (menu) menu.classList.remove('open');
+        if (!await showConfirmModal('Hapus sub-kegiatan "' + button.dataset.folderName + '" dan pindahkan foldernya ke Tempat Sampah?')) return;
+        button.disabled = true;
+        const result = await archiveFolderAction('trashSubActivityFolder', {
+          activityId: context.activity.activity_id,
+          subActivityId: button.dataset.subId,
+          year: state.bootstrap.settings.currentYear
+        }, context, 'Sub-kegiatan dihapus.', 'Menghapus sub-kegiatan "' + button.dataset.folderName + '"...');
+        if (result && result.bootstrap) {
+          state.bootstrap = result.bootstrap;
+          populateDashboardNav();
+        }
+        button.disabled = false;
+      });
+    });
+
+    document.querySelectorAll('[data-trash-file]').forEach(button => {
+      button.addEventListener('click', async () => {
+        if (!await showConfirmModal('Pindahkan dokumen "' + button.dataset.fileName + '" ke Tempat Sampah? Baris spreadsheet akan dihapus beserta pengurutan ulang nomor item.')) return;
+        button.disabled = true;
+        await archiveFolderAction('trashArchiveFile', {
+          fileId: button.dataset.fileId,
+          activityId: context.activity ? context.activity.activity_id : '',
+          subActivityId: context.subActivity ? context.subActivity.sub_activity_id : '',
+          year: state.bootstrap.settings.currentYear
+        }, context, 'Dokumen dan baris spreadsheet berhasil dihapus.', 'Menghapus dokumen "' + button.dataset.fileName + '"...');
+        button.disabled = false;
+      });
+    });
+  }
+
+  function archiveFolderModalHtml() {
+    return `
+      <div id="archive-folder-modal" class="modal-backdrop" style="display:none;">
+        <div class="modal-card" style="width: min(440px, 100%);">
+          <div class="modal-header">
+            <h3 class="section-title" id="archive-modal-title">Folder</h3>
+            <button class="btn icon-btn" id="archive-modal-close" aria-label="Tutup">x</button>
+          </div>
+          <div class="panel-pad">
+            <div class="form-field">
+              <label id="archive-modal-label" for="archive-modal-input">Nama</label>
+              <input id="archive-modal-input" type="text" autocomplete="off">
+            </div>
+            <div id="archive-sub-mapping-fields" style="display:none;">
+              <div class="form-field mt-12">
+                <label for="archive-sub-formal-name">Nama formal di rangkuman</label>
+                <input id="archive-sub-formal-name" type="text" autocomplete="off">
+              </div>
+              <div style="display:grid; grid-template-columns:minmax(0,1fr) 96px; gap:12px;" class="mt-12">
+                <div class="form-field" style="margin:0;">
+                  <label for="archive-sub-sheet-name">Lembar rincian</label>
+                  <input id="archive-sub-sheet-name" type="text" autocomplete="off">
+                </div>
+                <div class="form-field" style="margin:0;">
+                  <label for="archive-sub-no-folder">Nomor Folder</label>
+                  <input id="archive-sub-no-folder" type="text" autocomplete="off">
+                </div>
+              </div>
+              <details class="mt-12">
+                <summary class="small muted" style="cursor:pointer;">Opsi lanjutan</summary>
+                <div class="form-field mt-12">
+                  <label for="archive-sub-rekap-row">Baris rangkuman</label>
+                  <input id="archive-sub-rekap-row" type="text" placeholder="auto" autocomplete="off">
+                </div>
+                <div class="small muted mt-8">Kosongkan jika app boleh mencari baris dari nama formal atau nomor berkas.</div>
+              </details>
+            </div>
+            <div class="button-row justify-end mt-20">
+              <button class="btn" id="archive-modal-cancel">Batal</button>
+              <button class="btn btn-primary" id="archive-modal-submit">Simpan</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+
+  function openArchiveFolderModal(options) {
+    const modal = document.getElementById('archive-folder-modal');
+    const title = document.getElementById('archive-modal-title');
+    const label = document.getElementById('archive-modal-label');
+    const input = document.getElementById('archive-modal-input');
+    const submit = document.getElementById('archive-modal-submit');
+    const cancel = document.getElementById('archive-modal-cancel');
+    const closeBtn = document.getElementById('archive-modal-close');
+    const mappingFields = document.getElementById('archive-sub-mapping-fields');
+    const formalInput = document.getElementById('archive-sub-formal-name');
+    const sheetInput = document.getElementById('archive-sub-sheet-name');
+    const noFolderInput = document.getElementById('archive-sub-no-folder');
+    const rekapRowInput = document.getElementById('archive-sub-rekap-row');
+    const context = getArchiveFolderContext();
+    if (!modal || !title || !label || !input || !submit || !cancel) return;
+
+    const isSubActivityEdit = options.mode === 'edit-sub-activity';
+    const sub = options.subActivity || {};
+    title.textContent = options.title;
+    label.textContent = options.label;
+    input.value = options.value || '';
+    submit.textContent = options.submitText || 'Simpan';
+    if (mappingFields) mappingFields.style.display = isSubActivityEdit ? 'block' : 'none';
+    if (formalInput) formalInput.value = isSubActivityEdit ? (sub.formal_archive_name || sub.effective_formal_archive_name || sub.sub_activity_name || '') : '';
+    if (sheetInput) sheetInput.value = isSubActivityEdit ? (sub.target_sheet_name || sub.effective_target_sheet_name || sub.sub_activity_name || '') : '';
+    if (noFolderInput) noFolderInput.value = isSubActivityEdit ? (sub.no_folder || '') : '';
+    if (rekapRowInput) rekapRowInput.value = isSubActivityEdit ? (sub.rekap_row_number || '') : '';
+    modal.style.display = 'grid';
+    window.setTimeout(() => input.focus(), 30);
+
+    const close = () => {
+      modal.style.display = 'none';
+      submit.onclick = null;
+      cancel.onclick = null;
+      if(closeBtn) closeBtn.onclick = null;
+      modal.onclick = null;
+    };
+    cancel.onclick = close;
+    if(closeBtn) closeBtn.onclick = close;
+    modal.onclick = (event) => { if (event.target === modal) close(); };
+    submit.onclick = async () => {
+      const name = input.value.trim();
+      if (!name) {
+        showToast('Nama wajib diisi.');
+        return;
+      }
+      submit.disabled = true;
+      try {
+        if (options.mode === 'add-folder') {
+          await api('addArchiveChildFolder', Object.assign({}, options.payload, { name }));
+          const targetRootId = context.activity
+            ? String(context.activity.target_folder_id || (context.activity.targetFolder && context.activity.targetFolder.id) || '')
+            : '';
+          const isAddingKepemimpinanSubActivity = context.activity &&
+            context.activity.activity_id === 'kepemimpinan' &&
+            String(context.folderId || '') === targetRootId;
+          if (isAddingKepemimpinanSubActivity) {
+            const syncResult = await api('syncSubActivities', {
+              activityId: context.activity.activity_id,
+              year: state.bootstrap.settings.currentYear
+            });
+            if (syncResult && syncResult.bootstrap) {
+              state.bootstrap = syncResult.bootstrap;
+              populateDashboardNav();
+            }
+            showToast('Folder angkatan ditambahkan dan dipetakan ke lembar kerja.');
+          } else {
+            showToast('Folder turunan ditambahkan.');
+          }
+        } else if (options.mode === 'rename-folder') {
+          await api('renameArchiveFolder', Object.assign({}, options.payload, { name }));
+          showToast('Nama folder diperbarui.');
+        } else if (options.mode === 'edit-sub-activity') {
+          const result = await api('renameSubActivity', Object.assign({}, options.payload, {
+            newName: name,
+            formalArchiveName: formalInput ? formalInput.value.trim() : '',
+            targetSheetName: sheetInput ? sheetInput.value.trim() : '',
+            noFolder: noFolderInput ? noFolderInput.value.trim() : '',
+            rekapRowNumber: rekapRowInput ? rekapRowInput.value.trim() : '',
+            mappingStatus: 'SIAP',
+            year: state.bootstrap.settings.currentYear
+          }));
+          if (result && result.bootstrap) {
+            state.bootstrap = result.bootstrap;
+            populateDashboardNav();
+          }
+          showToast('Sub-kegiatan dan rangkuman diperbarui.');
+        }
+        close();
+        invalidateViewCache('archive_folder');
+        await loadArchiveFolderContent(context);
+      } catch (error) {
+        showToast(errorMessage(error));
+      } finally {
+        submit.disabled = false;
+      }
+    };
+  }
+
+  async function archiveFolderAction(apiName, payload, context, successMessage, loadingMessage) {
+    var actionToast = showToast(loadingMessage || 'Memproses...', true);
+    try {
+      const result = await api(apiName, payload);
+      invalidateViewCache('archive_folder');
+      await loadArchiveFolderContent(context);
+      if (actionToast) removeToast(actionToast);
+      showToast(successMessage);
+      return result;
+    } catch (error) {
+      if (actionToast) removeToast(actionToast);
+      showToast(errorMessage(error));
+      return null;
+    }
+  }
+
+
+
+
+  function archiveDocLinkModalHtml() {
+    return `
+      <div id="archive-doc-link-modal" class="modal-backdrop" style="display:none; z-index: 1000;">
+        <div class="modal-card" style="width: min(520px, 95dvw); display: flex; flex-direction: column;">
+          <div class="modal-header">
+            <h3 class="section-title" id="doc-link-modal-title">Tambah Dokumen</h3>
+            <button class="btn icon-btn" id="doc-link-modal-close" aria-label="Tutup">x</button>
+          </div>
+          <div class="panel-pad">
+            <div id="doc-link-modal-context" class="small mb-12" style="font-weight: 500;"></div>
+            <div class="form-field">
+              <label for="doc-link-modal-category">Pilih Kategori Dokumen</label>
+              <select id="doc-link-modal-category"></select>
+            </div>
+            <div class="form-field mt-12">
+              <label for="doc-link-modal-url">Tautan Google Drive</label>
+              <div class="drive-link-input" style="width: 100%;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
+                  <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
+                </svg>
+                <input id="doc-link-modal-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Contoh: drive.google.com/..." style="width: 100%; border: none; outline: none; background: transparent;">
+              </div>
+              <div class="small muted mt-4">Pilih kategori dokumen dan tempel tautannya di atas.</div>
+            </div>
+            <div class="button-row justify-end mt-20">
+              <button class="btn" id="doc-link-modal-cancel">Batal</button>
+              <button class="btn btn-primary" id="doc-link-modal-submit">Simpan</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function openArchiveDocLinkModal(options) {
+    var modal = document.getElementById('archive-doc-link-modal');
+    if (!modal) {
+      document.body.insertAdjacentHTML('beforeend', archiveDocLinkModalHtml());
+      modal = document.getElementById('archive-doc-link-modal');
+    }
+    var titleEl = document.getElementById('doc-link-modal-title');
+    var contextEl = document.getElementById('doc-link-modal-context');
+    var categorySelect = document.getElementById('doc-link-modal-category');
+    var urlInput = document.getElementById('doc-link-modal-url');
+    var submitBtn = document.getElementById('doc-link-modal-submit');
+    var cancelBtn = document.getElementById('doc-link-modal-cancel');
+    var closeBtn = document.getElementById('doc-link-modal-close');
+
+    titleEl.textContent = options.title || 'Tambah Dokumen';
+    contextEl.innerHTML = (options.contextParts || []).map(function(p) { return '<span>' + esc(p) + '</span>'; }).join('<span class="mx-4">/</span>');
+    urlInput.value = options.currentUrl || '';
+
+    categorySelect.innerHTML = '';
+    (options.allCategories || []).forEach(function(cat) {
+      var opt = document.createElement('option');
+      opt.value = cat.id;
+      opt.textContent = cat.name;
+      if (cat.name === options.categoryName) opt.selected = true;
+      categorySelect.appendChild(opt);
+    });
+
+    submitBtn.textContent = 'Simpan';
+    submitBtn.disabled = false;
+    modal.style.display = 'grid';
+
+    window.setTimeout(function() { urlInput.focus(); }, 50);
+
+    var closeModal = function() {
+      modal.style.opacity = '0';
+      setTimeout(function() {
+        modal.style.display = 'none';
+        modal.style.opacity = '1';
+        submitBtn.onclick = null;
+        cancelBtn.onclick = null;
+        closeBtn.onclick = null;
+      }, 200);
+    };
+
+    var handleSubmit = function() {
+      var url = urlInput.value.trim();
+      if (!url) { showToast('Tautan Drive wajib diisi.'); return; }
+      if (!url.startsWith('http')) { showToast('Tautan harus berupa URL yang valid (http/https).'); return; }
+      
+      var selectedId = categorySelect.value;
+      var selectedCat = (options.allCategories || []).find(function(c) { return c.id === selectedId; });
+      
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Menyimpan...';
+      
+      closeModal();
+      
+      if (typeof options.onSubmit === 'function') {
+        options.onSubmit(url, selectedCat);
+      }
+    };
+
+    cancelBtn.onclick = closeModal;
+    closeBtn.onclick = closeModal;
+    submitBtn.onclick = handleSubmit;
+  }
+
+</script>

@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portal Arsip PUSJARSKPP</title>
+  <?!= include('Styles'); ?>
+</head>
+<body>
+  <div id="app" class="app-shell loading">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo-container">
+          <img id="brand-logo-img" class="brand-logo-img" src="" alt="Logo PUSJARSKPP LAN RI">
+        </div>
+      </div>
+
+      <nav class="nav-group" aria-label="Menu utama">
+        <button class="nav-item active" data-view="dashboard" id="nav-dashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          <span>Dasbor</span>
+        </button>
+
+        <div class="nav-parent" id="nav-kegiatan-group">
+          <button class="nav-item" id="nav-kegiatan">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span>Kegiatan</span>
+            <svg class="nav-chevron" id="nav-kegiatan-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          <div class="nav-children" id="nav-kegiatan-children"></div>
+        </div>
+
+        <div class="nav-section-label nav-auth">Kearsipan</div>
+
+        <button class="nav-item nav-auth" data-view="process" id="nav-process">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <polyline points="9 15 12 12 15 15"/>
+          </svg>
+          Arsipkan Surat
+        </button>
+
+        <button class="nav-item nav-auth" data-view="document_process" id="nav-document-process">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
+            <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
+          </svg>
+          Arsipkan Dokumen
+        </button>
+
+        <button class="nav-item nav-auth" data-view="history" id="nav-history">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Riwayat & Draf Arsip
+        </button>
+
+        <div class="nav-section-label">Referensi & Utilitas</div>
+
+        <button class="nav-item" data-view="templates" id="nav-templates">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          Templat Surat
+        </button>
+
+        <div class="nav-section-label nav-admin">Administrasi</div>
+
+        <button class="nav-item nav-admin" data-view="accounts" id="nav-accounts">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/>
+            <polyline points="17 11 19 13 23 9"/>
+          </svg>
+          Manajemen Akun
+        </button>
+
+        <button class="nav-item nav-admin" data-view="inactive" id="nav-inactive">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            <line x1="9" y1="13" x2="15" y2="13"/>
+          </svg>
+          Arsip Nonaktif
+        </button>
+
+        <button class="nav-item nav-admin" data-view="audit" id="nav-audit">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+            <line x1="9" y1="10" x2="15" y2="10"/>
+            <line x1="9" y1="14" x2="15" y2="14"/>
+            <line x1="9" y1="18" x2="13" y2="18"/>
+          </svg>
+          Catatan Aktivitas
+        </button>
+
+        <button class="nav-item nav-admin" data-view="settings" id="nav-settings">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.07 4.93a9 9 0 0 1 0 14.14M4.93 4.93a9 9 0 0 0 0 14.14"/>
+          </svg>
+          Pengaturan Ruang Kerja
+        </button>
+      </nav>
+
+      <div id="sidebar-footer" class="sidebar-footer"></div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+    <main class="main">
+      <header class="topbar" role="banner">
+        <div class="topbar-left">
+          <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Buka menu navigasi" aria-expanded="false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="3" y1="6" x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+            <svg class="sidebar-toggle-close" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+          <h1 id="page-title">Portal Arsip PUSJARSKPP</h1>
+        </div>
+        <div class="search-bar" id="search-bar">
+          <svg class="search-bar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" id="search-input" class="search-bar-input" placeholder="Cari surat atau dokumen..." autocomplete="off">
+          <div id="search-dropdown" class="search-dropdown"></div>
+        </div>
+        
+        <div class="year-dropdown-container" id="year-dropdown-container">
+          <div class="year-pill" id="year-pill" aria-label="Tahun aktif" role="button" tabindex="0" data-action="toggle-dropdown">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            <span id="year-pill-text">Tahun -</span>
+            <svg class="year-pill-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </div>
+          <div id="year-dropdown-menu" class="search-dropdown year-dropdown-menu sub-dropdown-menu"></div>
+        </div>
+      </header>
+
+      <section id="content" class="content" role="main"></section>
+    </main>
+  </div>
+
+  <div id="year-loading-overlay" class="year-loading-overlay">
+    <div class="spinner"></div>
+    <div class="year-loading-text">Mengganti ruang kerja tahun...</div>
+    <div class="year-loading-sub" id="year-loading-sub">Memuat data tahun <span id="year-loading-year"></span></div>
+  </div>
+  <div id="toast-container" role="status" aria-live="polite"></div>
+  <div class="watermark-sosmed" aria-hidden="true">
+    <img src="" alt="" id="watermark-logo-sosmed">
+  </div>
+  <?!= include('ClientState'); ?>
+  <?!= include('ClientAssets'); ?>
+  <?!= include('ClientApi'); ?>
+  <?!= include('ClientRouter'); ?>
+  <?!= include('ClientDashboard'); ?>
+  <?!= include('ClientActivityDetail'); ?>
+  <?!= include('EditSubActivity'); ?>
+  <?!= include('ClientArchiveFolder'); ?>
+  <?!= include('ClientProcess'); ?>
+  <?!= include('ClientDocumentProcess'); ?>
+  <?!= include('ClientHistory'); ?>
+  <?!= include('ClientTemplates'); ?>
+  <?!= include('ClientAccounts'); ?>
+  <?!= include('ClientSettings'); ?>
+  <?!= include('ClientFolderPicker'); ?>
+  <?!= include('ClientLogin'); ?>
+  <?!= include('ClientUtils'); ?>
+</body>
+</html>

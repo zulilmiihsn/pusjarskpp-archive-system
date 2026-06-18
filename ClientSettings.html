@@ -1,0 +1,1747 @@
+<script>
+  function renderSettings() {
+    const settings = (state.bootstrap && state.bootstrap.settings) || {};
+    const activeTab = state.activeSettingsTab || 'tab-workspace';
+    const activeTheme = localStorage.getItem('portal_theme') || 'sleek';
+
+    setContent(`
+      <div class="tabs-nav" role="tablist">
+        <button class="tab-btn ${activeTab === 'tab-workspace' ? 'active' : ''}" data-tab="tab-workspace" role="tab" aria-selected="${activeTab === 'tab-workspace'}">
+          Ruang Kerja Utama
+        </button>
+        <button class="tab-btn ${activeTab === 'tab-mapping' ? 'active' : ''}" data-tab="tab-mapping" role="tab" aria-selected="${activeTab === 'tab-mapping'}">
+          Pemetaan Sub-kegiatan
+        </button>
+        <button class="tab-btn ${activeTab === 'tab-theme' ? 'active' : ''}" data-tab="tab-theme" role="tab" aria-selected="${activeTab === 'tab-theme'}">
+          Tema Tampilan
+        </button>
+        <button class="tab-btn ${activeTab === 'tab-advanced' ? 'active' : ''}" data-tab="tab-advanced" role="tab" aria-selected="${activeTab === 'tab-advanced'}">
+          Pemeliharaan
+        </button>
+      </div>
+
+      <!-- Tab Content 1: Workspace Utama -->
+      <div class="tab-content ${activeTab === 'tab-workspace' ? 'active' : ''}" id="tab-workspace" role="tabpanel">
+        <div style="margin-bottom: 24px; padding-left: 4px;">
+          <h2 class="section-title" style="font-size: 18px; font-weight: 800; letter-spacing: -0.02em;">Ruang Kerja Arsip</h2>
+          <p class="section-subtitle">Pengaturan dasar tahun kerja dan lokasi folder utama arsip Anda.</p>
+        </div>
+        <div style="display: flex; flex-direction: column;">
+          ${settingsForm(settings)}
+        </div>
+      </div>
+
+      <!-- Tab Content 2: Pemetaan Sub-kegiatan -->
+      <div class="tab-content ${activeTab === 'tab-mapping' ? 'active' : ''}" id="tab-mapping" role="tabpanel">
+        <div style="margin-bottom: 24px; padding-left: 4px;">
+          <h2 class="section-title" style="font-size: 18px; font-weight: 800; letter-spacing: -0.02em;">Pemetaan Sub-kegiatan</h2>
+          <p class="section-subtitle">Hubungkan nama folder Drive, nama formal di rangkuman, dan lembar detail. Jika kosong, aplikasi memakai cadangan sementara dan menandainya perlu ditinjau.</p>
+        </div>
+        ${subActivityMappingSettingsHtml()}
+      </div>
+
+      <!-- Tab Content 3: Tema Tampilan -->
+      <div class="tab-content ${activeTab === 'tab-theme' ? 'active' : ''}" id="tab-theme" role="tabpanel">
+        <div style="margin-bottom: 24px; padding-left: 4px;">
+          <h2 class="section-title" style="font-size: 18px; font-weight: 800; letter-spacing: -0.02em;">Tema Warna Laci</h2>
+          <p class="section-subtitle">Atur preferensi visual untuk kartu laci kegiatan Anda.</p>
+        </div>
+        <div class="settings-section-card">
+          <div class="settings-section-header">
+            <h3 class="settings-section-title">
+              ${iconSvg('sliders')}
+              Skema Warna Laci Kegiatan
+            </h3>
+            <p class="settings-section-subtitle">Pilih tema warna kartu laci kegiatan yang sesuai dengan selera Anda untuk kenyamanan bekerja.</p>
+          </div>
+          <div class="theme-options-grid">
+            <div class="theme-option-card" data-theme="sleek">
+              <div class="theme-option-preview">
+                <span class="preview-dot" style="background:#10B981;"></span>
+                <span class="preview-dot" style="background:#F43F5E;"></span>
+                <span class="preview-dot" style="background:#F59E0B;"></span>
+                <span class="preview-dot" style="background:#8B5CF6;"></span>
+              </div>
+              <div class="theme-option-info">
+                <strong>Modern Profesional (Bawaan)</strong>
+                <span>Gradasi cerah, kontras tinggi dan profesional.</span>
+              </div>
+            </div>
+            <div class="theme-option-card" data-theme="earthy">
+              <div class="theme-option-preview">
+                <span class="preview-dot" style="background:#059669;"></span>
+                <span class="preview-dot" style="background:#C2410C;"></span>
+                <span class="preview-dot" style="background:#A16207;"></span>
+                <span class="preview-dot" style="background:#7E22CE;"></span>
+              </div>
+              <div class="theme-option-info">
+                <strong>Hangat Alami (Minimalis)</strong>
+                <span>Warna alam teduh, nyaman untuk mata bekerja lama.</span>
+              </div>
+            </div>
+            <div class="theme-option-card" data-theme="nordic">
+              <div class="theme-option-preview">
+                <span class="preview-dot" style="background:#0891B2;"></span>
+                <span class="preview-dot" style="background:#BE185D;"></span>
+                <span class="preview-dot" style="background:#B45309;"></span>
+                <span class="preview-dot" style="background:#4338CA;"></span>
+              </div>
+              <div class="theme-option-info">
+                <strong>Senja Nordik (Tenang)</strong>
+                <span>Kombinasi warna dingin, tenang dan eksklusif.</span>
+              </div>
+            </div>
+            <div class="theme-option-card" data-theme="custom">
+              <div class="theme-option-preview" id="custom-theme-preview-dots">
+                <span class="preview-dot" style="background:#ccc;"></span>
+                <span class="preview-dot" style="background:#ccc;"></span>
+                <span class="preview-dot" style="background:#ccc;"></span>
+                <span class="preview-dot" style="background:#ccc;"></span>
+              </div>
+              <div class="theme-option-info">
+                <strong>Warna Kustom</strong>
+                <span>Pilih bebas 32 pilihan warna untuk tiap laci.</span>
+          </div>
+        </div>
+      </div>
+        </div>
+      </div>
+
+      <!-- Tab Content 4: Pemeliharaan & Teknis -->
+      <div class="tab-content ${activeTab === 'tab-advanced' ? 'active' : ''}" id="tab-advanced" role="tabpanel">
+        <div style="margin-bottom: 24px; padding-left: 4px;">
+          <h2 class="section-title" style="font-size: 18px; font-weight: 800; letter-spacing: -0.02em;">Sistem &amp; Pemeliharaan</h2>
+          <p class="section-subtitle">Kelola basis data konfigurasi, pemicu pemeliharaan, dan optimalisasi kinerja sistem.</p>
+        </div>
+        <div class="settings-section-card">
+          <div class="settings-section-header">
+            <h3 class="settings-section-title">
+              ${iconSvg('settingsGear')}
+              Pemeliharaan &amp; Teknis Lanjutan
+            </h3>
+            <p class="settings-section-subtitle">Pengaturan lembar konfigurasi global dan pembersihan basis data secara berkala.</p>
+          </div>
+          ${technicalSettingsHtml(settings)}
+        </div>
+      </div>
+
+      <!-- Custom Theme Modal -->
+      <div class="modal-backdrop" id="custom-theme-modal" style="display: none;">
+        <div class="modal-card" style="max-width:580px; padding:28px; background:var(--surface);">
+          <h3 style="margin:0 0 8px 0; font-size:18px; font-weight:800; text-align:center;">Pilih Warna Kustom</h3>
+          <p class="muted small" style="margin-bottom:20px; text-align:center;">Tentukan warna untuk tiap laci kegiatan. Anda bebas menentukan warna yang sama.</p>
+          
+          <div class="custom-theme-categories">
+            <div class="category-color-item" data-cat="kepemimpinan">
+              <div class="category-color-preview" id="preview-color-kepemimpinan"></div>
+              <strong style="font-size:13.5px; margin-top:4px;">Laci 1</strong>
+              <div class="small muted">Kepemimpinan</div>
+            </div>
+            <div class="category-color-item" data-cat="latsar">
+              <div class="category-color-preview" id="preview-color-latsar"></div>
+              <strong style="font-size:13.5px; margin-top:4px;">Laci 2</strong>
+              <div class="small muted">Latsar/Prajabatan</div>
+            </div>
+            <div class="category-color-item" data-cat="teknis">
+              <div class="category-color-preview" id="preview-color-teknis"></div>
+              <strong style="font-size:13.5px; margin-top:4px;">Laci 3</strong>
+              <div class="small muted">Teknis/Fungsional</div>
+            </div>
+            <div class="category-color-item" data-cat="lain">
+              <div class="category-color-preview" id="preview-color-lain"></div>
+              <strong style="font-size:13.5px; margin-top:4px;">Laci 4</strong>
+              <div class="small muted">Kegiatan Lain</div>
+            </div>
+          </div>
+          
+          <p class="muted small" style="margin-bottom:12px; font-weight:600; text-align:center;">Pilih warna dari palet di bawah untuk laci aktif:</p>
+          <div class="custom-theme-color-grid" id="custom-color-grid" style="margin-bottom:20px;"></div>
+          
+          <div style="display:flex; justify-content:center; gap:12px; margin-top:24px;">
+            <button class="btn" id="custom-theme-cancel" style="min-width:100px;">Batal</button>
+            <button class="btn btn-primary" id="custom-theme-save" style="min-width:120px;">Simpan Tema</button>
+          </div>
+        </div>
+      </div>
+
+    `);
+
+    bindSettingsForm();
+    bindWorkspaceInit();
+    bindFolderPickerButtons();
+    bindSettingsTabs();
+    bindAddYearModal();
+    bindThemeSettings();
+    bindSubActivityMappingSettings();
+  }
+
+  function bindSettingsTabs() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabId = btn.dataset.tab;
+        state.activeSettingsTab = tabId;
+
+        // Update tabs active state
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.tab === tabId);
+          b.setAttribute('aria-selected', b.dataset.tab === tabId);
+        });
+
+        // Update content active state
+        document.querySelectorAll('.tab-content').forEach(c => {
+          c.classList.toggle('active', c.id === tabId);
+        });
+
+        const contentEl = document.getElementById('content');
+        if (contentEl) contentEl.scrollTop = 0;
+      });
+    });
+  }
+
+
+  function settingsForm(settings) {
+    const busy = state.workspaceInitLoading;
+    const currentYear = settings.currentYear || 2026;
+
+    return `
+      <!-- Card 1: Konfigurasi Folder Induk -->
+      <div class="settings-section-card">
+        <div class="settings-section-header">
+          <h3 class="settings-section-title">
+            ${iconSvg('folder')}
+            Konfigurasi Folder Induk
+          </h3>
+          <p class="settings-section-subtitle">Tentukan lokasi folder utama penyimpanan arsip digital Anda di Google Drive.</p>
+        </div>
+        
+        <div class="form-grid" id="settings-root-form" style="margin-bottom: 20px;">
+          <!-- Folder Workspace Card -->
+          <div class="form-field">
+            <label for="workspace-root-id">Folder Ruang Kerja Utama</label>
+            <input id="workspace-root-id" type="hidden" value="${esc(settings.workspaceRootFolderId || '')}">
+            <div class="settings-folder-picker-card">
+              <div class="settings-folder-info">
+                <div class="settings-folder-icon">${iconSvg('folder')}</div>
+                <div class="settings-folder-details">
+                  <div class="settings-folder-label">Induk Ruang Kerja</div>
+                  <div class="settings-folder-name" data-folder-label-for="workspace-root-id">
+                    ${settings.workspaceRootFolderId ? 'Folder tersimpan' : 'Pilih Folder Google Drive'}
+                  </div>
+                </div>
+              </div>
+              <button class="btn" data-folder-picker data-target-input="workspace-root-id" data-title="Pilih Folder Ruang Kerja" ${busy ? 'disabled' : ''}>Pilih</button>
+            </div>
+          </div>
+
+          <!-- Folder Konfigurasi Card -->
+          <div class="form-field">
+            <label for="config-folder-id">Folder Konfigurasi Sistem</label>
+            <input id="config-folder-id" type="hidden" value="${esc(settings.configFolderId || '')}">
+            <div class="settings-folder-picker-card">
+              <div class="settings-folder-info">
+                <div class="settings-folder-icon" style="color: var(--warn); background: rgba(217, 119, 6, 0.1);">${iconSvg('folder')}</div>
+                <div class="settings-folder-details">
+                  <div class="settings-folder-label">Folder Konfigurasi</div>
+                  <div class="settings-folder-name" data-folder-label-for="config-folder-id">
+                    ${settings.configFolderId ? 'Folder kustom tersimpan' : 'Bawaan (00. Sistem Portal di direktori utama)'}
+                  </div>
+                </div>
+              </div>
+              <button class="btn" data-folder-picker data-target-input="config-folder-id" data-title="Pilih Folder Konfigurasi" ${busy ? 'disabled' : ''}>Pilih</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-start;">
+          <button class="btn btn-primary ${busy ? 'is-loading' : ''}" id="init-workspace" ${busy ? 'disabled' : ''}>
+            ${iconSvg('link')}
+            ${busy ? 'Menghubungkan...' : 'Simpan & Hubungkan Ruang Kerja'}
+          </button>
+        </div>
+      </div>
+
+      <!-- Card 2: Manajemen Tahun Kerja -->
+      <div class="settings-section-card">
+        <div class="settings-section-header">
+            <h3 class="settings-section-title">
+              ${iconSvg('calendar')}
+              Manajemen Tahun Kerja
+            </h3>
+          <p class="settings-section-subtitle">Kelola tahun kerja aktif dan inisialisasi struktur arsip baru di Google Drive.</p>
+        </div>
+
+        ${(function() {
+          const isWorkspaceConnected = settings.workspaceRootFolderId && settings.configSpreadsheetId;
+          if (isWorkspaceConnected) {
+            return `
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                <div class="settings-folder-label" style="color: var(--accent-mid); margin: 0;">Daftar Tahun Kerja</div>
+                <button class="btn btn-primary" id="open-add-year-modal" ${busy ? 'disabled' : ''} style="display: inline-flex; align-items: center; gap: 6px;">
+                  ${iconSvg('plusBtn')}
+                  Tambah Tahun Kerja
+                </button>
+              </div>
+
+              <!-- List of Years -->
+              <div class="settings-years-list" style="border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); display: flex; flex-direction: column; overflow: hidden; margin-bottom: 24px;">
+                ${state.bootstrap.years && state.bootstrap.years.length > 0
+                  ? state.bootstrap.years.map((y, idx, arr) => {
+                      const isActive = Number(y.year) === Number(settings.currentYear);
+                      const isLast = idx === arr.length - 1;
+                      return `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: ${isLast ? 'none' : '1px solid var(--line)'}; background: ${isActive ? 'var(--surface-soft)' : 'var(--surface)'}; gap: 16px; flex-wrap: wrap;">
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            ${isActive 
+                              ? `<span style="color: var(--ok); display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; flex-shrink: 0;">
+                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; display: block;">
+                                       <path d="M20 6L9 17l-5-5"></path>
+                                     </svg>
+                                   </span>`
+                              : `<span style="width: 14px; height: 14px; display: inline-block; flex-shrink: 0;"></span>`
+                            }
+                            <span style="font-weight: ${isActive ? '700' : '600'}; font-size: 13.5px; color: ${isActive ? 'var(--accent)' : 'var(--text)'};">
+                              Tahun Kerja ${y.year}
+                            </span>
+                          </div>
+                          
+                          <div style="display: flex; align-items: center; gap: 8px;">
+                            ${!isActive 
+                              ? `<button class="btn btn-sm select-year-btn" data-year="${y.year}" style="font-size: 11px; padding: 4px 8px; min-height: 28px; line-height: 1;">
+                                   Pilih
+                                 </button>`
+                              : ''
+                            }
+                            <button class="btn btn-sm btn-danger action-delete-year-btn" data-year="${y.year}" style="font-size: 11px; padding: 4px 8px; min-height: 28px; line-height: 1; display: inline-flex; align-items: center; gap: 4px;">
+                              ${iconSvg('trash')}
+                              Hapus
+                            </button>
+                          </div>
+                        </div>
+                      `;
+                    }).join('')
+                  : '<div style="padding: 14px; text-align: center; color: var(--muted); font-size: 12.5px;">Belum ada tahun kerja aktif.</div>'
+                }
+              </div>
+              
+              <div id="settings-workspace-checklist-container">
+                ${workspaceSetupHtml(state.workspaceSetup || state.bootstrap.workspaceSetup)}
+              </div>
+
+              <hr style="margin: 24px 0; border: none; border-top: 2px solid var(--danger-border);">
+
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+                <button class="btn btn-danger" id="btn-reset-workspace" style="font-size: 12px; padding: 6px 12px;">
+                  ${iconSvg('trash')}
+                  Reset Ruang Kerja
+                </button>
+                <span class="small muted" style="text-align: right; max-width: 300px; line-height: 1.4;">Reset akan menghapus semua konfigurasi ruang kerja. Data di Google Drive dan spreadsheet tidak dihapus.</span>
+              </div>
+            `;
+          } else {
+            return `
+              <div class="empty-state-container" style="padding: 24px 16px; border: 1px dashed var(--border); background: var(--surface-soft); border-radius: var(--radius-md); text-align: center; box-shadow: none;">
+                <div class="empty-state-icon" style="color: var(--warn); background: rgba(217, 119, 6, 0.1); width: 42px; height: 42px; border-radius: var(--radius-md); display: grid; place-items: center; margin: 0 auto 12px; border: 1px solid var(--warn-border);">
+                  ${iconSvg('alertTriangle')}
+                </div>
+                <h4 style="font-size: 13.5px; font-weight: 700; color: var(--text); margin-bottom: 6px;">Ruang Kerja Belum Terhubung</h4>
+                <p style="font-size: 12.5px; color: var(--muted); max-width: 360px; margin: 0 auto; line-height: 1.5;">
+                  Silakan tentukan Folder Ruang Kerja Utama di atas dan klik "Simpan & Hubungkan Ruang Kerja" terlebih dahulu untuk mengaktifkan manajemen tahun kerja.
+                </p>
+              </div>
+            `;
+          }
+        })()}
+      </div>
+      
+      <!-- Modal Tambah Tahun Kerja -->
+      <div id="add-year-modal" style="display: none; position: fixed; inset: 0; z-index: 999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+        <div class="settings-section-card" style="width: 100%; max-width: 400px; margin: 20px; box-shadow: var(--shadow-xl);">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px;">
+            <h3 style="font-size: 16px; font-weight: 600; margin: 0; color: var(--text);">Tambah Tahun Kerja</h3>
+            <button class="btn btn-icon" id="add-year-modal-close" style="padding: 4px; border: none; background: transparent; color: var(--muted); cursor: pointer;">
+              ${iconSvg('x')}
+            </button>
+          </div>
+          
+          <div class="form-field full" style="margin-bottom: 24px;">
+            <label for="modal-new-year" style="margin-bottom: 8px; display: block;">Pilih Tahun Kerja Baru</label>
+            <select id="modal-new-year" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-family: inherit; font-size: 14px; background: var(--surface);">
+              <!-- Options populated via JS -->
+            </select>
+            <div class="muted small" style="margin-top: 8px;">Tahun yang sudah aktif tidak dapat dipilih kembali.</div>
+          </div>
+          
+          <div style="display: flex; justify-content: flex-end; gap: 12px;">
+            <button class="btn" id="add-year-modal-cancel">Batal</button>
+            <button class="btn btn-primary" id="add-year-modal-submit">Tambah & Siapkan</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Reset Workspace -->
+      <div id="reset-workspace-modal" style="display: none; position: fixed; inset: 0; z-index: 999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; backdrop-filter: blur(2px);">
+        <div class="settings-section-card" style="width: 100%; max-width: 420px; margin: 20px; box-shadow: var(--shadow-xl); border: 2px solid var(--danger-border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--danger-border); padding: 16px 20px; background: var(--danger-bg);">
+            <h3 style="font-size: 16px; font-weight: 700; margin: 0; color: var(--danger); display: flex; align-items: center; gap: 8px;">
+              ${iconSvg('alertTriangle')}
+              Reset Ruang Kerja
+            </h3>
+            <button class="btn btn-icon" id="reset-modal-close" style="padding: 4px; border: none; background: transparent; color: var(--danger); cursor: pointer;">
+              ${iconSvg('x')}
+            </button>
+          </div>
+          <div style="padding: 20px;">
+            <p style="font-size: 14px; font-weight: 600; color: var(--text); margin: 0 0 8px 0;">Tindakan ini akan menghapus semua konfigurasi ruang kerja.</p>
+            <ul style="font-size: 13px; color: var(--muted); line-height: 1.6; margin: 0 0 16px 0; padding-left: 20px;">
+              <li>Semua pengaturan ruang kerja akan dihapus.</li>
+              <li>Data di Google Drive dan spreadsheet <strong>TIDAK</strong> dihapus.</li>
+              <li>Anda harus menghubungkan ulang ruang kerja setelah reset.</li>
+            </ul>
+            <div class="form-field">
+              <label for="reset-confirm-input">Ketik <strong style="color: var(--danger);">RESET</strong> untuk konfirmasi</label>
+              <input type="text" id="reset-confirm-input" placeholder="Ketik RESET" autocomplete="off" style="border-color: var(--danger-border);">
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px;">
+              <button class="btn" id="reset-modal-cancel">Batal</button>
+              <button class="btn" id="reset-modal-confirm" disabled style="background: var(--danger); border-color: var(--danger); color: #fff; opacity: 0.5;">Reset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function technicalSettingsHtml(settings) {
+    const busy = state.workspaceInitLoading;
+    const maintenance = state.bootstrap.maintenance || { triggerInstalled: false, trashedCount: 0, totalCount: 0 };
+    const triggerActive = maintenance.triggerInstalled;
+    
+    const totalCount = maintenance.totalCount || 0;
+    const trashedCount = maintenance.trashedCount || 0;
+
+    return `
+      <div id="technical-form" style="display: flex; flex-direction: column; gap: 20px;">
+        
+        <!-- Section 1: Spreadsheet Konfigurasi -->
+        <div style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; background: var(--surface-soft);">
+          <div class="settings-folder-label" style="margin-bottom: 12px; color: var(--accent-mid);">Database Konfigurasi</div>
+          
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 250px;">
+              <h4 style="font-size: 14px; font-weight: 700; color: var(--text); margin: 0 0 4px 0;">Spreadsheet Konfigurasi Utama</h4>
+              <p style="font-size: 12.5px; color: var(--muted); margin: 0 0 10px 0; line-height: 1.5;">
+                Berkas Google Sheets yang menyimpan seluruh daftar laci kegiatan, pemetaan sub-kegiatan, dan konfigurasi metadata sistem.
+              </p>
+              ${settings.configSpreadsheetId
+                ? `<div style="display: flex; align-items: center; gap: 8px; font-family: monospace; font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); padding: 6px 10px; border-radius: var(--radius); width: fit-content; max-width: 100%; word-break: break-all;">
+                     ${esc(settings.configSpreadsheetId)}
+                   </div>`
+                : ''
+              }
+            </div>
+            
+            <div style="flex-shrink: 0;">
+              ${settings.configSpreadsheetId
+                ? `<a href="https://docs.google.com/spreadsheets/d/${esc(settings.configSpreadsheetId)}/edit" target="_blank" class="btn" style="display: inline-flex; align-items: center; gap: 6px;">
+                     ${iconSvg('externalLink')}
+                     Buka Spreadsheet
+                   </a>`
+                : `<div style="display: flex; flex-direction: column; gap: 6px;">
+                     <input id="config-id" value="" placeholder="Terisi otomatis setelah ruang kerja siap" style="max-width: 300px;">
+                     <span class="small muted" style="font-size: 11.5px;">Terbentuk otomatis setelah menghubungkan ruang kerja utama.</span>
+                   </div>`
+              }
+            </div>
+          </div>
+        </div>
+
+        <!-- Section 2 removed and moved to main workspace settings -->
+
+        <!-- Section 3: Pemeliharaan & Otomatisasi -->
+        <div style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; background: var(--surface-soft);">
+          <div class="settings-folder-label" style="margin-bottom: 16px; color: var(--accent-mid);">Otomatisasi &amp; Pemeliharaan</div>
+          
+          <div style="display: flex; flex-direction: column; gap: 16px;">
+            
+            <!-- Row 1: Pemicu Pemeliharaan Harian -->
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+              <div style="flex: 1; min-width: 250px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                  <h4 style="font-size: 14px; font-weight: 700; color: var(--text); margin: 0;">Pemicu Pemeliharaan Harian</h4>
+                  <span class="status ${triggerActive ? 'status-ok' : ''}">
+                    ${triggerActive ? 'Aktif' : 'Belum Terpasang'}
+                  </span>
+                </div>
+                <p style="font-size: 12.5px; color: var(--muted); margin: 0; line-height: 1.5;">
+                  Menjalankan sinkronisasi struktur data dan pembersihan berkala di latar belakang setiap 24 jam untuk kestabilan sistem.
+                </p>
+              </div>
+              <div style="flex-shrink: 0;">
+                <button class="btn btn-sm ${triggerActive ? '' : 'btn-primary'}" id="install-maintenance-trigger" style="display: inline-flex; align-items: center; gap: 6px;">
+                  ${iconSvg('settingsGear')}
+                  ${triggerActive ? 'Pasang Ulang Pemicu' : 'Pasang Pemicu'}
+                </button>
+              </div>
+            </div>
+
+            <!-- Row 2: Pembersihan Sampah Konfigurasi -->
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 250px;">
+                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                  <h4 style="font-size: 14px; font-weight: 700; color: var(--text); margin: 0;">Pembersihan Sampah Konfigurasi</h4>
+                  <span class="status ${trashedCount > 0 ? 'status-warn' : 'status-ok'}">
+                    ${trashedCount > 0 ? `${trashedCount} Sampah` : 'Sistem Bersih'}
+                  </span>
+                </div>
+                <p style="font-size: 12.5px; color: var(--muted); margin: 0; line-height: 1.5;">
+                  Mendeteksi dan menghapus baris pemetaan sub-kegiatan yang foldernya sudah dihapus atau tidak ditemukan lagi di Google Drive.
+                </p>
+                <div style="font-size: 11.5px; color: var(--subtle); margin-top: 6px; font-weight: 500;">
+                  Total Terdaftar: <strong>${totalCount}</strong> sub-kegiatan · Di Tempat Sampah: <strong>${trashedCount}</strong> baris
+                </div>
+              </div>
+              <div style="flex-shrink: 0;">
+                <button class="btn btn-sm" id="run-cleanup-now" style="display: inline-flex; align-items: center; gap: 6px;">
+                  ${iconSvg('trash')}
+                  Bersihkan Sekarang
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    `;
+  }
+
+  function subActivityMappingSettingsHtml() {
+    const activities = (state.bootstrap && state.bootstrap.activities) || [];
+    const configured = state.bootstrap && state.bootstrap.configured;
+    if (!configured) {
+      return `
+        <div class="settings-section-card">
+          <div class="empty">Ruang kerja belum terhubung. Hubungkan folder utama dulu agar pemetaan sub-kegiatan bisa dibaca.</div>
+        </div>
+      `;
+    }
+
+    const selectedActivityId = state.mappingActivityId || (activities[0] && activities[0].activity_id) || '';
+    const selectedActivity = activities.find(activity => activity.activity_id === selectedActivityId) || activities[0];
+    const rows = selectedActivity
+      ? (selectedActivity.subActivities || []).map(sub => ({ activity: selectedActivity, sub }))
+      : [];
+    const allSubs = [];
+    activities.forEach(activity => (activity.subActivities || []).forEach(sub => allSubs.push(sub)));
+    const readyCount = allSubs.filter(sub => (sub.effective_mapping_status || sub.mapping_status) === 'SIAP').length;
+    const reviewCount = allSubs.length - readyCount;
+    const adoptBusy = !!state.adoptExistingLoading;
+    const adoptPreview = state.adoptExistingPreview || null;
+
+    if (!allSubs.length) {
+      return `
+        <div class="settings-section-card">
+          <div class="empty">Belum ada sub-kegiatan. Jalankan penyiapan ruang kerja atau sinkronisasi folder kegiatan terlebih dahulu.</div>
+        </div>
+      `;
+    }
+
+    return `
+      <!-- Card: Pengaturan Default Arsip -->
+      <div class="settings-section-card" style="margin-bottom: 24px;">
+        <div class="settings-section-header">
+          <h3 class="settings-section-title">
+            ${iconSvg('settingsGear')}
+            Pengaturan Default Arsip
+          </h3>
+          <p class="settings-section-subtitle">Nilai bawaan untuk isian arsip baru — otomatis diterapkan di seluruh ruang kerja.</p>
+        </div>
+        <div class="filing-cabinet-stepper">
+          <div class="fcs-input-group">
+            <div class="fcs-input-wrap">
+              <input type="text" id="default-filing-cabinet"
+                value="${esc((state.bootstrap.settings || {}).defaultFilingCabinet || '02')}"
+                maxlength="2" inputmode="numeric" autocomplete="off"
+                class="fcs-input"
+                aria-label="No Filing Cabinet Bawaan">
+              <div class="fcs-stepper">
+                <button class="fcs-btn fcs-btn-up" title="Naikkan" aria-label="Naikkan nilai">
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l4-4 4 4"/></svg>
+                </button>
+                <button class="fcs-btn fcs-btn-down" title="Turunkan" aria-label="Turunkan nilai">
+                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="fcs-meta">
+              <label class="fcs-label">No Filing Cabinet Bawaan</label>
+              <span class="fcs-hint">2 digit — ↑↓ atau klik panah — simpan otomatis</span>
+            </div>
+          </div>
+          <div id="fcs-status" class="fcs-status">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.75l6 6 9-13.5"/></svg>
+            <span>Tersimpan</span>
+          </div>
+        </div>
+        <style>
+          .filing-cabinet-stepper {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            flex-wrap: wrap;
+          }
+          .fcs-input-group {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+          }
+          .fcs-input-wrap {
+            position: relative;
+            display: flex;
+            align-items: stretch;
+            width: 100px;
+          }
+          .fcs-input {
+            width: 100%;
+            padding: 10px 36px 10px 14px;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-align: center;
+            border: 2px solid var(--border);
+            border-radius: var(--radius-md);
+            background: var(--surface);
+            color: var(--text);
+            font-family: inherit;
+            transition: border-color 150ms, box-shadow 150ms;
+            outline: none;
+          }
+          .fcs-input:focus {
+            border-color: var(--accent-mid);
+            box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+          }
+          .fcs-stepper {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            width: 28px;
+            border-left: 1px solid var(--border);
+          }
+          .fcs-btn {
+            flex: 1;
+            display: grid;
+            place-items: center;
+            border: none;
+            background: var(--surface-soft);
+            color: var(--muted);
+            cursor: pointer;
+            padding: 0;
+            transition: background 120ms, color 120ms;
+            min-height: 0;
+          }
+          .fcs-btn:first-child {
+            border-bottom: 1px solid var(--border);
+            border-radius: 0 var(--radius-sm) 0 0;
+          }
+          .fcs-btn:last-child {
+            border-radius: 0 0 var(--radius-sm) 0;
+          }
+          .fcs-btn:hover {
+            background: var(--accent-light);
+            color: var(--accent-mid);
+          }
+          .fcs-btn:active {
+            background: var(--accent-mid);
+            color: #fff;
+          }
+          .fcs-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+          }
+          .fcs-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+          }
+          .fcs-hint {
+            font-size: 12px;
+            color: var(--muted);
+          }
+          .fcs-status {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--ok);
+            background: rgba(16,185,129,0.1);
+            padding: 6px 12px;
+            border-radius: 20px;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 300ms;
+          }
+          .fcs-status.show {
+            display: inline-flex;
+            opacity: 1;
+          }
+        </style>
+      </div>
+
+      <div class="settings-section-card">
+        <div class="settings-section-header">
+          <h3 class="settings-section-title">
+            ${iconSvg('sliders')}
+            Pemetaan yang Perlu Diperiksa
+          </h3>
+          <p class="settings-section-subtitle">Pastikan setiap folder sub-kegiatan tersambung ke nama formal rangkuman dan halaman rincian yang benar.</p>
+        </div>
+
+        <div class="mapping-summary-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px; margin-bottom:18px;">
+          <div style="border:1px solid var(--border); border-left: 3px solid var(--accent-mid); border-radius:var(--radius-md); padding:12px 14px; background:var(--surface-soft);">
+            <div class="small muted" style="font-weight:600;">Total Sub-kegiatan</div>
+            <strong style="font-size:24px; color:var(--text);">${esc(allSubs.length)}</strong>
+          </div>
+          <div style="border:1px solid var(--border); border-left: 3px solid var(--ok); border-radius:var(--radius-md); padding:12px 14px; background:var(--surface-soft);">
+            <div class="small muted" style="font-weight:600;">Sudah Siap</div>
+            <strong style="font-size:24px; color:var(--ok);">${esc(readyCount)}</strong>
+          </div>
+          <div style="border:1px solid var(--border); border-left: 3px solid var(--warn); border-radius:var(--radius-md); padding:12px 14px; background:var(--surface-soft);">
+            <div class="small muted" style="font-weight:600;">Perlu Diperiksa</div>
+            <strong style="font-size:24px; color:var(--warn);">${esc(reviewCount)}</strong>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; border:1px solid var(--border); border-left: 3px solid var(--accent-mid); border-radius:var(--radius-md); padding:14px 16px; margin-bottom:18px; background:var(--surface-soft);">
+          <div>
+            <div style="font-weight:700; color:var(--text); font-size:13.5px; margin-bottom:4px;">Adaptasi Data Lama</div>
+            <div class="small muted" style="line-height:1.5; max-width:760px;">
+              Periksa baris data yang sudah terisi di halaman rincian. Setelah hasilnya benar, baru daftarkan ke Riwayat/Progres aplikasi. Proses ini tidak memindahkan berkas, tidak mengubah nama folder, dan tidak menulis ulang tabel halaman lama.
+            </div>
+          </div>
+          <button class="btn btn-primary ${adoptBusy ? 'is-loading' : ''}" id="preview-existing-archives" ${adoptBusy ? 'disabled' : ''}>
+            ${adoptBusy ? 'Memeriksa...' : 'Periksa Data Lama'}
+          </button>
+        </div>
+
+        ${adoptPreview ? existingArchivePreviewHtml(adoptPreview) : ''}
+
+        <div style="display:grid; grid-template-columns:repeat(${activities.length},minmax(0,1fr)); gap:8px; margin-bottom:16px;">
+          ${activities.map(activity => `
+            <button class="btn btn-sm ${activity.activity_id === (selectedActivity && selectedActivity.activity_id) ? 'btn-primary' : ''}"
+              data-mapping-activity="${esc(activity.activity_id)}"
+              style="width:100%;">
+              ${esc(activity.activity_name || activity.activity_id)}
+            </button>
+          `).join('')}
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          ${rows.map(({ activity, sub }) => subActivityMappingRowHtml(activity, sub)).join('')}
+        </div>
+        <div class="small muted" style="margin-top: 12px; line-height: 1.5;">
+          Yang wajib dicek cukup dua: nama formal rangkuman dan sheet detail. Nomor folder boleh disesuaikan jika berbeda dari urutan folder Drive.
+        </div>
+      </div>
+    `;
+  }
+
+  function existingArchivePreviewHtml(result) {
+    const activityRows = (result.byActivity || [])
+      .filter(activity => activity.scannedRows || activity.missingSheets || activity.skippedExisting || activity.imported)
+      .map(activity => `
+        <div style="border:1px solid var(--border); border-radius:var(--radius-md); padding:12px; background:var(--surface);">
+          <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+            <strong>${esc(activity.activityName || activity.activityId || '-')}</strong>
+            <span class="small muted">Baris: ${esc(activity.scannedRows || 0)} · Akan masuk: ${esc(activity.imported || 0)} · Sudah ada: ${esc(activity.skippedExisting || 0)}</span>
+          </div>
+          ${(activity.subActivities || [])
+            .filter(sub => sub.scannedRows || sub.missingSheet || sub.skippedExisting)
+            .slice(0, 8)
+            .map(sub => `
+              <div class="small muted" style="display:flex; justify-content:space-between; gap:10px; margin-top:7px; padding-top:7px; border-top:1px solid var(--line);">
+                <span>${esc(sub.subActivityName || sub.subActivityId || '-')}</span>
+                <span>${sub.missingSheet ? 'Lembar tidak ditemukan' : ('pindai ' + esc(sub.scannedRows || 0) + ', masuk ' + esc(sub.importable || 0) + ', berkas tidak ditemukan ' + esc(sub.missingFileMatches || 0))}</span>
+              </div>
+            `).join('')}
+        </div>
+      `).join('');
+
+    return `
+      <div style="border:1px solid var(--accent-border); border-radius:var(--radius-md); padding:14px; margin-bottom:16px; background:var(--accent-light);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap; margin-bottom:12px;">
+          <div>
+            <div style="font-weight:800; color:var(--text);">Pratinjau data lama tahun ${esc(result.year || '')}</div>
+            <div class="small muted" style="line-height:1.5;">Cek hasil ini sebelum konfirmasi. Baris yang sudah ada di log akan dilewati otomatis.</div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn" id="clear-existing-preview">Tutup Pratinjau</button>
+            <button class="btn btn-primary" id="confirm-existing-adoption">Konfirmasi Adaptasi</button>
+          </div>
+        </div>
+        <div class="mapping-summary-grid" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:10px; margin-bottom:12px;">
+          <div style="border:1px solid var(--border); border-radius:var(--radius-md); padding:10px; background:var(--surface);">
+            <div class="small muted">Baris dibaca</div><strong style="font-size:20px;">${esc(result.scannedRows || 0)}</strong>
+          </div>
+          <div style="border:1px solid var(--border); border-radius:var(--radius-md); padding:10px; background:var(--surface);">
+            <div class="small muted">Akan masuk</div><strong style="font-size:20px; color:var(--ok);">${esc(result.imported || 0)}</strong>
+          </div>
+          <div style="border:1px solid var(--border); border-radius:var(--radius-md); padding:10px; background:var(--surface);">
+            <div class="small muted">Sudah ada</div><strong style="font-size:20px; color:var(--warn);">${esc(result.skippedExisting || 0)}</strong>
+          </div>
+          <div style="border:1px solid var(--border); border-radius:var(--radius-md); padding:10px; background:var(--surface);">
+            <div class="small muted">Berkas tidak ditemukan</div><strong style="font-size:20px; color:var(--danger);">${esc(result.missingFileMatches || 0)}</strong>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; max-height:320px; overflow:auto;">
+          ${activityRows || '<div class="empty">Belum ada baris data lama yang terdeteksi dari pemetaan saat ini.</div>'}
+        </div>
+      </div>
+    `;
+  }
+
+  function subActivityMappingRowHtml(activity, sub) {
+    const rowId = [activity.activity_id, sub.sub_activity_id].map(value => String(value || '').replace(/[^a-zA-Z0-9_-]/g, '_')).join('__');
+    const status = sub.effective_mapping_status || sub.mapping_status || 'PERLU_REVIEW';
+    const statusLabel = status === 'SIAP' ? 'Siap' : (status === 'AUTO_MATCHED' ? 'Otomatis' : 'Perlu Tinjauan');
+    const statusColor = status === 'SIAP' ? 'var(--ok)' : (status === 'AUTO_MATCHED' ? 'var(--warn)' : 'var(--danger)');
+    return `
+      <div data-mapping-row="${esc(rowId)}"
+        data-year="${esc((state.bootstrap.settings && state.bootstrap.settings.currentYear) || 2026)}"
+        data-activity-id="${esc(activity.activity_id || '')}"
+        data-sub-id="${esc(sub.sub_activity_id || '')}"
+        data-folder-id="${esc(sub.folder_id || '')}"
+        data-folder-path="${esc(sub.folder_path || '')}"
+        data-sub-name="${esc(sub.sub_activity_name || '')}"
+        data-parent-folder-id="${esc(sub.parent_folder_id || '')}"
+        data-parent-folder-name="${esc(sub.parent_folder_name || '')}"
+        data-parent-folder-path="${esc(sub.parent_folder_path || '')}"
+        data-spreadsheet-file-id="${esc(sub.spreadsheet_file_id || activity.spreadsheet_file_id || '')}"
+        style="border:1px solid var(--border); border-left:3px solid ${statusColor}; border-radius:var(--radius-md); background:var(--surface); overflow:hidden; transition:box-shadow 150ms ease;">
+
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--border);">
+          <div style="min-width:0;">
+            <div style="font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(sub.sub_activity_name || '-')}</div>
+            ${sub.folder_path ? '<div style="font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' + esc(sub.folder_path) + '"><svg style="display:inline;vertical-align:-2px;margin-right:3px;" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> ' + esc(sub.folder_path) + '</div>' : ''}
+          </div>
+          <span style="flex-shrink:0; display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; color:${statusColor}; background:${statusColor}18; border:1px solid ${statusColor}40; border-radius:20px; padding:2px 8px; white-space:nowrap;">
+            <span style="width:5px;height:5px;border-radius:50%;background:${statusColor};display:inline-block;"></span>
+            ${esc(statusLabel)}
+          </span>
+        </div>
+
+        <!-- Mapping fields -->
+        <div style="padding:10px 12px; display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) 70px; gap:10px; align-items:end;">
+          <div>
+            <label style="font-size:10px;font-weight:500;color:var(--muted);display:block;margin-bottom:3px;">Nama Formal Rangkuman</label>
+            <input class="mapping-input" data-field="formalArchiveName"
+              value="${esc(sub.formal_archive_name || '')}"
+              placeholder="${esc(sub.effective_formal_archive_name || sub.sub_activity_name || 'otomatis')}"
+              style="font-size:12px; padding:5px 8px;">
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:500;color:var(--muted);display:block;margin-bottom:3px;">Lembar Rincian</label>
+            <input class="mapping-input" data-field="targetSheetName"
+              value="${esc(sub.target_sheet_name || '')}"
+              placeholder="${esc(sub.effective_target_sheet_name || sub.sub_activity_name || 'otomatis')}"
+              style="font-size:12px; padding:5px 8px;">
+          </div>
+          <div>
+            <label style="font-size:10px;font-weight:500;color:var(--muted);display:block;margin-bottom:3px;">No. Folder</label>
+            <input class="mapping-input" data-field="noFolder"
+              value="${esc(sub.no_folder || '')}"
+              placeholder="auto"
+              style="font-size:12px; padding:5px 8px; text-align:center;">
+          </div>
+        </div>
+
+        <!-- Advanced + Save -->
+        <div style="padding:0 12px 10px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+          <details style="margin:0;">
+            <summary style="cursor:pointer; font-size:11px; color:var(--muted); user-select:none; list-style:none; display:inline-flex; align-items:center; gap:3px;">
+              <svg style="transition:transform 200ms;" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              Opsi lanjutan
+            </summary>
+            <div style="margin-top:8px; display:grid; grid-template-columns:120px 1fr; gap:10px; align-items:center;">
+              <div>
+                <label style="font-size:10px;font-weight:500;color:var(--muted);display:block;margin-bottom:3px;">Baris Rangkuman</label>
+                <input class="mapping-input" data-field="rekapRowNumber"
+                  value="${esc(sub.rekap_row_number || '')}"
+                  placeholder="otomatis"
+                  style="font-size:12px; padding:5px 8px; text-align:center;">
+              </div>
+              <p style="font-size:11px; color:var(--muted); margin:0; line-height:1.4;">
+                Isi hanya jika aplikasi salah menemukan baris rangkuman. Kosongkan agar aplikasi mencari otomatis.
+              </p>
+            </div>
+          </details>
+          <button class="btn btn-sm btn-primary" data-save-sub-mapping style="flex-shrink:0;">Simpan Pemetaan</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function bindSubActivityMappingSettings() {
+    document.querySelectorAll('[data-mapping-activity]').forEach(button => {
+      button.addEventListener('click', () => {
+        state.mappingActivityId = button.dataset.mappingActivity;
+        renderSettings();
+      });
+    });
+
+    document.querySelectorAll('[data-save-sub-mapping]').forEach(button => {
+      button.addEventListener('click', async () => {
+        const row = button.closest('[data-mapping-row]');
+        if (!row) return;
+        const getValue = field => {
+          const input = row.querySelector(`[data-field="${field}"]`);
+          return input ? input.value.trim() : '';
+        };
+        try {
+          button.disabled = true;
+          const payload = {
+            year: Number(row.dataset.year || 2026),
+            activityId: row.dataset.activityId,
+            subActivityId: row.dataset.subId,
+            folderId: row.dataset.folderId,
+            folderPath: row.dataset.folderPath,
+            subActivityName: row.dataset.subName,
+            formalArchiveName: getValue('formalArchiveName'),
+            targetSheetName: getValue('targetSheetName'),
+            noFolder: getValue('noFolder'),
+            rekapRowNumber: getValue('rekapRowNumber'),
+            parentFolderId: row.dataset.parentFolderId,
+            parentFolderName: row.dataset.parentFolderName,
+            parentFolderPath: row.dataset.parentFolderPath,
+            spreadsheetFileId: row.dataset.spreadsheetFileId
+          };
+          payload.mappingStatus = (payload.formalArchiveName && payload.targetSheetName) ? 'SIAP' : 'PERLU_REVIEW';
+          await api('updateSubActivityMapping', payload);
+          state.bootstrap = await api('getBootstrap', {});
+          renderSettings();
+          showToast('Pemetaan sub-kegiatan disimpan.');
+        } catch (error) {
+          showToast(errorMessage(error));
+        } finally {
+          button.disabled = false;
+        }
+      });
+    });
+
+    const previewButton = document.getElementById('preview-existing-archives');
+    if (previewButton) {
+      previewButton.addEventListener('click', async () => {
+        if (state.adoptExistingLoading) return;
+        try {
+          state.adoptExistingLoading = true;
+          state.adoptExistingPreview = null;
+          renderSettings();
+          showToast('Mengecek lembar rincian yang ada...');
+          const result = await api('previewExistingArchives', {
+            year: (state.bootstrap.settings && state.bootstrap.settings.currentYear) || 2026
+          });
+          state.adoptExistingPreview = result;
+          state.adoptExistingLoading = false;
+          renderSettings();
+          showToast('Pratinjau selesai. Akan masuk: ' + (result.imported || 0) + ', sudah ada: ' + (result.skippedExisting || 0) + '.');
+        } catch (error) {
+          state.adoptExistingLoading = false;
+          renderSettings();
+          showToast(errorMessage(error));
+        }
+      });
+    }
+
+    const clearPreview = document.getElementById('clear-existing-preview');
+    if (clearPreview) {
+      clearPreview.addEventListener('click', () => {
+        state.adoptExistingPreview = null;
+        renderSettings();
+      });
+    }
+
+    const confirmAdoption = document.getElementById('confirm-existing-adoption');
+    if (confirmAdoption) {
+      confirmAdoption.addEventListener('click', async () => {
+        if (!state.adoptExistingPreview) return;
+        if (!await showConfirmModal('Daftarkan data lama yang terdeteksi ke Riwayat/Progres aplikasi? Berkas dan lembar lama tidak akan diubah.')) return;
+        try {
+          confirmAdoption.disabled = true;
+          showToast('Mengadaptasi data lama ke aplikasi...');
+          const result = await api('adoptExistingArchives', {
+            year: (state.bootstrap.settings && state.bootstrap.settings.currentYear) || 2026
+          });
+          state.bootstrap = await api('getBootstrap', {});
+          state.adoptExistingPreview = null;
+          renderSettings();
+          showToast('Adaptasi selesai. Masuk: ' + (result.imported || 0) + ', dilewati: ' + (result.skippedExisting || 0) + ', baris dibaca: ' + (result.scannedRows || 0) + '.');
+        } catch (error) {
+          showToast(errorMessage(error));
+        } finally {
+          confirmAdoption.disabled = false;
+        }
+      });
+    }
+
+    // Filing cabinet stepper
+    var fcInput = document.getElementById('default-filing-cabinet');
+    var fcStatus = document.getElementById('fcs-status');
+    if (fcInput) {
+      var flashStatus = function() {
+        fcStatus.style.display = 'inline-flex';
+        fcStatus.classList.add('show');
+        clearTimeout(fcStatus._hideTimer);
+        fcStatus._hideTimer = setTimeout(function(){ fcStatus.classList.remove('show'); }, 2000);
+      };
+      var saveFc = async function(val) {
+        val = String(val).trim().padStart(2, '0').slice(0, 2);
+        fcInput.value = val;
+        if (!val || val === '00') { fcInput.value = '02'; val = '02'; }
+        try {
+          state.bootstrap = await api('saveSettings', { defaultFilingCabinet: val });
+          flashStatus();
+        } catch (e) {
+          showToast('Gagal simpan: ' + errorMessage(e));
+        }
+      };
+      fcInput.addEventListener('blur', function(){ saveFc(this.value); });
+      fcInput.addEventListener('keydown', function(e) {
+        var v = parseInt(this.value || '0', 10);
+        if (e.key === 'ArrowUp') { e.preventDefault(); if (v < 99) v++; this.value = String(v).padStart(2, '0'); saveFc(this.value); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); if (v > 1) v--; this.value = String(v).padStart(2, '0'); saveFc(this.value); }
+        if (e.key === 'Enter') { this.blur(); }
+      });
+      fcInput.addEventListener('input', function() {
+        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 2);
+      });
+    }
+    var upBtn = document.querySelector('.fcs-btn-up');
+    if (upBtn) {
+      upBtn.addEventListener('click', function(){
+        var v = parseInt(fcInput.value || '0', 10);
+        if (v < 99) v++;
+        fcInput.value = String(v).padStart(2, '0');
+        saveFc(fcInput.value);
+      });
+    }
+    var downBtn = document.querySelector('.fcs-btn-down');
+    if (downBtn) {
+      downBtn.addEventListener('click', function(){
+        var v = parseInt(fcInput.value || '0', 10);
+        if (v > 1) v--;
+        fcInput.value = String(v).padStart(2, '0');
+        saveFc(fcInput.value);
+      });
+    }
+  }
+
+  function bindSettingsForm() {
+    const triggerButton = document.getElementById('install-maintenance-trigger');
+    if (triggerButton) {
+      triggerButton.addEventListener('click', async () => {
+        try {
+          triggerButton.disabled = true;
+          showToast('Memasang pemicu pemeliharaan...');
+          const result = await api('installMaintenanceTrigger', {});
+          state.bootstrap = await api('getBootstrap', {});
+          render();
+          showToast(result.exists ? 'Pemicu pemeliharaan sudah terpasang.' : 'Pemicu pemeliharaan terpasang.');
+        } catch (error) {
+          showToast(errorMessage(error));
+        } finally {
+          triggerButton.disabled = false;
+        }
+      });
+    }
+
+    const cleanupButton = document.getElementById('run-cleanup-now');
+    if (cleanupButton) {
+      cleanupButton.addEventListener('click', async () => {
+        try {
+          cleanupButton.disabled = true;
+          showToast('Menjalankan pembersihan konfigurasi...');
+          const result = await api('cleanupTrashedSubActivities', {});
+          state.bootstrap = await api('getBootstrap', {});
+          render();
+          showToast('Pembersihan selesai. Baris terhapus: ' + (result.removed || 0));
+        } catch (error) {
+          showToast(errorMessage(error));
+        } finally {
+          cleanupButton.disabled = false;
+        }
+      });
+    }
+
+    document.querySelectorAll('.action-delete-year-btn').forEach(button => {
+      button.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const year = button.dataset.year;
+        const confirmed = await showConfirmModal(`Apakah Anda yakin ingin menghapus tahun kerja ${year}? Tindakan ini akan menghapus semua konfigurasi tahun ini dan memindahkan folder terkait di Google Drive ke tempat sampah.`);
+        if (!confirmed) return;
+
+        showToast(`Menghapus tahun kerja ${year}...`);
+        button.disabled = true;
+        try {
+          const result = await api('deleteYear', { year: year });
+          if (result.success) {
+            showToast(`Tahun ${year} berhasil dihapus.`);
+            state.bootstrap = await api('getBootstrap', {});
+            if (typeof invalidateViewCache === 'function') {
+              invalidateViewCache();
+            }
+            render();
+          } else {
+            showToast(`Gagal menghapus: ${result.error || 'Terjadi kesalahan'}`);
+          }
+        } catch (error) {
+          showToast(errorMessage(error));
+        }
+      });
+    });
+
+    document.querySelectorAll('.select-year-btn').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const selectedYear = Number(btn.dataset.year);
+        try {
+          showToast(`Mengganti tahun kerja aktif ke ${selectedYear}...`);
+          state.bootstrap = await api('saveSettings', { currentYear: selectedYear });
+          state.selectedFolderId = null;
+          state.selectedFolderName = null;
+          state.selectedFolderBreadcrumb = [];
+          state.preselectedTargetFolderId = null;
+          state.preselectedTargetFolderName = null;
+          state.preselectedFolderBreadcrumb = [];
+          if (typeof invalidateViewCache === 'function') {
+            invalidateViewCache();
+          }
+          if (typeof populateDashboardNav === 'function') {
+            populateDashboardNav();
+          }
+          render();
+          showToast(`Tahun kerja aktif berhasil diganti ke ${selectedYear}.`);
+        } catch (err) {
+          showToast('Gagal mengganti tahun: ' + errorMessage(err));
+        }
+      });
+    });
+
+    var resetBtn = document.getElementById('btn-reset-workspace');
+    var resetModal = document.getElementById('reset-workspace-modal');
+    var resetInput = document.getElementById('reset-confirm-input');
+    var resetConfirm = document.getElementById('reset-modal-confirm');
+    var resetClose = document.getElementById('reset-modal-close');
+    var resetCancel = document.getElementById('reset-modal-cancel');
+
+    if (resetBtn && resetModal) {
+      resetBtn.addEventListener('click', function () {
+        resetModal.style.display = 'flex';
+        if (resetInput) resetInput.value = '';
+        if (resetConfirm) resetConfirm.disabled = true;
+      });
+    }
+    if (resetInput && resetConfirm) {
+      resetInput.addEventListener('input', function () {
+        resetConfirm.disabled = this.value.trim() !== 'RESET';
+        resetConfirm.style.opacity = resetConfirm.disabled ? '0.5' : '1';
+      });
+    }
+    if (resetConfirm) {
+      resetConfirm.addEventListener('click', async function () {
+        resetConfirm.disabled = true;
+        resetConfirm.textContent = 'Menghapus spreadsheet...';
+        try {
+          var resetResult = await api('resetWorkspace');
+          showToast('Ruang kerja berhasil direset. ' + resetResult.removed + ' spreadsheet dihapus.');
+          if (resetModal) resetModal.style.display = 'none';
+          state.currentUser = { role: 'guest', username: '', displayName: 'Tamu' };
+          localStorage.removeItem('portal_session_id');
+          state.bootstrap = null;
+          if (typeof loadBootstrap === 'function') {
+            state.bootstrap = null;
+            await loadBootstrap();
+          }
+          if (typeof render === 'function') render();
+        } catch (e) {
+          showToast('Gagal: ' + errorMessage(e));
+        }
+      });
+    }
+    if (resetClose) resetClose.addEventListener('click', function () { resetModal.style.display = 'none'; });
+    if (resetCancel) resetCancel.addEventListener('click', function () { resetModal.style.display = 'none'; });
+    if (resetModal) resetModal.addEventListener('click', function (e) { if (e.target === resetModal) resetModal.style.display = 'none'; });
+  }
+
+  function bindWorkspaceInit() {
+    const button = document.getElementById('init-workspace');
+    if (button) {
+      button.addEventListener('click', async () => {
+        if (state.workspaceInitLoading) return;
+        try {
+          const payload = {
+            year: Number((state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.currentYear) || 2026),
+            workspaceRootFolderId: document.getElementById('workspace-root-id').value.trim(),
+            configFolderId: document.getElementById('config-folder-id').value.trim()
+          };
+          if (!payload.workspaceRootFolderId) throw new Error('Pilih Folder Ruang Kerja terlebih dahulu.');
+          state.workspaceInitTargetYear = payload.year;
+          state.workspaceInitLoading = true;
+          render();
+          showToast('Menyimpan dan menghubungkan ruang kerja...');
+          state.bootstrap = await api('initializeWorkspace', payload);
+          state.workspaceSetup = state.bootstrap.workspaceSetup;
+          state.workspaceInitTargetYear = null;
+          state.workspaceInitLoading = false;
+          render();
+          showToast('Ruang kerja berhasil dihubungkan.');
+          if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
+            showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);
+          }
+        } catch (error) {
+          state.workspaceInitTargetYear = null;
+          state.workspaceInitLoading = false;
+          render();
+          showToast(errorMessage(error));
+        }
+      });
+    }
+  }
+
+  function workspaceSetupHtml(result) {
+    if (state.workspaceInitLoading) {
+      const year = state.workspaceInitTargetYear ||
+        ((state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.currentYear) || 2026);
+      return `
+        <div class="premium-checklist" style="border-style: dashed; opacity: 0.8;">
+          <div class="premium-checklist-item">
+            <span class="spinner"></span>
+            <span>Memeriksa folder tahun kerja ${esc(year)} dan struktur 4 kegiatan...</span>
+          </div>
+          <div class="small muted" style="margin-left: 28px;">
+            Aplikasi sedang membuat atau memverifikasi struktur folder tahun ${esc(year)}. Harap tunggu hingga proses selesai.
+          </div>
+        </div>
+      `;
+    }
+    if (!result) {
+      return ``;
+    }
+
+    const report = result.report || [];
+    const created = report.filter(item => item.status === 'created').length;
+    const found = report.filter(item => item.status === 'found').length;
+    return `
+      <div class="workspace-active-banner">
+        <div class="workspace-active-banner-info">
+          <div class="workspace-active-banner-icon">
+            ${iconSvg('check')}
+          </div>
+          <div class="workspace-active-banner-text">
+            <strong>Tahun ${esc(result.year)} Aktif &amp; Siap Dipakai</strong>
+            <span>${found} item ditemukan, ${created} folder baru dibuat otomatis</span>
+          </div>
+        </div>
+        <a class="btn" href="${esc(result.rootFolderUrl)}" target="_blank" style="background: var(--surface); color: var(--text); border-color: var(--border);">
+          ${iconSvg('externalLink')}
+          Buka di Drive
+        </a>
+      </div>
+      <div class="premium-checklist">
+        <div class="premium-checklist-item">
+          <div class="premium-checklist-icon ok">
+            ${iconSvg('check')}
+          </div>
+          <span>${found} item terverifikasi di Google Drive</span>
+        </div>
+        <div class="premium-checklist-item">
+          <div class="premium-checklist-icon ok" style="background: var(--warn-bg); color: var(--warn);">
+            ${iconSvg('plusSm')}
+          </div>
+          <span>${created} folder tahun kerja dibuat otomatis</span>
+        </div>
+        <div class="premium-checklist-item">
+          <div class="premium-checklist-icon ok">
+            ${iconSvg('check')}
+          </div>
+          <span>Spreadsheet konfigurasi siap &amp; tersinkronisasi</span>
+        </div>
+      </div>
+    `;
+  }
+
+  async function renderAuditLog() {
+    const rid = currentRenderId();
+    const cacheParams = { limit: 150 };
+    const cached = isViewCacheValid('audit', cacheParams) ? getCachedView('audit', cacheParams) : null;
+    
+    if (cached) {
+      setContent(auditPageHtml(cached.data || []));
+      document.getElementById('refresh-audit')?.addEventListener('click', function () {
+        invalidateViewCache('audit');
+        renderAuditLog();
+      });
+    } else {
+      showLoading('Memuat log aktivitas...');
+    }
+
+    try {
+      const result = await getCachedOrFetch('audit', cacheParams, function () {
+        return api('getAdminAuditLogs', cacheParams);
+      });
+      if (rid !== currentRenderId()) return;
+
+      if (result.source === 'fresh') {
+        setContent(auditPageHtml(result.data || []));
+        document.getElementById('refresh-audit')?.addEventListener('click', function () {
+          invalidateViewCache('audit');
+          renderAuditLog();
+        });
+      } else if (result.source === 'stale-revalidated') {
+        const wrap = document.getElementById('audit-table-wrap');
+        if (wrap) {
+          wrap.innerHTML = auditTable(result.data || []);
+        } else {
+          setContent(auditPageHtml(result.data || []));
+          document.getElementById('refresh-audit')?.addEventListener('click', function () {
+            invalidateViewCache('audit');
+            renderAuditLog();
+          });
+        }
+      }
+    } catch (error) {
+      if (rid !== currentRenderId()) return;
+      setContent('<div class="error" style="margin:22px;">' + esc(errorMessage(error)) + '</div>');
+    }
+  }
+
+  function auditPageHtml(rows) {
+    return pageCardHtml({
+      title: 'Catatan Aktivitas',
+      subtitle: 'Daftar riwayat aksi dan aktivitas administrator pada sistem.',
+      icon: iconSvg('audit'),
+      actions: '<button class="btn" id="refresh-audit">' + iconSvg('refresh') + 'Segarkan</button>',
+      body: '<div id="audit-table-wrap">' + auditTable(rows) + '</div>',
+      extraClass: 'settings-audit-card'
+    });
+  }
+
+  function auditTable(rows) {
+    if (!rows.length) return '<div class="empty settings-audit-empty">Belum ada audit log admin.</div>';
+
+    const auditActionLabels = {
+      'METADATA_UPDATED': 'Ubah Metadata',
+      'LOGIN_FAILED': 'Login Gagal',
+      'ACCOUNT_CREATED': 'Buat Akun',
+      'ACCOUNT_UPDATED': 'Update Akun',
+      'ACCOUNT_DELETED': 'Nonaktifkan Akun'
+    };
+
+    function auditActionLabel(action) {
+      return auditActionLabels[action] || action;
+    }
+
+    function auditTarget(row) {
+      if (row.folder_id) {
+        const activityName = getActivityName(row.activity_id);
+        const subActivityName = getSubActivityName(row.activity_id, row.sub_activity_id);
+        if (activityName && subActivityName) {
+          return esc(activityName) + '<br><span class="muted small">' + esc(subActivityName) + '</span>';
+        }
+        return esc(row.folder_id);
+      }
+      if (row.message) {
+        if (row.action === 'ACCOUNT_CREATED' || row.action === 'ACCOUNT_UPDATED' || row.action === 'ACCOUNT_DELETED') {
+          const m = row.message.match(/:\s*(.+)/);
+          return m ? esc(m[1].trim()) : '-';
+        }
+        if (row.action === 'LOGIN_FAILED') {
+          const m = row.message.match(/:\s*(.+)/);
+          return m ? esc(m[1].trim()) : '-';
+        }
+      }
+      return '-';
+    }
+
+    return `
+      <div class="overflow-auto settings-audit-table-wrap">
+        <table class="settings-audit-table">
+          <thead>
+            <tr>
+              <th>Waktu</th>
+              <th>Aktor</th>
+              <th>Aksi</th>
+              <th>Target</th>
+              <th>Status</th>
+              <th>Pesan</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr>
+                <td>${esc(formatDateTime(row.created_at))}</td>
+                <td>${esc(row.actor || '-')}</td>
+                <td>${esc(auditActionLabel(row.action))}</td>
+                <td>${auditTarget(row)}</td>
+                <td>${statusBadge(row.status)}</td>
+                <td>${esc(row.message || '-')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  async function renderInactiveSubActivities() {
+    const rid = currentRenderId();
+    const year = state.bootstrap && state.bootstrap.settings ? state.bootstrap.settings.currentYear : null;
+    const params = { year: year };
+    const cached = isViewCacheValid('inactive', params) ? getCachedView('inactive', params) : null;
+    
+    if (cached) {
+      setContent(inactivePageHtml(cached.data || []));
+      document.getElementById('refresh-inactive')?.addEventListener('click', function () {
+        invalidateViewCache('inactive');
+        renderInactiveSubActivities();
+      });
+      bindInactiveSubActivityActions();
+    } else {
+      showLoading('Memuat arsip nonaktif...');
+    }
+
+    try {
+      const result = await getCachedOrFetch('inactive', params, function () {
+        return api('getInactiveSubActivities', { year: year });
+      });
+      if (rid !== currentRenderId()) return;
+
+      if (result.source === 'fresh') {
+        setContent(inactivePageHtml(result.data || []));
+        document.getElementById('refresh-inactive')?.addEventListener('click', function () {
+          invalidateViewCache('inactive');
+          renderInactiveSubActivities();
+        });
+        bindInactiveSubActivityActions();
+      } else if (result.source === 'stale-revalidated') {
+        const wrap = document.getElementById('inactive-table-wrap');
+        if (wrap) {
+          wrap.innerHTML = inactiveSubActivityTable(result.data || []);
+          bindInactiveSubActivityActions();
+        } else {
+          setContent(inactivePageHtml(result.data || []));
+          document.getElementById('refresh-inactive')?.addEventListener('click', function () {
+            invalidateViewCache('inactive');
+            renderInactiveSubActivities();
+          });
+          bindInactiveSubActivityActions();
+        }
+      }
+    } catch (error) {
+      if (rid !== currentRenderId()) return;
+      setContent('<div class="error" style="margin:22px;">' + esc(errorMessage(error)) + '</div>');
+    }
+  }
+
+  function inactivePageHtml(rows) {
+    return pageCardHtml({
+      title: 'Arsip Nonaktif',
+      subtitle: 'Daftar sub-kegiatan yang telah dinonaktifkan dari ruang kerja.',
+      icon: iconSvg('folderOff'),
+      actions: '<button class="btn" id="refresh-inactive">' + iconSvg('refresh') + 'Segarkan</button>',
+      body: '<div id="inactive-table-wrap">' + inactiveSubActivityTable(rows) + '</div>',
+      extraClass: 'settings-inactive-card'
+    });
+  }
+
+  function inactiveSubActivityTable(rows) {
+    if (!rows.length) return '<div class="empty">Tidak ada sub-kegiatan nonaktif.</div>';
+    return `
+      <div class="overflow-auto settings-audit-table-wrap">
+        <table class="settings-audit-table">
+          <thead>
+            <tr>
+              <th>Kegiatan</th>
+              <th>Sub-kegiatan</th>
+              <th>ID Folder</th>
+              <th>Alasan</th>
+              <th>Waktu</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `
+              <tr>
+                <td>${esc(getActivityName(row.activity_id) || row.activity_id || '-')}</td>
+                <td>${esc(row.sub_activity_name || row.sub_activity_id || '-')}</td>
+                <td><span class="muted small">${esc(row.folder_id || '-')}</span></td>
+                <td>${esc(row.inactive_reason || '-')}</td>
+                <td>${esc(formatDateTime(row.inactive_at || row.updated_at || row.created_at))}</td>
+                <td>
+                  <div class="button-row">
+                    <button class="btn btn-sm" data-restore-sub data-activity-id="${esc(row.activity_id || '')}" data-sub-id="${esc(row.sub_activity_id || '')}">Pulihkan</button>
+                    <button class="btn btn-sm btn-danger" data-purge-sub data-activity-id="${esc(row.activity_id || '')}" data-sub-id="${esc(row.sub_activity_id || '')}">Hapus</button>
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function bindInactiveSubActivityActions() {
+    document.querySelectorAll('[data-restore-sub]').forEach(button => {
+      button.addEventListener('click', async () => {
+        if (!await showConfirmModal('Pulihkan sub-kegiatan ini ke ruang kerja?')) return;
+        try {
+          button.disabled = true;
+          await api('restoreSubActivity', {
+            year: state.bootstrap.settings.currentYear,
+            activityId: button.dataset.activityId,
+            subActivityId: button.dataset.subId
+          });
+          showToast('Sub-kegiatan dipulihkan.');
+          renderInactiveSubActivities();
+        } catch (error) {
+          showToast(errorMessage(error));
+        }
+      });
+    });
+
+    document.querySelectorAll('[data-purge-sub]').forEach(button => {
+      button.addEventListener('click', async () => {
+        if (!await showConfirmModal('Hapus permanen baris konfigurasi sub-kegiatan ini? Folder Drive tidak ikut dihapus.')) return;
+        showToast('Menghapus baris konfigurasi...');
+        button.disabled = true;
+        try {
+          await api('purgeSubActivity', {
+            year: state.bootstrap.settings.currentYear,
+            activityId: button.dataset.activityId,
+            subActivityId: button.dataset.subId
+          });
+          showToast('Baris konfigurasi dihapus.');
+          renderInactiveSubActivities();
+        } catch (error) {
+          showToast(errorMessage(error));
+        }
+      });
+    });
+  }
+
+  function populateModalYearOptions() {
+    const select = document.getElementById('modal-new-year');
+    if (!select) return;
+    
+    const activeYears = state.bootstrap.years ? state.bootstrap.years.map(y => Number(y.year)) : [];
+    const currentYear = (state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.currentYear) || 2026;
+    
+    let html = '';
+    for (let y = 2020; y <= 2035; y++) {
+      const isActive = activeYears.includes(y);
+      const isSelected = y === (currentYear + 1); // Select next year by default if possible
+      html += `<option value="${y}" ${isActive ? 'disabled style="color:var(--muted); opacity:0.6;"' : ''} ${isSelected && !isActive ? 'selected' : ''}>${y} ${isActive ? '(Sudah Aktif)' : ''}</option>`;
+    }
+    select.innerHTML = html;
+  }
+
+  function bindAddYearModal() {
+    const modal = document.getElementById('add-year-modal');
+    const openBtn = document.getElementById('open-add-year-modal');
+    const closeBtn = document.getElementById('add-year-modal-close');
+    const cancelBtn = document.getElementById('add-year-modal-cancel');
+    const submitBtn = document.getElementById('add-year-modal-submit');
+    
+    if (!modal) return;
+    
+    const openModal = () => {
+      populateModalYearOptions();
+      modal.style.display = 'flex';
+    };
+    
+    const closeModal = () => {
+      modal.style.display = 'none';
+    };
+    
+    if (openBtn) openBtn.addEventListener('click', openModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeModal);
+    if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+    
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+    
+    if (submitBtn) {
+      submitBtn.addEventListener('click', async () => {
+        const yearSelect = document.getElementById('modal-new-year');
+        if (!yearSelect) return;
+        const selectedYear = Number(yearSelect.value);
+        
+        closeModal();
+        if (state.workspaceInitLoading) return;
+        
+        try {
+          const payload = {
+            year: selectedYear,
+            workspaceRootFolderId: document.getElementById('workspace-root-id').value.trim(),
+            configFolderId: document.getElementById('config-folder-id').value.trim()
+          };
+          if (!payload.workspaceRootFolderId) throw new Error('Folder Ruang Kerja belum dihubungkan.');
+          state.workspaceInitTargetYear = payload.year;
+          state.workspaceInitLoading = true;
+          render();
+          showToast('Membuat struktur folder untuk tahun ' + payload.year + '...');
+          state.bootstrap = await api('initializeWorkspace', payload);
+          state.workspaceSetup = state.bootstrap.workspaceSetup;
+          state.workspaceInitTargetYear = null;
+          state.workspaceInitLoading = false;
+          render();
+          showToast('Tahun ' + payload.year + ' berhasil disiapkan!');
+          if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
+            showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);
+          }
+        } catch (error) {
+          state.workspaceInitTargetYear = null;
+          state.workspaceInitLoading = false;
+          render();
+          showToast(errorMessage(error));
+        }
+      });
+    }
+  }
+
+  function bindThemeSettings() {
+    const activeTheme = localStorage.getItem('portal_theme') || 'sleek';
+
+    document.querySelectorAll('.theme-option-card').forEach(card => {
+      const theme = card.dataset.theme;
+      card.classList.toggle('active', theme === activeTheme);
+      
+      card.addEventListener('click', () => {
+        document.querySelectorAll('.theme-option-card').forEach(c => c.classList.remove('active'));
+        card.classList.add('active');
+        localStorage.setItem('portal_theme', theme);
+        
+        if (theme === 'custom') {
+          showToast('Tema Kustom dipilih. Silakan atur warna.');
+          openCustomThemeModal();
+        } else {
+          document.documentElement.className = 'theme-' + theme;
+          document.querySelectorAll('style[data-custom-theme]').forEach(el => el.remove());
+          showToast('Tema warna laci berhasil diubah.');
+        }
+      });
+    });
+
+    const palette = [
+      '#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16', '#22C55E', '#10B981', '#14B8A6',
+      '#06B6D4', '#0EA5E9', '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7', '#D946EF', '#EC4899',
+      '#F43F5E', '#78716C', '#737373', '#71717A', '#64748B', '#94A3B8', '#0F766E', '#1D4ED8',
+      '#4338CA', '#6D28D9', '#BE185D', '#9F1239', '#B45309', '#4D7C0F', '#047857', '#0369A1'
+    ];
+    let customColors = JSON.parse(localStorage.getItem('portal_custom_colors') || '{"kepemimpinan":"#10B981","latsar":"#F43F5E","teknis":"#F59E0B","lain":"#8B5CF6"}');
+    let activeCategory = 'kepemimpinan';
+
+    function renderCustomThemePreviewDots() {
+      const dots = document.querySelectorAll('#custom-theme-preview-dots .preview-dot');
+      if (dots.length === 4) {
+        dots[0].style.background = customColors.kepemimpinan;
+        dots[1].style.background = customColors.latsar;
+        dots[2].style.background = customColors.teknis;
+        dots[3].style.background = customColors.lain;
+      }
+    }
+    renderCustomThemePreviewDots();
+
+    function hexToRgb(hex) {
+      var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? parseInt(result[1], 16) + ', ' + parseInt(result[2], 16) + ', ' + parseInt(result[3], 16) : '0,0,0';
+    }
+
+    function shadeColor(color, percent) {
+      var R = parseInt(color.substring(1,3),16), G = parseInt(color.substring(3,5),16), B = parseInt(color.substring(5,7),16);
+      R = parseInt(R * (100 + percent) / 100); R = (R<255)?R:255;
+      G = parseInt(G * (100 + percent) / 100); G = (G<255)?G:255;
+      B = parseInt(B * (100 + percent) / 100); B = (B<255)?B:255;
+      return "#" + ((1<<24) + (R<<16) + (G<<8) + B).toString(16).slice(1);
+    }
+
+    function openCustomThemeModal() {
+      const modal = document.getElementById('custom-theme-modal');
+      const grid = document.getElementById('custom-color-grid');
+      
+      const updateModalUI = () => {
+        document.querySelectorAll('.category-color-item').forEach(el => {
+          el.classList.toggle('active', el.dataset.cat === activeCategory);
+          el.querySelector('.category-color-preview').style.background = customColors[el.dataset.cat];
+        });
+        grid.innerHTML = palette.map(color => 
+          `<div class="color-swatch ${customColors[activeCategory] === color ? 'selected' : ''}" style="background:${color}" data-color="${color}"></div>`
+        ).join('');
+        grid.querySelectorAll('.color-swatch').forEach(el => {
+          el.addEventListener('click', () => {
+            customColors[activeCategory] = el.dataset.color;
+            updateModalUI();
+          });
+        });
+      };
+
+      document.querySelectorAll('.category-color-item').forEach(el => {
+        el.addEventListener('click', () => {
+          activeCategory = el.dataset.cat;
+          updateModalUI();
+        });
+      });
+
+      updateModalUI();
+      modal.style.display = 'grid';
+    }
+
+    document.getElementById('custom-theme-cancel')?.addEventListener('click', () => {
+      customColors = JSON.parse(localStorage.getItem('portal_custom_colors') || '{"kepemimpinan":"#10B981","latsar":"#F43F5E","teknis":"#F59E0B","lain":"#8B5CF6"}');
+      document.getElementById('custom-theme-modal').style.display = 'none';
+    });
+
+    document.getElementById('custom-theme-save')?.addEventListener('click', () => {
+      localStorage.setItem('portal_custom_colors', JSON.stringify(customColors));
+      localStorage.setItem('portal_theme', 'custom');
+      
+      document.querySelectorAll('.theme-option-card').forEach(c => c.classList.remove('active'));
+      document.querySelector('.theme-option-card[data-theme="custom"]').classList.add('active');
+      renderCustomThemePreviewDots();
+      document.getElementById('custom-theme-modal').style.display = 'none';
+
+      let styleEl = document.getElementById('custom-theme-style');
+      if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'custom-theme-style';
+        styleEl.setAttribute('data-custom-theme', 'true');
+        document.head.appendChild(styleEl);
+      }
+      
+      const cats = ['kepemimpinan', 'latsar', 'teknis', 'lain'];
+      let cssText = '.theme-custom {';
+      cats.forEach(c => {
+        const base = customColors[c];
+        const start = shadeColor(base, 20); // slightly lighter
+        const text = shadeColor(base, -40); // darker text
+        cssText += `
+          --color-${c}-start: ${start};
+          --color-${c}-end: ${base};
+          --color-${c}-border: ${shadeColor(base, -20)};
+          --color-${c}-rgb: ${hexToRgb(base)};
+          --color-${c}-text: ${text};
+        `;
+      });
+      cssText += '}';
+      styleEl.innerHTML = cssText;
+      document.documentElement.className = 'theme-custom';
+      showToast('Tema Custom berhasil diterapkan.');
+    });
+  }
+</script>

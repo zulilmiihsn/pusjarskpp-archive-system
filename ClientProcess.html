@@ -1,0 +1,1849 @@
+<script>
+  const CATEGORY_HINTS = {
+    kepemimpinan: {
+      no_berkas:       { hint: 'Contoh: 01/LKG-PK/2026' },
+      kode_klasifikasi:{ hint: 'Contoh: DL.01.01 (Diklat Kepemimpinan)' },
+      uraian_informasi_berkas: { hint: 'Isi: Jenis Diklat, Angkatan, Tahun. Contoh: Berkas Kurikulum, Daftar Hadir, dan Evaluasi Kelulusan PKA Angkatan 1 Tahun 2026' },
+      no_filing_cabinet:{ hint: 'FC-01' },
+      no_laci:         { hint: '1 (Laci Kepemimpinan)' },
+      no_folder:       { hint: 'Folder 1 (Pelatihan Kepemimpinan)' },
+      klasifikasi_akses:{ hint: 'Terbatas / Rahasia' },
+      ket:             { hint: 'Baik / Lengkap / Digital' }
+    },
+    latsar_cpns: {
+      no_berkas:       { hint: 'Contoh: 02/LKG-LATSAR/2026' },
+      kode_klasifikasi:{ hint: 'Contoh: DL.02.01 (Diklat Latsar CPNS)' },
+      uraian_informasi_berkas: { hint: 'Cantumkan Angkatan & Instansi. Contoh: Berkas Kelengkapan Administrasi dan Evaluasi Akademik Latsar CPNS Angkatan III Tahun 2026' },
+      no_filing_cabinet:{ hint: 'FC-01' },
+      no_laci:         { hint: '2 (Laci Latsar CPNS)' },
+      no_folder:       { hint: 'Folder 2 (Latsar CPNS)' },
+      klasifikasi_akses:{ hint: 'Terbatas' },
+      ket:             { hint: 'Lengkap / Ada dokumen digital di Awan' }
+    },
+    teknis: {
+      no_berkas:       { hint: 'Contoh: 03/LKG-TEKNIS/2026' },
+      kode_klasifikasi:{ hint: 'Contoh: DL.03.00 (Teknis/Fungsional)' },
+      uraian_informasi_berkas: { hint: 'Sebutkan Nama Program Spesifik. Contoh: Berkas Pelaksanaan Coaching bagi ASN Tahun 2026' },
+      no_filing_cabinet:{ hint: 'FC-02' },
+      no_laci:         { hint: '3 (Laci Teknis)' },
+      no_folder:       { hint: 'Folder 3 (Pelatihan Teknis dan Lainnya)' },
+      klasifikasi_akses:{ hint: 'Biasa / Terbuka' },
+      ket:             { hint: 'Berkas aktif' }
+    },
+    lain_lain: {
+      no_berkas:       { hint: 'Contoh: 04/LKG-LAIN/2026' },
+      kode_klasifikasi:{ hint: 'Contoh: KP.01 (Kepegawaian) / OT (Organisasi)' },
+      uraian_informasi_berkas: { hint: 'Sebutkan Nama Kegiatan Pendukung. Contoh: Data Nominatif Jabatan Fungsional Tahun 2026' },
+      no_filing_cabinet:{ hint: 'FC-02' },
+      no_laci:         { hint: '4 (Laci Lain-lain)' },
+      no_folder:       { hint: 'Folder 4 (Lain-lain)' },
+      klasifikasi_akses:{ hint: 'Biasa / Internal' },
+      ket:             { hint: 'Arsip Statis / Dinamis Aktif' }
+    }
+  };
+
+  function getCategoryHint(categoryId, fieldName) {
+    const hints = CATEGORY_HINTS[categoryId] || {};
+    const entry = hints[fieldName];
+    return entry ? entry.hint : '';
+  }
+
+  function getCategoryLocation(draft) {
+    if (!draft) return '';
+    const breadcrumb = Array.isArray(draft.folderBreadcrumb) && draft.folderBreadcrumb.length
+      ? [...draft.folderBreadcrumb]
+      : [
+        draft.activity ? (draft.activity.activity_name || draft.activity.nama_kegiatan || draft.activity.activity_id) : '',
+        draft.subActivity ? (draft.subActivity.sub_activity_name || draft.subActivity.nama_sub_kegiatan || draft.subActivity.sub_activity_id) : ''
+      ].filter(Boolean);
+      
+    const target = draft.targetFolderName;
+    if (target && breadcrumb[breadcrumb.length - 1] !== target) {
+      breadcrumb.push(target);
+    }
+    
+    const unique = [];
+    breadcrumb.forEach(p => {
+      if (unique[unique.length - 1] !== p) unique.push(p);
+    });
+    
+    return unique.join(' / ');
+  }
+
+  function extractNomorSuratFromText_(text) {
+    const value = String(text || '');
+    const patterns = [
+      /(?:No\.?|Nomor)\s*[:.]?\s*([A-Z0-9][A-Z0-9./\-\s]+\/\d{4})/i,
+      /\b([A-Z]-?\d+[A-Z0-9./\-\s]+\/\d{4})\b/i,
+      /\b(\d+\/[A-Z0-9.\/\-]+\/\d{4})\b/i
+    ];
+    for (let i = 0; i < patterns.length; i++) {
+      const match = value.match(patterns[i]);
+      if (match) return match[1].replace(/\s+/g, ' ').trim();
+    }
+    return '';
+  }
+
+  function fillNomorSuratFromSourceName_(force) {
+    if (!state.draft || !state.draft.metadata) return;
+    const current = String(state.draft.metadata.nomor_surat || '').trim();
+    if (current && !force) return;
+    const sourceName = state.draft.sourceFile && state.draft.sourceFile.name ? state.draft.sourceFile.name : '';
+    const parsed = extractNomorSuratFromText_(sourceName);
+    if (!parsed) return;
+    state.draft.metadata.nomor_surat = parsed;
+    const input = document.getElementById('meta-nomor_surat');
+    if (input) input.value = parsed;
+    updateFileName();
+  }
+
+  function getDropTarget() {
+    const select = document.getElementById('activity-id');
+    if (!select) return { id: '', name: '' };
+    const activity = getActivity(select.value);
+    return activity
+      ? { id: activity.activity_id, name: activity.activity_name }
+      : { id: '', name: '' };
+  }
+
+  let _fileNameTimer = null;
+  async function updateFileName() {
+    if (!state.draft) return '';
+    const sourceName = (state.draft.sourceFile && state.draft.sourceFile.name) || '';
+    if (_fileNameTimer) clearTimeout(_fileNameTimer);
+    _fileNameTimer = setTimeout(async () => {
+      try {
+        state.draft.finalFileName = await getFinalFileName(state.draft.metadata, sourceName);
+      } catch (e) {
+        state.draft.finalFileName = sourceName || 'dokumen.pdf';
+      }
+      const preview = document.getElementById('final-name-preview');
+      if (preview) preview.textContent = state.draft.finalFileName;
+      saveProcessStateToLocal();
+    }, 200);
+    return state.draft.finalFileName;
+  }
+
+  function setSourceFile(name, id, url) {
+    if (!state.draft) {
+      state.draft = { sourceFile: {}, metadata: {} };
+    }
+    state.draft.sourceFile = { id: id || '', name: name || '', url: url || '' };
+
+    var container = document.getElementById('dropzone-content');
+    var dz = document.getElementById('dropzone');
+    if (container) {
+      container.className = 'file-preview-wrap';
+      container.innerHTML = getFilePreviewHtml_(state.draft.sourceFile);
+    }
+    if (dz) dz.classList.add('has-file');
+
+    bindPreviewActions_();
+
+    fillNomorSuratFromSourceName_(false);
+  }
+
+  const MAX_UPLOAD_MB = 10;
+  const RESUMABLE_CHUNK_BYTES = 8 * 1024 * 1024;
+
+  async function resumableUploadFile(file) {
+    const totalSize = file.size;
+    showToast('Menyiapkan upload berkas besar (' + (totalSize / 1024 / 1024).toFixed(1) + ' MB)...');
+
+    const session = await api('initInboxResumableUpload', {
+      name: file.name,
+      mimeType: file.type || '',
+      totalSize: totalSize
+    });
+
+    let startByte = 0;
+    let chunkIndex = 0;
+
+    while (startByte < totalSize) {
+      const endByte = Math.min(startByte + RESUMABLE_CHUNK_BYTES, totalSize);
+      const chunk = file.slice(startByte, endByte);
+
+      const chunkBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const data = reader.result;
+          resolve(data.indexOf(',') >= 0 ? data.split(',')[1] : data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(chunk);
+      });
+
+      const result = await api('uploadResumableChunk', {
+        sessionUrl: session.sessionUrl,
+        chunk: chunkBase64,
+        startByte: startByte,
+        totalSize: totalSize
+      });
+
+      if (result.done) {
+        return result;
+      }
+
+      startByte = result.nextByte;
+      chunkIndex++;
+
+      const pct = Math.round(startByte / totalSize * 100);
+      if (chunkIndex % 2 === 0 || pct < 100) {
+        showToast('Mengunggah... ' + pct + '%');
+      }
+    }
+
+    throw new Error('Upload gagal: data tidak lengkap.');
+  }
+
+  function uploadAndGetId(fileInput) {
+    return new Promise((resolve, reject) => {
+      if (!fileInput || !fileInput.files || !fileInput.files[0]) return resolve('');
+      const file = fileInput.files[0];
+
+      if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+        resumableUploadFile(file).then(result => {
+          resolve(result.fileId);
+        }).catch(e => {
+          showToast('Upload besar gagal: ' + (e.message || e));
+          resolve(null);
+        });
+        return;
+      }
+
+      showToast('Mengunggah berkas dokumen...');
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const result = await api('uploadSourceFile', {
+            name: file.name,
+            mimeType: file.type || '',
+            dataUrl: reader.result
+          });
+          resolve(result.id);
+        } catch (e) { reject(e); }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function getDropzoneUploadHtml_() {
+    return '<svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'
+      + '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
+      + '<polyline points="17 8 12 3 7 8"/>'
+      + '<line x1="12" y1="3" x2="12" y2="15"/>'
+      + '</svg>'
+      + '<div class="dropzone-text">Pilih atau tarik dokumen</div>'
+      + '<div class="dropzone-sub">PDF / DOCX &mdash; Maks. 50 MB (lebih besar otomatis)</div>';
+  }
+
+  var _localDataCache = {};
+
+  function getFilePreviewBody_(f) {
+    if (f && f._uploadToken && _localDataCache[f._uploadToken]) {
+      f._localData = _localDataCache[f._uploadToken];
+    }
+    var ext = (f.name || '').split('.').pop().toLowerCase();
+    var isImg = ['png','jpg','jpeg','gif','webp','bmp','svg'].indexOf(ext) !== -1;
+    var isPdf = ext === 'pdf';
+    var isDoc = ext === 'doc' || ext === 'docx';
+    var isDrive = !!f.id;
+    var hasLocalData = !!f._localData;
+
+    // 1. Jika berkas sudah ada di Drive
+    if (isDrive) {
+      if (f.isJustUploaded) {
+        return '<div class="file-preview-body" id="preview-processing-spinner">'
+          + '<div class="file-preview-fallback"><div class="modern-spinner"><div class="modern-spinner-ring"></div></div><div class="file-preview-fallback-hint">Google Drive sedang memproses dokumen...</div></div>'
+          + '</div>';
+      }
+      var src = 'https://drive.google.com/file/d/' + esc(f.id) + '/preview';
+      return '<div class="file-preview-body" style="position:relative;">'
+        + '<iframe class="file-preview-iframe" id="drive-preview-iframe" src="' + src + '" allow="autoplay"></iframe>'
+        + '<button type="button" class="btn btn-sm btn-outline" style="position:absolute; bottom:10px; right:10px; background:white; z-index:10; box-shadow:0 2px 5px rgba(0,0,0,0.2);" onclick="var iframe=document.getElementById(\'drive-preview-iframe\'); if(iframe){ iframe.src = iframe.src; }">'
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle;margin-right:4px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
+        + 'Muat Ulang Pratinjau</button>'
+        + '</div>';
+    }
+
+    // 2. Jika data lokal (belum diunggah ke Drive)
+    if (hasLocalData) {
+      if (isImg) {
+        return '<div class="file-preview-body"><img class="file-preview-img" src="' + esc(f._localData) + '" alt="' + esc(f.name) + '"></div>';
+      }
+      if (isPdf) {
+        // PDF lokal tidak bisa menggunakan <embed src="blob:..."> di sandbox Google Apps Script (tampil blank).
+        // Kita tampilkan spinner pemuatan sampai selesai diunggah ke Drive.
+        return '<div class="file-preview-body" id="preview-loading">'
+          + '<div class="file-preview-fallback"><div class="modern-spinner"><div class="modern-spinner-ring"></div></div><div class="file-preview-fallback-hint">Mengunggah dan menyiapkan pratinjau...</div></div>'
+          + '</div>';
+      }
+    }
+
+    if (isImg || isPdf) {
+      return '<div class="file-preview-body" id="preview-loading">'
+        + '<div class="file-preview-fallback"><div class="modern-spinner"><div class="modern-spinner-ring"></div></div><div class="file-preview-fallback-hint">Memuat pratinjau...</div></div>'
+        + '</div>';
+    }
+
+    var iconSvg = isDoc
+      ? '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>'
+      : '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>';
+
+    return '<div class="file-preview-body"><div class="file-preview-fallback">'
+      + '<svg class="file-preview-fallback-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' + iconSvg + '</svg>'
+      + '<div class="file-preview-fallback-name">' + esc(f.name) + '</div>'
+      + '<div class="file-preview-fallback-hint">' + (isDoc ? 'Pratinjau tidak tersedia untuk file dokumen' : 'Pilih file untuk melihat pratinjau') + '</div>'
+      + '</div></div>';
+  }
+
+  function getFilePreviewHtml_(f) {
+    if (!f || !f.name) return getDropzoneUploadHtml_();
+    var showAutoParseBtn = f.id && !state.editMode && !_parseDone;
+    var autoParseBtnHtml = '';
+    if (showAutoParseBtn) {
+      if (typeof _isParsing !== 'undefined' && _isParsing) {
+        autoParseBtnHtml = '<button class="btn btn-sm btn-outline" id="btn-auto-parse" type="button" style="margin-left:auto;" disabled>'
+          + '<span class="modern-spinner" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:4px;"><span class="modern-spinner-ring"></span></span> Menganalisis...</button>';
+      } else {
+        autoParseBtnHtml = '<button class="btn btn-sm btn-outline" id="btn-auto-parse" type="button" style="margin-left:auto;">'
+          + AUTO_PARSE_BTN_INNER_HTML + '</button>';
+      }
+    } else if (_parseDone && _parseResults === null) {
+      autoParseBtnHtml = '<span class="btn btn-sm btn-outline" style="margin-left:auto;opacity:0.5;cursor:default;">'
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle;margin-right:4px;">'
+        + '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>'
+        + '</svg>Tak ada data ditemukan</span>';
+    } else if (_parseDone && _parseResults) {
+      var filledCount = _parseResults._filledCount || 0;
+      autoParseBtnHtml = '<span class="btn btn-sm btn-outline" style="margin-left:auto;opacity:0.7;cursor:default;border-color:#22c55e;color:#22c55e;">'
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle;margin-right:4px;">'
+        + '<polyline points="20 6 9 17 4 12"/>'
+        + '</svg>' + filledCount + ' kolom terisi</span>';
+    }
+    return '<div class="file-preview-wrap">'
+      + getFilePreviewBody_(f)
+      + '<div class="file-preview-actions">'
+      + '<span class="file-preview-name-label" title="' + esc(f.name) + '">' + esc(f.name) + '</span>'
+      + '<button class="btn btn-sm btn-danger-sm" id="clear-file-btn" type="button">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle;margin-right:3px;">'
+      + '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'
+      + '</svg>Hapus</button>'
+      + autoParseBtnHtml
+      + '</div>'
+      + '</div>';
+  }
+
+  function getEditPreviewHtml_(f) {
+    if (!f || !f.name) return '';
+    return '<div class="file-preview-wrap">'
+      + getFilePreviewBody_(f)
+      + '<div class="file-preview-actions">'
+      + '<span class="file-preview-name-label" title="' + esc(f.name) + '">' + esc(f.name) + '</span>'
+      + (f.url ? '<a class="btn btn-sm btn-outline" href="' + esc(f.url) + '" target="_blank" rel="noopener" style="text-decoration:none;">'
+        + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle;margin-right:4px;">'
+        + '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
+        + '<polyline points="15 3 21 3 21 9"/>'
+        + '<line x1="10" y1="14" x2="21" y2="3"/>'
+        + '</svg>Buka Dokumen</a>' : '')
+      + '</div></div>';
+  }
+
+  function loadPreviewContent_(srcFile, actualFile) {
+    if (!srcFile || srcFile.id) return;
+    var ext = (srcFile.name || '').split('.').pop().toLowerCase();
+    var isImg = ['png','jpg','jpeg','gif','webp','bmp','svg'].indexOf(ext) !== -1;
+    var isPdf = ext === 'pdf';
+    if (!isImg && !isPdf) return;
+
+    var fileInput = document.getElementById('source-file');
+    var file = actualFile || (fileInput && fileInput.files ? fileInput.files[0] : null);
+    if (!file) return;
+
+    if (srcFile._objectUrl) {
+      URL.revokeObjectURL(srcFile._objectUrl);
+    }
+    srcFile._objectUrl = URL.createObjectURL(file);
+    srcFile._localData = srcFile._objectUrl;
+    if (srcFile._uploadToken) {
+      _localDataCache[srcFile._uploadToken] = srcFile._objectUrl;
+    }
+
+    var container = document.getElementById('dropzone-content');
+    if (container) {
+      container.innerHTML = getFilePreviewHtml_(srcFile);
+      bindPreviewActions_();
+      
+      // Sembunyikan banner jika user mulai berinteraksi
+      state.draftPrompted = true;
+      var banner = document.getElementById('draft-restore-banner');
+      if (banner) banner.style.display = 'none';
+    }
+  }
+
+  function clearSelectedFile_() {
+    if (_pendingUpload) _pendingUpload = null;
+    _parseResults = null;
+    _parseDone = false;
+    _parseDebugInfo = null;
+    _isParsing = false;
+    var input = document.getElementById('source-file');
+    if (input) input.value = '';
+    if (state.draft) {
+      state.draft.sourceFile = { id: '', name: '', url: '', mimeType: '', fileSize: 0 };
+    }
+    var dz = document.getElementById('dropzone');
+    var container = document.getElementById('dropzone-content');
+    if (dz) dz.classList.remove('has-file');
+    if (container) {
+      container.className = 'dropzone-content';
+      container.innerHTML = getDropzoneUploadHtml_();
+    }
+    if (typeof bindDropzone === 'function') bindDropzone();
+    if (typeof saveProcessStateToLocal === 'function') saveProcessStateToLocal();
+  }
+
+  function bindPreviewActions_() {
+    var btn = document.getElementById('clear-file-btn');
+    if (btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        clearSelectedFile_();
+      });
+    }
+    var autoParseBtn = document.getElementById('btn-auto-parse');
+    if (autoParseBtn) {
+      autoParseBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        triggerAutoParse_();
+      });
+    }
+
+  }
+
+  var _parseResults = null;
+  var _parseDone = false;
+  var _isParsing = false;
+
+  var AUTO_PARSE_BTN_INNER_HTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle;margin-right:4px;">'
+    + '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'
+    + '<line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>'
+    + '</svg>Bantu Isi Otomatis';
+
+  function triggerAutoParse_() {
+    if (!state.draft || !state.draft.sourceFile || !state.draft.sourceFile.id) return;
+    var parseFileId = state.draft.sourceFile.id;
+    var btn = document.getElementById('btn-auto-parse');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="modern-spinner" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:4px;"><span class="modern-spinner-ring"></span></span> Menganalisis...';
+    }
+    _isParsing = true;
+    api('parseDocumentContent', { fileId: state.draft.sourceFile.id }, { timeoutMs: 30000 })
+      .then(function (result) {
+        _isParsing = false;
+        if (!state.draft || !state.draft.sourceFile || state.draft.sourceFile.id !== parseFileId) return;
+        if (result.skipped) {
+          showToast(result.skipReason || 'Tipe file tidak didukung untuk parsing otomatis.');
+          _parseResults = null;
+          _parseDone = true;
+          refreshFilePreview_();
+          return;
+        }
+        _parseDone = true;
+        var fields = result.fields || {};
+        var filledCount = autoFillParseFields_(fields);
+        if (filledCount > 0) {
+          result._filledCount = filledCount;
+          _parseResults = result;
+          showToast(filledCount + ' kolom terisi otomatis.');
+        } else {
+          _parseResults = null;
+        }
+        refreshFilePreview_();
+      })
+      .catch(function (error) {
+        _isParsing = false;
+        if (!state.draft || !state.draft.sourceFile || state.draft.sourceFile.id !== parseFileId) return;
+        _parseDone = true;
+        _parseResults = null;
+        showToast('Gagal menganalisis dokumen. Isi form secara manual.');
+        refreshFilePreview_();
+      });
+  }
+
+  function autoFillParseFields_(fields) {
+    var filledCount = 0;
+    var labels = {
+      nomor_surat: 'Nomor Surat', kode_klasifikasi: 'Kode Klasifikasi',
+      uraian_informasi_berkas: 'Uraian', tanggal: 'Tanggal',
+      klasifikasi_akses: 'Klasifikasi Akses', jumlah: 'Jumlah Halaman',
+      pengirim: 'Pengirim', penerima: 'Penerima',
+      tanda_tangan: 'Tanda Tangan', lampiran: 'Lampiran'
+    };
+    Object.keys(fields).forEach(function (key) {
+      var f = fields[key];
+      if (!f || !f.value) return;
+      var input = document.querySelector('[data-field="' + key + '"]') || document.querySelector('[name="' + key + '"]');
+      if (!input) return;
+      if (state.draft && state.draft.metadata) {
+        state.draft.metadata[key] = f.value;
+      }
+      input.value = f.value;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.classList.add('auto-parse-filled');
+      filledCount++;
+    });
+    updateFileName();
+    return filledCount;
+  }
+
+  function refreshFilePreview_() {
+    var container = document.getElementById('dropzone-content');
+    if (container && state.draft && state.draft.sourceFile) {
+      container.innerHTML = getFilePreviewHtml_(state.draft.sourceFile);
+      bindPreviewActions_();
+    }
+  }
+
+  function renderProcess() {
+    const data = state.bootstrap;
+    if (!data) {
+      setContent('<div class="error">Konfigurasi data aplikasi belum termuat. Silakan muat ulang halaman.</div>');
+      return;
+    }
+
+    let hasLocalDraft = false;
+    if (typeof getProcessStateKey === 'function') {
+      try {
+        hasLocalDraft = !!localStorage.getItem(getProcessStateKey());
+      } catch (e) {
+        console.warn('Gagal membaca localStorage:', e);
+      }
+    }
+
+    // Hanya pulihkan otomatis dari localStorage jika user memilih 'Pulihkan' (state.draftPrompted = true)
+    if (hasLocalDraft && !state.editMode && state.draftPrompted && !state.draft) {
+      if (typeof restoreProcessStateFromLocal === 'function') {
+        restoreProcessStateFromLocal();
+      }
+    }
+
+    if (state.draft && (!Array.isArray(state.draft.fields) || state.draft.fields.length === 0)) {
+      if (state.draft.sourceFile && !state.selectedFile) state.selectedFile = state.draft.sourceFile;
+      state.draft = null;
+    }
+
+    if (!state.draft) {
+      const activities = data.activities || [];
+      const first = activities[0];
+      const activityId = state.preselectedActivityId || (first ? first.activity_id : '');
+      const activity = activities.find(a => a.activity_id === activityId);
+
+      let subId = state.preselectedSubActivityId;
+      if (!subId && activity && activity.subActivities && activity.subActivities.length) {
+        subId = activity.subActivities[0].sub_activity_id;
+      }
+
+      const sub = activity
+        ? (activity.subActivities || []).find(s => s.sub_activity_id === subId)
+        : null;
+
+      const fields = getFieldsForActivity_(activityId);
+      const metadata = {};
+
+      fields.forEach(f => {
+        let val = f.default_value || '';
+        if (f.field_name === 'no_filing_cabinet') val = (state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.defaultFilingCabinet) || '02';
+        if (f.field_name === 'no_laci') val = (activity ? activity.laci_no : '') || '';
+        if (f.field_name === 'no_folder') val = (sub ? sub.no_folder : '') || (activity ? activity.folder_no : '') || '';
+        if (f.field_name === 'no_berkas') val = (sub ? sub.sort_order : '') || '';
+        if (f.field_name === 'nomor_item_arsip') val = '01';
+        if (f.field_name === 'klasifikasi_akses') val = 'Terbatas';
+        metadata[f.field_name] = val;
+      });
+
+      const breadcrumb = state.preselectedFolderBreadcrumb && state.preselectedFolderBreadcrumb.length
+        ? state.preselectedFolderBreadcrumb
+        : [activity ? activity.activity_name : '', sub ? sub.sub_activity_name : ''].filter(Boolean);
+
+      state.draft = {
+        year: data.settings ? data.settings.currentYear : '',
+        activity: activity || null,
+        subActivity: sub || null,
+        sourceFile: state.selectedFile || { id: '', name: '', url: '' },
+        fields,
+        metadata,
+        targetFolderId: state.preselectedTargetFolderId || (sub ? sub.folder_id : ''),
+        targetFolderName: state.preselectedTargetFolderName || (sub ? sub.sub_activity_name : ''),
+        folderBreadcrumb: breadcrumb,
+        targetLocked: Boolean(state.preselectedTargetFolderId),
+        finalFileName: ''
+      };
+
+      fillNomorSuratFromSourceName_(false);
+      state.draft.metadata.lokasi_simpan = getCategoryLocation(state.draft);
+      updateFileName();
+    }
+
+    const catId = state.draft.activity ? state.draft.activity.activity_id : '';
+    const hints = CATEGORY_HINTS[catId] || {};
+    const lockedContext = state.draft.targetLocked;
+    const srcFile = state.draft.sourceFile;
+    const hasBack = state.draft.targetFolderId;
+
+    const activityOptions = (data.activities || []).map(a => {
+      const sel = state.draft.activity && state.draft.activity.activity_id === a.activity_id ? 'selected' : '';
+      return `<option value="${esc(a.activity_id)}" ${sel}>${esc(a.activity_name)}</option>`;
+    }).join('');
+
+    const hasFile = srcFile && (srcFile.id || srcFile.name);
+
+    const draftBannerHtml = (hasLocalDraft && !state.draftPrompted && !state.editMode) ? `
+      <div class="draft-banner" id="draft-restore-banner">
+        <div class="draft-banner-content">
+          <div class="draft-banner-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          </div>
+          <div class="draft-banner-text">
+            <strong>Draf pengisian sebelumnya ditemukan</strong>
+            <span>Apakah Anda ingin memulihkan data yang belum selesai diisi?</span>
+          </div>
+        </div>
+        <div class="draft-banner-actions">
+          <button class="btn btn-sm btn-outline" id="clear-draft-btn" type="button">Mulai Baru</button>
+          <button class="btn btn-sm" id="restore-draft-btn" type="button">Lanjutkan</button>
+        </div>
+      </div>
+    ` : '';
+
+    setContent(`
+      ${hasBack ? `
+        <div class="toolbar mb-16">
+          <button class="btn" id="back-to-archive-folder" type="button">
+            <svg class="svg-inline-btn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            Kembali ke Folder
+          </button>
+        </div>
+      ` : ''}
+
+      ${draftBannerHtml}
+
+      <div class="process-layout">
+        <div class="process-card">
+          <div class="process-card-header">
+            <div class="process-card-step">1</div>
+            <div class="process-card-title">${state.editMode ? 'Konteks Surat' : 'Surat Sumber'}</div>
+            <div class="process-card-desc">${state.editMode ? 'Informasi kategori kegiatan dan sub-kegiatan' : 'Unggah berkas surat'}</div>
+          </div>
+
+          <div class="process-target-context" id="target-context" style="margin-bottom: 24px;">
+            ${processTargetContextHtml(state.draft)}
+          </div>
+
+            <div class="process-source-grid" ${state.editMode ? 'style="grid-template-columns: 1fr;"' : ''}>
+              ${!state.editMode ? `
+              <div class="dropzone${hasFile ? ' has-file' : ''}" id="dropzone" tabindex="0" role="button" aria-label="Pilih berkas">
+                <input id="source-file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+                <div id="dropzone-content" class="${hasFile ? 'file-preview-wrap' : 'dropzone-content'}">
+                  ${hasFile ? getFilePreviewHtml_(srcFile) : getDropzoneUploadHtml_()}
+                </div>
+              </div>
+              ` : (hasFile ? '<div class="dropzone has-file" style="cursor:default;">' + getEditPreviewHtml_(srcFile) + '</div>' : '')}
+
+            <div class="process-controls-stack">
+
+            <div class="process-selectors">
+              <div class="form-field">
+                <label for="activity-id">Kegiatan</label>
+                <select id="activity-id" ${(lockedContext || state.editMode) ? 'disabled' : ''}>${activityOptions}</select>
+              </div>
+              <div class="form-field">
+                <label for="sub-activity-id">Sub-kegiatan</label>
+                <select id="sub-activity-id" ${(lockedContext || state.editMode) ? 'disabled' : ''}></select>
+              </div>
+            </div>
+
+            </div>
+          </div>
+        </div>
+
+        ${state.draft && state.draft.metadata ? (function() {
+          var lf = {
+            field_name: 'lokasi_simpan',
+            spreadsheet_column_name: 'Lokasi Simpan Target',
+            is_required: 'FALSE',
+            input_type: 'text',
+            is_visible_in_form: 'TRUE'
+          };
+          var lv = state.draft.metadata.lokasi_simpan || '';
+          return '<div class="form-grid metadata-grid" style="margin-bottom:24px;">' + metadataField(lf, lv, hints) + '</div>';
+        })() : ''}
+
+        <div id="metadata-section">
+          ${metadataReviewHtml(state.draft, hints)}
+        </div>
+      </div>
+
+      <div id="inbox-queue-container" class="process-card mt-16">
+        <div class="empty" id="inbox-loading">${loadingHtml('Memuat draf tersimpan...')}</div>
+      </div>
+    `);
+
+    bindProcessForm();
+    bindMetadataReview();
+    bindDropzone();
+    bindPreviewActions_();
+    bindBackButton();
+    loadInboxQueue();
+    bindDraftBanner();
+  }
+
+  function bindDraftBanner() {
+    const restoreBtn = document.getElementById('restore-draft-btn');
+    const clearBtn = document.getElementById('clear-draft-btn');
+    if (!restoreBtn || !clearBtn) return;
+
+    restoreBtn.addEventListener('click', () => {
+      state.draftPrompted = true;
+      if (typeof restoreProcessStateFromLocal === 'function') {
+        restoreProcessStateFromLocal();
+      }
+      showToast('Draf berhasil dilanjutkan.');
+      renderProcess();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    clearBtn.addEventListener('click', () => {
+      state.draftPrompted = true;
+      if (typeof clearProcessStateFromLocal === 'function') {
+        clearProcessStateFromLocal();
+      }
+      state.draft = null;
+      _parseResults = null;
+      _parseDone = false;
+      showToast('Memulai sesi baru.');
+      renderProcess();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+
+  function processTargetContextHtml(draft) {
+    if (!draft) return '';
+    const breadcrumb = Array.isArray(draft.folderBreadcrumb) && draft.folderBreadcrumb.length
+      ? draft.folderBreadcrumb
+      : [
+        draft.activity ? draft.activity.activity_name : '',
+        draft.subActivity ? draft.subActivity.sub_activity_name : '',
+        draft.targetFolderName || ''
+      ].filter(Boolean);
+    const target = draft.targetFolderName || (draft.subActivity ? draft.subActivity.sub_activity_name : 'Folder tujuan');
+    return `
+      <div>
+        <div class="small muted">Lokasi surat</div>
+        <div class="breadcrumb-line">${breadcrumb.map(i => '<span>' + esc(i) + '</span>').join('<span class="breadcrumb-sep">/</span>')}</div>
+        <strong>${esc(target)}</strong>
+        ${draft.targetLocked && draft.subActivity ? `
+          <div class="small muted mt-8">
+            Berkas disimpan di folder ini. Pencatatan tetap masuk ke lembar rincian dan baris rangkuman sub-kegiatan <strong>${esc(draft.subActivity.formal_archive_name || draft.subActivity.sub_activity_name || '')}</strong>.
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
+  function bindBackButton() {
+    const btn = document.getElementById('back-to-archive-folder');
+    if (!btn || !state.draft || !state.draft.targetFolderId) return;
+    btn.addEventListener('click', () => {
+      setView('archive_folder', {
+        activityId: state.draft.activity ? state.draft.activity.activity_id : '',
+        subActivityId: state.draft.subActivity ? state.draft.subActivity.sub_activity_id : '',
+        folderId: state.draft.targetFolderId,
+        folderName: state.draft.targetFolderName,
+        folderBreadcrumb: state.draft.folderBreadcrumb || []
+      });
+    });
+  }
+
+  function bindDropzone() {
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('source-file');
+    if (!dropzone || !fileInput) return;
+
+    dropzone.onclick = function(e) {
+      if (e.target.closest('#clear-file-btn') || e.target.closest('.file-preview-actions')) return;
+      fileInput.click();
+    };
+
+    dropzone.ondragover = e => { e.preventDefault(); dropzone.classList.add('dropzone-over'); };
+    dropzone.ondragleave = () => dropzone.classList.remove('dropzone-over');
+    dropzone.ondrop = e => {
+      e.preventDefault();
+      dropzone.classList.remove('dropzone-over');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        fileInput.files = e.dataTransfer.files;
+        handleFileSelect(e.dataTransfer.files[0]);
+      }
+    };
+
+    fileInput.onchange = () => {
+      if (fileInput.files && fileInput.files[0]) handleFileSelect(fileInput.files[0]);
+    };
+  }
+
+  var _pendingUpload = null;
+
+  function handleFileSelect(file) {
+    state.draftPrompted = true;
+    var banner = document.getElementById('draft-restore-banner');
+    if (banner) banner.style.display = 'none';
+
+    if (!state.draft) updateDraft(false);
+
+    const token = Date.now().toString();
+    state.draft.sourceFile = {
+      id: '', name: file.name, url: '',
+      mimeType: file.type || '', fileSize: file.size,
+      isJustUploaded: true,
+      _uploadToken: token
+    };
+
+    var container = document.getElementById('dropzone-content');
+    var dz = document.getElementById('dropzone');
+    if (container) {
+      container.className = 'file-preview-wrap';
+      container.innerHTML = getFilePreviewHtml_(state.draft.sourceFile);
+    }
+    if (dz) dz.classList.add('has-file');
+
+    bindPreviewActions_();
+    loadPreviewContent_(state.draft.sourceFile, file);
+
+    // Upload file di background
+    if (_pendingUpload) _pendingUpload = null;
+    _pendingUpload = uploadAndGetId(document.getElementById('source-file'));
+    _pendingUpload.then(function (id) {
+      _pendingUpload = null;
+      if (!id) {
+        showToast('Gagal mengunggah berkas. Silakan coba lagi.');
+        clearSelectedFile_();
+        return;
+      }
+      if (state.draft && state.draft.sourceFile && state.draft.sourceFile._uploadToken === token) {
+        state.draft.sourceFile.id = id;
+        saveProcessStateToLocal();
+        
+        var container = document.getElementById('dropzone-content');
+        if (container) {
+          container.innerHTML = getFilePreviewHtml_(state.draft.sourceFile);
+          bindPreviewActions_();
+        }
+
+        setTimeout(function() {
+          if (state.draft && state.draft.sourceFile && state.draft.sourceFile._uploadToken === token && state.draft.sourceFile.id === id) {
+            state.draft.sourceFile.isJustUploaded = false;
+            var currentContainer = document.getElementById('dropzone-content');
+            if (currentContainer && currentContainer.querySelector('#preview-processing-spinner')) {
+              currentContainer.innerHTML = getFilePreviewHtml_(state.draft.sourceFile);
+              bindPreviewActions_();
+            }
+          }
+        }, 1500);
+      }
+    }).catch(function (error) {
+      _pendingUpload = null;
+      var msg = error ? (error.message || error) : 'Terjadi kesalahan tidak dikenal';
+      showToast('Upload gagal: ' + msg);
+      clearSelectedFile_();
+    });
+
+    updateFileName();
+    saveProcessStateToLocal();
+  }
+
+  function updateDraft(keepExistingMetadata) {
+    const activitySelect = document.getElementById('activity-id');
+    const subSelect = document.getElementById('sub-activity-id');
+    const data = state.bootstrap;
+    if (!data) return;
+
+    const activities = data.activities || [];
+    if (!activities.length) return;
+
+    const activityId = activitySelect ? activitySelect.value : (state.preselectedActivityId || activities[0].activity_id);
+    const activity = activities.find(a => a.activity_id === activityId);
+    if (!activity) return;
+
+    let subId = subSelect ? subSelect.value : state.preselectedSubActivityId;
+    if (!subId && activity.subActivities && activity.subActivities.length) subId = activity.subActivities[0].sub_activity_id;
+    const sub = (activity.subActivities || []).find(s => s.sub_activity_id === subId);
+    if (!sub) return;
+
+    const fields = getFieldsForActivity_(activityId);
+    const oldMetadata = state.draft ? state.draft.metadata : {};
+    const newMetadata = {};
+
+    fields.forEach(f => {
+      const key = f.field_name;
+      if (keepExistingMetadata && oldMetadata[key] !== undefined && oldMetadata[key] !== '') {
+        newMetadata[key] = oldMetadata[key];
+      } else {
+        let val = f.default_value || '';
+        if (key === 'no_filing_cabinet') val = (state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.defaultFilingCabinet) || '02';
+        if (key === 'no_laci') val = activity.laci_no || '';
+        if (key === 'no_folder') val = sub.no_folder || activity.folder_no || '';
+        if (key === 'no_berkas') val = sub.sort_order || '';
+        if (key === 'nomor_item_arsip') val = '01';
+        if (key === 'klasifikasi_akses') val = 'Terbatas';
+        newMetadata[key] = val;
+      }
+    });
+
+    if (keepExistingMetadata && state.draft) {
+      state.draft.activity = activity;
+      state.draft.subActivity = sub;
+      state.draft.fields = fields;
+      state.draft.metadata = newMetadata;
+      if (!state.draft.targetLocked) {
+        state.draft.targetFolderId = sub.folder_id || '';
+        state.draft.targetFolderName = sub.sub_activity_name || '';
+        state.draft.folderBreadcrumb = [activity.activity_name, sub.sub_activity_name].filter(Boolean);
+      }
+    } else {
+      const breadcrumb = state.preselectedFolderBreadcrumb && state.preselectedFolderBreadcrumb.length
+        ? state.preselectedFolderBreadcrumb
+        : [activity.activity_name, sub.sub_activity_name].filter(Boolean);
+
+      state.draft = {
+        year: data.settings ? data.settings.currentYear : '',
+        activity,
+        subActivity: sub,
+        sourceFile: state.selectedFile || { id: '', name: '', url: '' },
+        fields,
+        metadata: newMetadata,
+        targetFolderId: state.preselectedTargetFolderId || sub.folder_id || '',
+        targetFolderName: state.preselectedTargetFolderName || sub.sub_activity_name || '',
+        folderBreadcrumb: breadcrumb,
+        targetLocked: Boolean(state.preselectedTargetFolderId),
+        finalFileName: ''
+      };
+    }
+
+    state.draft.metadata.lokasi_simpan = getCategoryLocation(state.draft);
+    fillNomorSuratFromSourceName_(false);
+    updateFileName();
+  }
+
+  function bindProcessForm() {
+    const sel = document.getElementById('activity-id');
+    const subSel = document.getElementById('sub-activity-id');
+    if (!sel || !subSel) return;
+
+    const fillSubs = () => {
+      const activity = getActivity(sel.value);
+      const curId = state.draft && state.draft.subActivity ? state.draft.subActivity.sub_activity_id : null;
+      const subs = activity ? (activity.subActivities || []) : [];
+      subSel.innerHTML = subs.map(s => {
+        const selAttr = curId === s.sub_activity_id ? 'selected' : '';
+        return '<option value="' + esc(s.sub_activity_id) + '" ' + selAttr + '>' + esc(s.sub_activity_name) + '</option>';
+      }).join('');
+    };
+
+    sel.addEventListener('change', () => {
+      state.preselectedActivityId = null;
+      state.preselectedSubActivityId = null;
+      fillSubs();
+      updateDraft(true);
+      refreshMetadataReview();
+      applyArchiveMetadataDefaults_();
+      saveProcessStateToLocal();
+    });
+
+    subSel.addEventListener('change', () => {
+      state.preselectedSubActivityId = null;
+      updateDraft(true);
+      refreshMetadataReview();
+      applyArchiveMetadataDefaults_();
+      saveProcessStateToLocal();
+    });
+
+    fillSubs();
+    state.preselectedActivityId = null;
+    state.preselectedSubActivityId = null;
+    applyArchiveMetadataDefaults_();
+
+  }
+
+  function refreshMetadataReview() {
+    const section = document.getElementById('metadata-section');
+    const ctx = document.getElementById('target-context');
+    if (!section || !state.draft) return;
+
+    const catId = state.draft.activity ? state.draft.activity.activity_id : '';
+    const hints = CATEGORY_HINTS[catId] || {};
+
+    state.draft.metadata.lokasi_simpan = getCategoryLocation(state.draft);
+    updateFileName();
+
+    section.innerHTML = metadataReviewHtml(state.draft, hints);
+    bindMetadataReview();
+
+    if (ctx) {
+      ctx.innerHTML = processTargetContextHtml(state.draft);
+    }
+  }
+
+  let _metadataDefaultsRequestId = 0;
+
+  async function applyArchiveMetadataDefaults_() {
+    if (!state.draft || !state.draft.activity || !state.draft.subActivity || state.editMode) return;
+    const requestId = ++_metadataDefaultsRequestId;
+    const activityId = state.draft.activity.activity_id;
+    const subActivityId = state.draft.subActivity.sub_activity_id;
+    try {
+      const result = await api('getArchiveMetadataDefaults', {
+        year: state.draft.year || (state.bootstrap.settings && state.bootstrap.settings.currentYear) || '',
+        activityId,
+        subActivityId
+      });
+      if (requestId !== _metadataDefaultsRequestId) return;
+      if (!state.draft || !state.draft.activity || !state.draft.subActivity) return;
+      if (state.draft.activity.activity_id !== activityId || state.draft.subActivity.sub_activity_id !== subActivityId) return;
+
+      const defaults = result && result.metadata ? result.metadata : {};
+      let changed = false;
+      ['no_filing_cabinet', 'no_laci', 'no_folder'].forEach(key => {
+        const nextValue = defaults[key];
+        if (!nextValue) return;
+        const current = state.draft.metadata ? state.draft.metadata[key] : '';
+        if (current !== nextValue) {
+          state.draft.metadata[key] = nextValue;
+          changed = true;
+          const input = document.querySelector(`[data-field="${key}"]`);
+          if (input && document.activeElement !== input) {
+            input.value = nextValue;
+          }
+        }
+      });
+      var currentItem = state.draft && state.draft.metadata && state.draft.metadata.nomor_item_arsip;
+      if (defaults.next_item_number && (!currentItem || currentItem === '01')) {
+        const nextNum = defaults.next_item_number.toString().padStart(2, '0');
+        if (state.draft.metadata.nomor_item_arsip !== nextNum) {
+          state.draft.metadata.nomor_item_arsip = nextNum;
+          changed = true;
+          const input = document.querySelector(`[data-field="nomor_item_arsip"]`);
+          if (input && document.activeElement !== input) {
+            input.value = nextNum;
+          }
+        }
+      }
+      if (changed) {
+        state.draft.metadata.lokasi_simpan = getCategoryLocation(state.draft);
+        const locInput = document.querySelector('[data-field="lokasi_simpan"]');
+        if (locInput) locInput.value = state.draft.metadata.lokasi_simpan;
+        
+        updateFileName();
+        saveProcessStateToLocal();
+      }
+    } catch (error) {
+      console.warn('Gagal memuat default lokasi arsip: ' + (error.message || error));
+    }
+  }
+
+  let _kbdHandler = null;
+
+  function metadataReviewHtml(draft, hints) {
+    if (!draft) return '<div class="empty">Menyiapkan formulir...</div>';
+    
+    // Force synchronize the lokasi_simpan so it always matches the actual Drive path
+    if (!draft.metadata) draft.metadata = {};
+    draft.metadata.lokasi_simpan = getCategoryLocation(draft);
+    
+    const metadata = draft.metadata;
+    const fields = orderMetadataFields_(draft.fields || []).filter(f => f.field_name !== 'ket' && f.field_name !== 'no_berkas');
+
+    const section2 = ['nomor_item_arsip', 'nomor_surat', 'kode_klasifikasi', 'uraian_informasi_berkas', 'tanggal'];
+    const section3 = ['tingkat_perkembangan', 'jumlah', 'satuan', 'no_filing_cabinet', 'no_laci', 'no_folder', 'klasifikasi_akses'];
+
+    const section2Fields = fields.filter(f => section2.includes(f.field_name));
+    const section3Fields = fields.filter(f => section3.includes(f.field_name));
+    const extraFields = fields.filter(f =>
+      !section2.includes(f.field_name) &&
+      !section3.includes(f.field_name) &&
+      f.field_name !== 'lokasi_simpan'
+    );
+    const locFields = fields.filter(f => f.field_name === 'lokasi_simpan');
+
+    const card = (step, title, desc, content, extraGridClass = '') =>
+      '<div class="process-card">'
+      + '<div class="process-card-header">'
+      + '<div class="process-card-step">' + step + '</div>'
+      + '<div class="process-card-title">' + title + '</div>'
+      + '<div class="process-card-desc">' + desc + '</div>'
+      + '</div>'
+      + '<div class="form-grid metadata-grid ' + extraGridClass + '">' + content + '</div>'
+      + '</div>';
+
+    const renderFields = arr => arr.map(f => metadataField(f, metadata[f.field_name], hints)).join('');
+
+    let section2Html = '';
+    if (section2Fields.length) {
+      const gridFields = section2Fields.filter(f => f.field_name !== 'tanggal' && f.field_name !== 'uraian_informasi_berkas');
+      const tanggalField = section2Fields.find(f => f.field_name === 'tanggal');
+      const uraianField = section2Fields.find(f => f.field_name === 'uraian_informasi_berkas');
+
+      let inner = gridFields.map(f => metadataField(f, metadata[f.field_name], hints)).join('');
+
+      if (tanggalField && uraianField) {
+        inner += '<div class="tanggal-uraian-row">'
+          + metadataField(tanggalField, metadata[tanggalField.field_name], hints)
+          + metadataField(uraianField, metadata[uraianField.field_name], hints)
+          + '</div>';
+      } else {
+        if (tanggalField) inner += metadataField(tanggalField, metadata[tanggalField.field_name], hints);
+        if (uraianField) inner += metadataField(uraianField, metadata[uraianField.field_name], hints);
+      }
+
+      section2Html = card('2', 'Identitas Surat', 'Informasi utama arsip',
+        inner,
+        'metadata-grid-3'
+      );
+    }
+
+    let section3Html = '';
+    if (section3Fields.length) {
+      const groupedNames = new Set(['tingkat_perkembangan', 'jumlah', 'satuan']);
+      const groupedFields = section3Fields.filter(f => groupedNames.has(f.field_name));
+      const otherFields = section3Fields.filter(f => !groupedNames.has(f.field_name));
+
+      let inner = otherFields.map(f => metadataField(f, metadata[f.field_name], hints)).join('');
+
+      if (groupedFields.length >= 2) {
+        const wrapClass = groupedFields.length === 3 ? 'lokasi-triple-row' : 'jumlah-satuan-row';
+        inner += '<div class="' + wrapClass + '">'
+          + groupedFields.map(f => metadataField(f, metadata[f.field_name], hints)).join('')
+          + '</div>';
+      } else {
+        inner += groupedFields.map(f => metadataField(f, metadata[f.field_name], hints)).join('');
+      }
+
+      section3Html = card('3', 'Detail Lokasi Fisik', 'Penyimpanan berkas', inner);
+    }
+
+    const extraHtml = extraFields.length
+      ? '<div class="process-card"><div class="form-grid metadata-grid">' + renderFields(extraFields) + '</div></div>'
+      : '';
+
+    const locHtml = locFields.length
+      ? '<div class="form-grid metadata-grid" style="margin-top:4px;">' + renderFields(locFields) + '</div>'
+      : '';
+
+    const sourceLabel = draft.sourceFile && draft.sourceFile.name
+      ? esc(draft.sourceFile.name)
+      : '<span class="color-danger">Belum ada dokumen terpilih</span>';
+
+    return `
+
+      ${section2Html}
+      ${section3Html}
+      ${extraHtml}
+      <div class="process-sticky-bar" id="finalize-bar">
+        <div class="preview-section">
+          <div class="preview-label">Nama Berkas Akhir</div>
+          <div class="preview-name" id="final-name-preview">${esc(draft.finalFileName || metadata.lokasi_simpan || '')}</div>
+        </div>
+        <div class="action-group">
+          ${state.editMode ? '' : `
+          <button class="btn btn-outline" id="save-draft-btn" data-action="save-draft-process">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Simpan Draf <span class="kbd-badge">Ctrl+S</span>
+          </button>
+          `}
+          <button class="btn btn-primary" id="finalize-archive" data-action="submit-process">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            ${state.editMode ? 'Simpan Perubahan' : 'Simpan Surat ke Folder'} <span class="kbd-badge">Ctrl+Enter</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  function getFieldsForActivity_(activityId) {
+    const data = state.bootstrap || {};
+    const activity = (data.activities || []).find(a => a.activity_id === activityId);
+    const src = activity && Array.isArray(activity.fields)
+      ? activity.fields
+      : (data.fields || []).filter(f => f.activity_id === activityId);
+    return ensureProcessRequiredFields_(
+      src.filter(f => f.is_visible_in_form === 'TRUE' || f.is_visible_in_form === true),
+      activityId
+    );
+  }
+
+  function ensureProcessRequiredFields_(fields, activityId) {
+    const result = fields.slice();
+    const byName = {};
+    result.forEach(f => { byName[f.field_name] = f; });
+    [
+      ['nomor_surat', 'Nomor Surat', false, 'text', 2.5],
+      ['no_filing_cabinet', 'No Filing Cabinet', false, 'text', 9],
+      ['no_laci', 'No Laci', true, 'text', 10],
+      ['no_folder', 'No Folder', true, 'text', 11],
+      ['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', false, 'select', 12]
+    ].forEach(item => {
+      if (byName[item[0]]) return;
+      result.push({
+        field_id: activityId + '_' + item[0],
+        activity_id: activityId,
+        field_name: item[0],
+        spreadsheet_column_name: item[1],
+        is_required: item[2] ? 'TRUE' : 'FALSE',
+        default_value: '',
+        input_type: item[3],
+        sort_order: item[4],
+        is_visible_in_form: 'TRUE'
+      });
+    });
+    return result;
+  }
+
+  function orderMetadataFields_(fields) {
+    const preferred = [
+      'nomor_item_arsip', 'nomor_surat', 'kode_klasifikasi', 'tanggal', 'uraian_informasi_berkas',
+      'tingkat_perkembangan', 'jumlah', 'satuan', 'no_filing_cabinet', 'no_laci', 'no_folder',
+      'klasifikasi_akses', 'ket', 'lokasi_simpan'
+    ];
+    return fields.slice().sort((a, b) => {
+      const ai = preferred.indexOf(a.field_name);
+      const bi = preferred.indexOf(b.field_name);
+      if (ai !== -1 || bi !== -1) return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
+      return Number(a.sort_order || 0) - Number(b.sort_order || 0);
+    });
+  }
+
+  const METADATA_TOOLTIPS = {
+    nomor_surat: 'Nomor surat dari dokumen. Terisi otomatis dari nama file jika terbaca, tetapi tetap bisa dikoreksi manual.',
+    kode_klasifikasi: 'Kode arsip sesuai JRA, contoh: DL.01.01 untuk Diklat Kepemimpinan',
+    tingkat_perkembangan: 'Status dokumen dalam sistem Srikandi, misal: Srikandi (dokumen digital), Asli, atau Salinan',
+    jumlah: 'Jumlah dokumen. Gunakan tombol + dan - atau ketik langsung.',
+    no_filing_cabinet: 'Nomor lemari arsip fisik tempat dokumen disimpan, contoh: FC-01',
+    klasifikasi_akses: 'Biasa: dapat diakses semua. Terbatas: hanya unit terkait. Rahasia: akses terbatas pimpinan.'
+  };
+
+  function metadataField(field, value, hints) {
+    const key = field.field_name;
+    const label = METADATA_LABELS[key] || field.spreadsheet_column_name || key;
+    const isRequired = field.is_required === 'TRUE' || field.is_required === true;
+    const required = isRequired ? ' required' : '';
+    const today = new Date().toISOString().slice(0, 10);
+    let current = value == null || value === '' ? (field.default_value || (key === 'tanggal' ? today : '')) : value;
+    if (key === 'tanggal') {
+      current = normalizeDateToIso(current);
+    }
+    if ((key === 'nomor_item_arsip' || key === 'no_filing_cabinet') && current && !isNaN(current)) {
+      current = String(Number(current)).padStart(2, '0');
+    }
+    const full = key === 'uraian_informasi_berkas' || key === 'lokasi_simpan';
+    const cls = 'form-field metadata-field metadata-field-' + key + (full ? ' full' : '');
+    const hint = getCategoryHint(
+      state.draft && state.draft.activity ? state.draft.activity.activity_id : '',
+      key
+    );
+    const hintHtml = (hint && key !== 'uraian_informasi_berkas' && key !== 'kode_klasifikasi') ? '<div class="field-hint">' + esc(hint) + '</div>' : '';
+    const safeKey = esc(key);
+    const safeCur = esc(current);
+    const safeHint = esc(hint || label);
+
+    const requiredMark = isRequired ? '<span class="required-dot" aria-hidden="true">*</span>' : '';
+    const labelHtml = '<label for="meta-' + safeKey + '">' + esc(label) + requiredMark
+      + (METADATA_TOOLTIPS[key] ? '<span class="tooltip-trigger" title="">?<span class="tooltip-text">' + esc(METADATA_TOOLTIPS[key]) + '</span></span>' : '')
+      + '</label>';
+
+    let inputHtml;
+    let extraAttrs = '';
+
+    if (key === 'uraian_informasi_berkas') {
+      inputHtml = '<textarea id="meta-' + safeKey + '" data-field="' + safeKey + '" placeholder="' + safeHint + '"' + required + '>' + safeCur + '</textarea>';
+    } else if (SELECT_OPTIONS[key]) {
+      const opts = SELECT_OPTIONS[key].map(function (o) {
+        return '<option value="' + esc(o) + '"' + (o === current ? ' selected' : '') + '>' + esc(o) + '</option>';
+      }).join('');
+      inputHtml = '<select id="meta-' + safeKey + '" data-field="' + safeKey + '"' + required + '>' + opts + '</select>';
+    } else {
+      let type = 'text';
+      if (key === 'tanggal') {
+        type = 'date';
+        extraAttrs = ' inputmode="numeric"';
+      } else if (key === 'nomor_item_arsip' || key === 'no_filing_cabinet') {
+        type = 'text';
+        extraAttrs = ' inputmode="numeric" pattern="[0-9]*"';
+      } else if (key === 'jumlah') {
+        type = 'text';
+        extraAttrs = ' inputmode="numeric" pattern="[0-9]*"';
+      } else if (key === 'no_laci' || key === 'no_folder') {
+        type = 'text';
+        extraAttrs = ' inputmode="numeric" pattern="[0-9]*"';
+      }
+      const readonlyAttr = (key === 'lokasi_simpan') ? ' readonly' : '';
+      inputHtml = '<input id="meta-' + safeKey + '" data-field="' + safeKey + '" type="' + type + '" value="' + safeCur + '" placeholder="' + safeHint + '"' + extraAttrs + required + readonlyAttr + '>';
+    }
+
+    return '<div class="' + cls + '">' + labelHtml + inputHtml + hintHtml + '</div>';
+  }
+
+  function bindMetadataReview() {
+    if (!state.draft) return;
+
+    const fields = Array.from(document.querySelectorAll('[data-field]'));
+
+    fields.forEach(input => {
+      const handler = () => {
+        if (!state.draft) return;
+        state.draft.metadata[input.dataset.field] = input.value;
+        updateFileName();
+      };
+
+      input.addEventListener('input', handler);
+      input.addEventListener('change', handler);
+
+      if (input.dataset.field === 'nomor_item_arsip' || input.dataset.field === 'no_filing_cabinet') {
+        const padInput = () => {
+          let val = input.value.trim();
+          if (val && !isNaN(val)) {
+            let num = parseInt(val, 10);
+            if (num >= 0) {
+              let padded = String(num).padStart(2, '0');
+              if (input.value !== padded) {
+                input.value = padded;
+                if (state.draft && state.draft.metadata) {
+                  state.draft.metadata[input.dataset.field] = padded;
+                  updateFileName();
+                }
+              }
+            }
+          }
+        };
+        input.addEventListener('change', padInput);
+        input.addEventListener('blur', padInput);
+        input.addEventListener('keydown', function(e) {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            let val = parseInt(input.value || '0', 10);
+            if (isNaN(val)) val = 0;
+            if (e.key === 'ArrowUp') val++;
+            if (e.key === 'ArrowDown') val = Math.max(0, val - 1);
+            input.value = String(val).padStart(2, '0');
+            padInput();
+          }
+        });
+      }
+
+      if (input.dataset.field === 'no_laci' || input.dataset.field === 'no_folder' || input.dataset.field === 'jumlah') {
+        input.addEventListener('keydown', function(e) {
+          if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            let val = parseInt(input.value || '0', 10);
+            if (isNaN(val)) val = 0;
+            if (e.key === 'ArrowUp') val++;
+            if (e.key === 'ArrowDown') val = Math.max(0, val - 1);
+            input.value = String(val);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
+      }
+
+      if (input.dataset.field === 'nomor_item_arsip' || input.dataset.field === 'uraian_informasi_berkas') {
+        input.addEventListener('blur', function () {
+          validateFieldOnBlur_(input.dataset.field, input.value);
+        });
+      }
+
+      if (input.tagName === 'INPUT' && input.type !== 'select') {
+        input.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            const all = Array.from(document.querySelectorAll('[data-field]'));
+            const idx = all.indexOf(this);
+            if (idx < all.length - 1) {
+              const next = all[idx + 1];
+              next.focus();
+              if (next.tagName === 'INPUT' || next.tagName === 'TEXTAREA') {
+                try { next.select(); } catch (err) {}
+              }
+            }
+          }
+        });
+      }
+    });
+
+    if (_kbdHandler) document.removeEventListener('keydown', _kbdHandler);
+    _kbdHandler = function(e) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.key === 's') {
+        e.preventDefault();
+        var btn = document.getElementById('save-draft-btn');
+        if (btn) btn.click();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        var btn = document.getElementById('finalize-archive');
+        if (btn) btn.click();
+      }
+    };
+    document.addEventListener('keydown', _kbdHandler);
+  }
+
+  async function handleSaveDraft() {
+    const saveBtn = document.getElementById('save-draft-btn');
+    const finalBtn = document.getElementById('finalize-archive');
+    try {
+      if (!state.draft) { showToast('Error: Form belum siap.'); return; }
+      state.draft.metadata = collectMetadata();
+
+      if (saveBtn) {
+        saveBtn.classList.add('is-loading');
+        saveBtn.disabled = true;
+      }
+      if (finalBtn) {
+        finalBtn.disabled = true;
+      }
+
+      let sourceFileId = state.draft.sourceFile ? state.draft.sourceFile.id : '';
+      const fileInput = document.getElementById('source-file');
+
+      if (fileInput && fileInput.files && fileInput.files[0] && !sourceFileId) {
+        const id = await uploadAndGetId(fileInput);
+        if (id === null) {
+          if (saveBtn) {
+            saveBtn.classList.remove('is-loading');
+            saveBtn.disabled = false;
+          }
+          if (finalBtn) {
+            finalBtn.disabled = false;
+          }
+          return;
+        }
+        if (id) {
+          sourceFileId = id;
+          state.draft.sourceFile = { id, name: fileInput.files[0].name };
+          saveProcessStateToLocal();
+        }
+      }
+
+      var saveDraftToast = showToast('Menyimpan draf ke peladen...', true);
+      await api('saveDraftToLog', {
+        year: state.draft.year,
+        activityId: state.draft.activity ? state.draft.activity.activity_id : '',
+        subActivityId: state.draft.subActivity ? state.draft.subActivity.sub_activity_id : '',
+        draftState: JSON.stringify(state.draft)
+      });
+
+      state.draft = null;
+      clearProcessStateFromLocal();
+      await loadBootstrap();
+      setView('history');
+      if (saveDraftToast) removeToast(saveDraftToast);
+      showToast('Draf berhasil disimpan ke riwayat.');
+    } catch (error) {
+      if (saveDraftToast) removeToast(saveDraftToast);
+      showToast(errorMessage(error));
+      if (saveBtn) {
+        saveBtn.classList.remove('is-loading');
+        saveBtn.disabled = false;
+      }
+      if (finalBtn) {
+        finalBtn.disabled = false;
+      }
+    }
+  }
+
+  /* ── handleFinalize helpers ── */
+  
+  async function awaitSourceFileId_() {
+    if (_pendingUpload) {
+      showToast('Menyelesaikan unggahan...', true);
+      await _pendingUpload;
+    }
+    var sourceFileId = state.draft.sourceFile ? state.draft.sourceFile.id : '';
+    if (sourceFileId) return sourceFileId;
+  
+    var fileInput = document.getElementById('source-file');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      var id = await uploadAndGetId(fileInput);
+      if (id === null) return null;
+      if (id) {
+        state.draft.sourceFile = { id: id, name: fileInput.files[0].name };
+        saveProcessStateToLocal();
+        return id;
+      }
+    }
+    return '';
+  }
+  
+  function snapshotDraftState_() {
+    var snap = {
+      targetFolderId: state.draft.targetFolderId || (state.draft.subActivity ? state.draft.subActivity.folder_id : ''),
+      activityId: state.draft.activity ? state.draft.activity.activity_id : '',
+      subActivityId: state.draft.subActivity ? state.draft.subActivity.sub_activity_id : '',
+      year: state.draft.year,
+      editMode: !!state.editMode,
+      archiveId: state.draft.archiveId || '',
+      returnFolder: state.editReturnFolder,
+      draftCopy: JSON.parse(JSON.stringify(state.draft)),
+      prevNomorItemArsip: state.draft.metadata ? state.draft.metadata.nomor_item_arsip : ''
+    };
+    var restoreKey = 'portal_arsip_restore_' + (snap.year || 'default');
+    try { localStorage.setItem(restoreKey, JSON.stringify({ draft: snap.draftCopy, returnFolder: snap.returnFolder })); } catch (e) {}
+    snap.restoreKey = restoreKey;
+    return snap;
+  }
+  
+  function resetFormAfterSubmit_(snap) {
+    var nextNomorItemArsip = '01';
+    if (snap.prevNomorItemArsip && !isNaN(snap.prevNomorItemArsip)) {
+      nextNomorItemArsip = String(parseInt(snap.prevNomorItemArsip, 10) + 1).padStart(2, '0');
+    }
+    state.draft = null;
+    state.editMode = false;
+    state.editReturnFolder = null;
+    state.selectedFile = null;
+    state.draftPrompted = false;
+    _parseResults = null;
+    _parseDone = false;
+    clearProcessStateFromLocal();
+    invalidateViewCache('archive_folder');
+    renderProcess();
+  
+    if (!snap.editMode && state.draft && state.draft.metadata) {
+      state.draft.metadata.nomor_item_arsip = nextNomorItemArsip;
+      var input = document.querySelector('[data-field="nomor_item_arsip"]');
+      if (input) input.value = nextNomorItemArsip;
+      updateFileName();
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  
+  async function submitArchivePayload_(snap, metadata, sourceFileId) {
+    var payload = {
+      year: snap.year,
+      activityId: snap.activityId,
+      subActivityId: snap.subActivityId,
+      metadata: metadata
+    };
+    if (snap.editMode) {
+      payload.archiveId = snap.archiveId;
+      return api('editMetadata', payload);
+    }
+    payload.sourceFileId = sourceFileId;
+    payload.targetFolderId = snap.targetFolderId;
+    return api('finalizeArchive', payload);
+  }
+  
+  function handleFinalizeError_(snap, loadingToast, error) {
+    if (loadingToast) removeToast(loadingToast);
+    var errMsg = errorMessage(error);
+    var toastEl = showToast(errMsg + ' \u2014 Klik Untuk pulihkan', true);
+    if (!toastEl) return;
+    toastEl.style.cursor = 'pointer';
+    toastEl.onclick = function () {
+      removeToast(toastEl);
+      try {
+        var saved = JSON.parse(localStorage.getItem(snap.restoreKey) || '{}');
+        if (saved.draft) {
+          state.draft = saved.draft;
+          if (state.draft.sourceFile) state.draft.sourceFile.isJustUploaded = false;
+          if (saved.returnFolder) state.editReturnFolder = saved.returnFolder;
+          renderProcess();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+          showToast('Data berhasil dipulihkan.');
+        }
+      } catch (e) {
+        showToast('Gagal memulihkan data.');
+      }
+    };
+  }
+  
+  async function handleFinalize() {
+    var saveBtn = document.getElementById('save-draft-btn');
+    var finalBtn = document.getElementById('finalize-archive');
+    try {
+      if (!state.draft) { showToast('Error: Form belum siap.'); return; }
+      var metadata = collectMetadata();
+  
+      if (finalBtn) { finalBtn.classList.add('is-loading'); finalBtn.disabled = true; }
+      if (saveBtn) { saveBtn.disabled = true; }
+  
+      var sourceFileId = await awaitSourceFileId_();
+      if (sourceFileId === null) {
+        if (finalBtn) { finalBtn.classList.remove('is-loading'); finalBtn.disabled = false; }
+        if (saveBtn) { saveBtn.disabled = false; }
+        return;
+      }
+      if (!state.editMode && !sourceFileId) {
+        showToast('Silakan unggah dokumen terlebih dahulu.');
+        if (finalBtn) { finalBtn.classList.remove('is-loading'); finalBtn.disabled = false; }
+        if (saveBtn) { saveBtn.disabled = false; }
+        return;
+      }
+  
+      var snap = snapshotDraftState_();
+      await new Promise(function (r) { return window.setTimeout(r, 800); });
+      resetFormAfterSubmit_(snap);
+  
+      var loadingToast = showToast(snap.editMode ? 'Menyimpan perubahan...' : 'Menyimpan arsip...', true);
+      try {
+        var result = await submitArchivePayload_(snap, metadata, sourceFileId);
+        try { localStorage.removeItem(snap.restoreKey); } catch (e) {}
+        if (loadingToast) removeToast(loadingToast);
+        showToast(result.warning || 'Selesai: ' + (result.finalFile ? result.finalFile.name : ''));
+      } catch (error) {
+        handleFinalizeError_(snap, loadingToast, error);
+      }
+    } catch (error) {
+      showToast(errorMessage(error));
+      if (saveBtn) { saveBtn.disabled = false; }
+      if (finalBtn) { finalBtn.classList.remove('is-loading'); finalBtn.disabled = false; }
+    }
+  }
+
+  function showFieldError_(fieldName, message) {
+    var field = document.querySelector('[data-field="' + fieldName + '"]');
+    if (!field) return;
+    field.classList.add('field-error');
+    var existing = field.parentElement.querySelector('.field-error-msg');
+    if (message) {
+      if (existing) existing.textContent = message;
+      else {
+        var msg = document.createElement('div');
+        msg.className = 'field-error-msg';
+        msg.textContent = message;
+        field.parentElement.appendChild(msg);
+      }
+    }
+  }
+
+  function clearFieldError_(fieldName) {
+    var field = document.querySelector('[data-field="' + fieldName + '"]');
+    if (!field) return;
+    field.classList.remove('field-error');
+    var msg = field.parentElement.querySelector('.field-error-msg');
+    if (msg) msg.remove();
+  }
+
+  function clearAllFieldErrors_() {
+    document.querySelectorAll('.field-error').forEach(function (el) { el.classList.remove('field-error'); });
+    document.querySelectorAll('.field-error-msg').forEach(function (el) { el.remove(); });
+  }
+
+  function validateFieldOnBlur_(fieldName, currentValue) {
+    if (!state.draft || !state.draft.activity || !state.draft.subActivity) return;
+    var val = String(currentValue || '').trim();
+    if (!val) { clearFieldError_(fieldName); return; }
+
+    clearFieldError_(fieldName);
+
+    api('validateArchiveFields', {
+      year: state.draft.year,
+      activityId: state.draft.activity.activity_id,
+      subActivityId: state.draft.subActivity.sub_activity_id,
+      nomor_item_arsip: fieldName === 'nomor_item_arsip' ? val : '',
+      uraian_informasi_berkas: fieldName === 'uraian_informasi_berkas' ? val : ''
+    }).then(function (result) {
+      if (!state.draft) return;
+      if (!result || result.valid) {
+        clearFieldError_(fieldName);
+      } else {
+        var match = result.errors && result.errors.find(function (e) { return e.field === fieldName; });
+        if (match) showFieldError_(fieldName, match.message);
+      }
+    }).catch(function () {
+      // silent — network errors jangan ganggu UX
+    });
+  }
+
+  function collectMetadata() {
+    const metadata = Object.assign({}, state.draft && state.draft.metadata ? state.draft.metadata : {});
+    document.querySelectorAll('[data-field]').forEach(input => {
+      metadata[input.dataset.field] = input.value;
+    });
+    return metadata;
+  }
+
+  function getProcessStateKey() {
+    const year = state.currentYear || 'default_year';
+    const folderId = state.draft ? state.draft.targetFolderId : state.preselectedTargetFolderId;
+    const isLocked = state.draft ? state.draft.targetLocked : Boolean(state.preselectedTargetFolderId);
+    if (isLocked && folderId) {
+      return 'portal_arsip_' + year + '_process_state_folder_' + folderId;
+    }
+    return 'portal_arsip_' + year + '_process_state_general';
+  }
+
+  function saveProcessStateToLocal() {
+    try {
+      if (!state.draft || !state.draft.activity) return;
+      
+      // Auto-save hanya aktif jika ada dokumen yang sudah dipilih atau diunggah
+      const sourceFile = state.draft.sourceFile;
+      const hasValidFile = sourceFile && (sourceFile.id || sourceFile.name);
+      
+      if (!hasValidFile) {
+        return;
+      }
+
+      state.draftPrompted = true;
+
+      const inputState = {
+        activityId: (document.getElementById('activity-id') || {}).value || '',
+        subActivityId: (document.getElementById('sub-activity-id') || {}).value || '',
+        targetFolderId: state.draft ? state.draft.targetFolderId || '' : '',
+        targetFolderName: state.draft ? state.draft.targetFolderName || '' : '',
+        folderBreadcrumb: state.draft && state.draft.folderBreadcrumb ? state.draft.folderBreadcrumb : []
+      };
+      const clone = JSON.parse(JSON.stringify(state.draft));
+      
+      if (clone.sourceFile) {
+        clone.sourceFile.isJustUploaded = false;
+      }
+      
+      if (clone.metadata) {
+        Object.keys(clone.metadata).forEach(k => {
+          clone.metadata[k] = String(clone.metadata[k] || '').replace(/[\\:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
+        });
+      }
+      localStorage.setItem(getProcessStateKey(), JSON.stringify({ draft: clone, inputState }));
+    } catch (e) { console.error('Gagal menyimpan draf lokal:', e); }
+  }
+
+  function clearProcessStateFromLocal() {
+    try { localStorage.removeItem(getProcessStateKey()); } catch (_) { console.warn('localStorage remove failed'); }
+  }
+
+  function restoreProcessStateFromLocal() {
+    try {
+      const key = getProcessStateKey();
+      const saved = JSON.parse(localStorage.getItem(key) || '{}');
+      if (saved.draft) {
+        const d = saved.draft;
+        if (d && d.activity && d.subActivity && Array.isArray(d.fields) && d.metadata) {
+          state.draft = d;
+          if (!state.draft.sourceFile) state.draft.sourceFile = { id: '', name: '', url: '' };
+          state.draft.sourceFile.isJustUploaded = false;
+        } else {
+          localStorage.removeItem(key);
+        }
+      }
+      if (saved.inputState) {
+        const s = saved.inputState;
+        if (s.activityId) state.preselectedActivityId = s.activityId;
+        if (s.subActivityId) state.preselectedSubActivityId = s.subActivityId;
+        if (s.targetFolderId) state.preselectedTargetFolderId = s.targetFolderId;
+        if (s.targetFolderName) state.preselectedTargetFolderName = s.targetFolderName;
+        if (s.folderBreadcrumb) state.preselectedFolderBreadcrumb = s.folderBreadcrumb;
+      }
+    } catch (e) {
+      console.error('Gagal memulihkan draf lokal:', e);
+      try { localStorage.removeItem(getProcessStateKey()); } catch (_) {}
+    }
+  }
+
+  function loadInboxQueue() {
+    const container = document.getElementById('inbox-queue-container');
+    if (!container) return;
+
+    const allHistory = state.bootstrap.history || [];
+    const drafts = allHistory.filter(h => String(h.status || '').toUpperCase() === STATUS_ENUM.DRAFT);
+
+    const activityFilter = state.preselectedActivityId;
+    const filtered = activityFilter
+      ? drafts.filter(d => d.activity_id === activityFilter)
+      : drafts;
+
+    if (!filtered.length) {
+      container.style.display = 'none';
+      return;
+    }
+
+    const listHtml = filtered.map(d => {
+      const dt = formatDateTime(d.created_at);
+      const activityName = getActivityName(d.activity_id) || d.activity_id;
+      const subName = getSubActivityName(d.activity_id, d.sub_activity_id) || d.sub_activity_id;
+      const fileName = d.final_file_name || '-';
+      return `
+        <div class="inbox-item">
+          <div class="inbox-item-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+          </div>
+          <div class="inbox-item-content">
+            <div class="inbox-item-title" title="${esc(fileName)}">${esc(fileName)}</div>
+            <div class="inbox-item-meta">${esc(activityName)} &bull; ${esc(subName)} &bull; ${dt}</div>
+          </div>
+          <div class="inbox-item-actions">
+            <button class="btn btn-outline btn-sm resume-draft-from-queue-btn" data-row='${esc(encodeURIComponent(JSON.stringify(d)))}'>Lanjutkan</button>
+            <button class="btn btn-sm btn-danger delete-draft-from-queue-btn" data-row='${esc(encodeURIComponent(JSON.stringify(d)))}'>Hapus</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    const title = activityFilter
+      ? 'Draf Tersimpan (' + esc(getActivityName(activityFilter)) + ')'
+      : 'Semua Draf Tersimpan';
+
+    container.innerHTML = '<div class="process-card-header"><div class="process-card-step" style="background:var(--warn);">i</div><div class="process-card-title">' + title + '</div></div>'
+      + '<div class="inbox-list-scroll">' + listHtml + '</div>';
+
+    container.querySelectorAll('.resume-draft-from-queue-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        try {
+          const row = JSON.parse(decodeURIComponent(btn.dataset.row));
+          if (row.metadata_json) {
+            state.draft = JSON.parse(row.metadata_json);
+            showToast('Melanjutkan draf...');
+            renderProcess();
+          } else {
+            showToast('Data draf kosong.');
+          }
+        } catch (e) {
+          showToast('Gagal memuat draf: ' + e.message);
+        }
+      });
+    });
+
+    container.querySelectorAll('.delete-draft-from-queue-btn').forEach(button => {
+      button.addEventListener('click', async () => {
+        if (!await showConfirmModal('Hapus draf ini selamanya?')) return;
+        const row = JSON.parse(decodeURIComponent(button.dataset.row));
+        button.disabled = true;
+        var delDraftToast = showToast('Menghapus draf...', true);
+        try {
+          await api('deleteDraft', { archiveId: row.archive_id, year: row.year });
+          if (delDraftToast) removeToast(delDraftToast);
+          showToast('Draf berhasil dihapus.');
+          loadInboxQueue();
+        } catch (e) {
+          if (delDraftToast) removeToast(delDraftToast);
+          showToast('Gagal menghapus draf: ' + (e.message || String(e)));
+          button.disabled = false;
+        }
+      });
+    });
+  }
+
+</script>
