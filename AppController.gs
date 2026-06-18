@@ -45,6 +45,7 @@ const AppController = {
   },
   bulkAddArchiveDocumentLinks: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const items = payload.items || [];
     if (!items.length) return { successCount: 0, failCount: 0, errors: [] };
     
@@ -85,6 +86,7 @@ const AppController = {
   },
   addArchiveDocumentLink: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     Validator.requireId(payload.parentFolderId, 'Folder induk');
     Validator.requireString(payload.name, 'Kategori dokumen');
     Validator.requireString(payload.url, 'Link Google Drive');
@@ -108,6 +110,7 @@ const AppController = {
   },
   updateArchiveDocumentLink: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     Validator.requireId(payload.fileId, 'File ID');
     Validator.requireString(payload.url, 'URL Drive');
     const result = DriveService.updateArchiveDocumentLink(payload);
@@ -139,6 +142,7 @@ const AppController = {
   },
   renameArchiveFile: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     Validator.requireId(payload.fileId, 'File ID');
     Validator.requireString(payload.name, 'Nama baru');
     bumpVersion(); return DriveService.renameFile(payload.fileId, payload.name);
@@ -179,9 +183,10 @@ const AppController = {
   getHistory: function (payload) { return SettingsController.getHistory(payload); },
   getTemplates: function (payload) { return SettingsController.getTemplates(payload); },
   getTemplatesData: function (payload) { return SettingsController.getTemplatesData(payload); },
-  uploadTemplate: function (payload) { const r = DriveService.uploadTemplateFile(payload); invalidateTemplatesCache_(payload.year); bumpVersion(); return r; },
+  uploadTemplate: function (payload) { requireAuth_(payload); const r = DriveService.uploadTemplateFile(payload); invalidateTemplatesCache_(payload.year); bumpVersion(); return r; },
   deleteTemplate: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     Validator.requireId(payload.fileId, 'File ID');
     invalidateTemplatesCache_(payload.year);
     bumpVersion(); return DriveService.trashTemplateFile(payload.fileId);
@@ -191,8 +196,8 @@ const AppController = {
   deleteTemplateCategory: function (payload) { const r = SettingsController.deleteTemplateCategory(payload); invalidateTemplatesCache_(payload && payload.year); bumpVersion(); return r; },
   renameTemplateCategory: function (payload) { const r = SettingsController.renameTemplateCategory(payload); invalidateTemplatesCache_(payload && payload.year); bumpVersion(); return r; },
   setTemplateCategory: function (payload) { const r = SettingsController.setTemplateCategory(payload); invalidateTemplatesCache_(payload && payload.year); bumpVersion(); return r; },
-  getAdminAuditLogs: function (payload) { return SettingsController.getAdminAuditLogs(payload); },
-  listAccounts: function () { return ConfigService.listAccounts(); },
+  getAdminAuditLogs: function (payload) { requireAdmin_(payload); return SettingsController.getAdminAuditLogs(payload); },
+  listAccounts: function (payload) { requireAdmin_(payload); return ConfigService.listAccounts().map(stripAccountSecrets_); },
   saveAccount: function (payload) {
     payload = payload || {};
     var adminUser = requireAdmin_(payload);
@@ -257,12 +262,12 @@ const AppController = {
   editMetadata: function (payload) { requireAuth_(payload); const r = ArchiveController.editMetadata(payload); bumpVersion(); return r; },
   listInboxFiles: function (payload) { return ArchiveController.listInboxFiles(payload); },
   addSubActivity: function (payload) { requireAuth_(payload); const r = SubActivityController.addSubActivity(payload); bumpVersion(); return r; },
-  createParentFolder: function (payload) { const r = SubActivityController.createParentFolder(payload); bumpVersion(); return r; },
-  convertSubActivityToParent: function (payload) { const r = SubActivityController.convertSubActivityToParent(payload); bumpVersion(); return r; },
+  createParentFolder: function (payload) { requireAuth_(payload); const r = SubActivityController.createParentFolder(payload); bumpVersion(); return r; },
+  convertSubActivityToParent: function (payload) { requireAuth_(payload); const r = SubActivityController.convertSubActivityToParent(payload); bumpVersion(); return r; },
   syncSubActivities: function (payload) { requireAuth_(payload); const r = SubActivityController.syncSubActivities(payload); bumpVersion(); return r; },
   deleteSubActivity: function (payload) { requireAuth_(payload); const r = SubActivityController.deleteSubActivity(payload); bumpVersion(); return r; },
   trashSubActivityFolder: function (payload) { requireAuth_(payload); const r = SubActivityController.trashSubActivityFolder(payload); bumpVersion(); return r; },
-  cleanupTrashedSubActivities: function (payload) { return SubActivityController.cleanupTrashedSubActivities(payload); },
+  cleanupTrashedSubActivities: function (payload) { requireAuth_(payload); return SubActivityController.cleanupTrashedSubActivities(payload); },
   renameSubActivity: function (payload) { requireAuth_(payload); const r = SubActivityController.renameSubActivity(payload); bumpVersion(); return r; },
   updateSubActivityMetadata: function (payload) { requireAuth_(payload); const r = SubActivityController.updateSubActivityMetadata(payload); bumpVersion(); return r; },
   getInactiveSubActivities: function (payload) { return SubActivityController.getInactiveSubActivities(payload); },
@@ -281,6 +286,19 @@ const AppController = {
     return MetadataService.buildFinalFileName(JSON.parse(payload.metadata), payload.sourceName);
   }
 };
+
+/**
+ * Strip sensitive fields (password hash) from an account row before returning to client.
+ * Internal callers (hasActiveAdminAccount_, deleteAccount) use ConfigService.listAccounts
+ * directly and never expose the raw row to the client.
+ * @param {object} account
+ * @return {object}
+ */
+function stripAccountSecrets_(account) {
+  const safe = Object.assign({}, account);
+  delete safe.password_hash;
+  return safe;
+}
 
 function requireAdminIfWorkspaceSecured_(payload) {
   const settings = ConfigService.getSettings();
