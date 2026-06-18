@@ -789,13 +789,16 @@ function _adoptSubActivity_(activity, subActivity, result, activityResult, exist
     }
   }
 
+  // Index nama file dibangun SEKALI per sub-kegiatan (bukan rekursi folder per baris).
+  // Sebelumnya tiap baris menelusuri ulang seluruh pohon folder → O(baris × pohon).
+  const fileIndex = listing.rows.length ? buildArchiveFileIndex_(subActivity.folder_id) : null;
   listing.rows.forEach(function (row) {
-    _adoptRow_(row, listing, activity, subActivity, result, activityResult, subResult, existingKeys, year, createdBy, dryRun);
+    _adoptRow_(row, listing, activity, subActivity, result, activityResult, subResult, existingKeys, year, createdBy, dryRun, fileIndex);
   });
   return subResult;
 }
 
-function _adoptRow_(row, listing, activity, subActivity, result, activityResult, subResult, existingKeys, year, createdBy, dryRun) {
+function _adoptRow_(row, listing, activity, subActivity, result, activityResult, subResult, existingKeys, year, createdBy, dryRun, fileIndex) {
   result.scannedRows++;
   activityResult.scannedRows++;
   subResult.scannedRows++;
@@ -809,7 +812,7 @@ function _adoptRow_(row, listing, activity, subActivity, result, activityResult,
   }
 
   const finalFileName = row.metadata.lokasi_simpan || row.metadata.uraian_informasi_berkas || '';
-  const finalFileMatch = findExistingArchiveFile_(subActivity.folder_id, finalFileName);
+  const finalFileMatch = lookupArchiveFile_(fileIndex, finalFileName);
   const finalFile = finalFileMatch ? finalFileMatch.file : null;
   const targetFolderInfo = finalFileMatch ? getArchiveTargetFolderInfo_(finalFileMatch.folder) : null;
   if (!finalFile && finalFileName) {
@@ -856,41 +859,55 @@ function _adoptRow_(row, listing, activity, subActivity, result, activityResult,
   if (finalFile) existingKeys['file:' + finalFile.getId()] = true;
 }
 
-function findExistingArchiveFile_(folderId, fileName) {
-  if (!folderId || !fileName) return null;
-  try {
-    const folder = DriveApp.getFolderById(cleanId_(folderId));
-    return findExistingArchiveFileInFolder_(folder, fileName, 0);
-  } catch (error) {
-    console.warn('findExistingArchiveFile_: ' + error.message);
+/**
+ * Telusuri pohon folder sub-kegiatan SATU KALI (depth <= 6) dan bangun index
+ * nama-file → { file, folder }. Dipakai untuk lookup per baris tanpa rekursi ulang.
+ * @param {string} folderId
+ * @return {{exact: Object, normalized: Object}}
+ */
+function buildArchiveFileIndex_(folderId) {
+  const index = { exact: {}, normalized: {} };
+  if (!folderId) return index;
+  let root = null;
+  try { root = DriveApp.getFolderById(cleanId_(folderId)); } catch (error) {
+    console.warn('buildArchiveFileIndex_: ' + error.message);
+    return index;
   }
-  return null;
-}
-
-function findExistingArchiveFileInFolder_(folder, fileName, depth) {
-  if (!folder || depth > 6) return null;
-  const exact = folder.getFilesByName(fileName);
-  while (exact.hasNext()) {
-    const exactFile = exact.next();
-    if (!exactFile.isTrashed()) return { file: exactFile, folder: folder };
-  }
-
-  const wanted = normalizeFileLookupName_(fileName);
-  const files = folder.getFiles();
-  while (files.hasNext()) {
-    const file = files.next();
-    if (!file.isTrashed() && normalizeFileLookupName_(file.getName()) === wanted) {
-      return { file: file, folder: folder };
+  const stack = [{ folder: root, depth: 0 }];
+  while (stack.length) {
+    const cur = stack.pop();
+    if (!cur.folder || cur.depth > 6) continue;
+    const files = cur.folder.getFiles();
+    while (files.hasNext()) {
+      const file = files.next();
+      if (file.isTrashed()) continue;
+      const name = file.getName();
+      const entry = { file: file, folder: cur.folder };
+      if (!(name in index.exact)) index.exact[name] = entry;          // exact match diutamakan
+      const norm = normalizeFileLookupName_(name);
+      if (norm && !(norm in index.normalized)) index.normalized[norm] = entry;
+    }
+    const childFolders = cur.folder.getFolders();
+    while (childFolders.hasNext()) {
+      const child = childFolders.next();
+      if (child.isTrashed && child.isTrashed()) continue;
+      stack.push({ folder: child, depth: cur.depth + 1 });
     }
   }
+  return index;
+}
 
-  const childFolders = folder.getFolders();
-  while (childFolders.hasNext()) {
-    const child = childFolders.next();
-    if (child.isTrashed && child.isTrashed()) continue;
-    const match = findExistingArchiveFileInFolder_(child, fileName, depth + 1);
-    if (match) return match;
-  }
+/**
+ * Cari file di index: exact dulu, lalu normalized. Null jika tidak ada.
+ * @param {{exact: Object, normalized: Object}} index
+ * @param {string} fileName
+ * @return {?{file: GoogleAppsScript.Drive.File, folder: GoogleAppsScript.Drive.Folder}}
+ */
+function lookupArchiveFile_(index, fileName) {
+  if (!index || !fileName) return null;
+  if (index.exact[fileName]) return index.exact[fileName];
+  const norm = normalizeFileLookupName_(fileName);
+  if (norm && index.normalized[norm]) return index.normalized[norm];
   return null;
 }
 

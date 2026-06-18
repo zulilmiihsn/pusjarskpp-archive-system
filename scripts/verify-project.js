@@ -93,7 +93,7 @@ assert(read('SpreadsheetService.gs').includes('updateRekapSubActivityIdentity'),
 assert(read('SubActivityController.gs').includes('formalArchiveName') && read('SubActivityController.gs').includes('rekapRowNumber'), 'Sub-activity rename must accept mapping metadata, not only the folder name.');
 assert(read('ClientArchiveFolder.html').includes("mode: 'edit-sub-activity'"), 'Mapped sub-activity folders must open the edit-sub-activity flow instead of raw folder rename.');
 assert(configRepo.includes('target_folder_id') && configRepo.includes('headers.map(function (header)'), 'Archive log writes must persist target folder fields by header name.');
-assert(read('ArchiveController.gs').includes('findExistingArchiveFileInFolder_'), 'Existing archive adoption must search nested target folders.');
+assert(read('ArchiveController.gs').includes('buildArchiveFileIndex_') && read('ArchiveController.gs').includes('cur.depth + 1'), 'Existing archive adoption must search nested target folders (file index built once per sub-activity).');
 assert(read('SubActivityController.gs').includes('persistRekapRowNumber_'), 'New/synced sub-activities must persist their rekap row number.');
 assert(read('SubActivityController.gs').includes('markRekapSubActivityInactive'), 'Sub-activity deactivation must mark the rekap row.');
 assert(read('SpreadsheetService.gs').includes('clearRekapSubActivityInactiveMark'), 'Sub-activity restore must clear stale inactive rekap notes.');

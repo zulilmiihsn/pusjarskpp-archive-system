@@ -294,15 +294,24 @@ const ConfigRepository = {
       const rowCol = headers.indexOf('spreadsheet_row_number');
       if (ssCol === -1 || rowCol === -1) return 0;
 
+      const targetSs = cleanId_(spreadsheetFileId);
       let updatedCount = 0;
+      // Bangun kolom spreadsheet_row_number di memori lalu tulis SEKALI,
+      // bukan satu setValue per baris (sebelumnya O(N) write per delete).
+      const newColumn = [];
       for (let i = 1; i < values.length; i++) {
-        if (cleanId_(values[i][ssCol]) === cleanId_(spreadsheetFileId)) {
+        let cell = values[i][rowCol];
+        if (cleanId_(values[i][ssCol]) === targetSs) {
           const rowNum = parseInt(values[i][rowCol], 10);
           if (!isNaN(rowNum) && rowNum > thresholdRow) {
-            updateConfigRow_(sheet, i + 1, { spreadsheet_row_number: rowNum - 1 });
+            cell = rowNum - 1;
             updatedCount++;
           }
         }
+        newColumn.push([cell]);
+      }
+      if (updatedCount > 0) {
+        sheet.getRange(2, rowCol + 1, newColumn.length, 1).setValues(newColumn);
       }
       return updatedCount;
     });

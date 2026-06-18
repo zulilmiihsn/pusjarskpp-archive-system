@@ -71,13 +71,25 @@ function findConfigRow_(sheet, criteria) {
   return 0;
 }
 
+// Batch update: 1 read + 1 write, bukan satu setValue per field.
+// Hanya dipakai pada sheet config/log (tanpa formula), jadi read-modify-write
+// seluruh baris aman — tidak ada formula yang ter-overwrite.
 function updateConfigRow_(sheet, rowIndex, updates) {
   const headers = getHeaders_(sheet);
+  const width = headers.length;
+  if (width < 1) return;
+  const range = sheet.getRange(rowIndex, 1, 1, width);
+  const rowValues = range.getValues()[0];
+  let dirty = false;
   Object.keys(updates).forEach(key => {
     if (updates[key] === undefined) return;
-    const colIndex = headers.indexOf(key) + 1;
-    if (colIndex > 0) sheet.getRange(rowIndex, colIndex).setValue(updates[key]);
+    const colIndex = headers.indexOf(key);
+    if (colIndex >= 0) {
+      rowValues[colIndex] = updates[key];
+      dirty = true;
+    }
   });
+  if (dirty) range.setValues([rowValues]);
 }
 
 function getOrCreateSheet_(ss, name) {
