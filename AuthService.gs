@@ -126,14 +126,38 @@ const AuthService = {
     
     // Garbage collection ringan setiap kali ada login sukses
     cleanupExpiredSessions_();
-    
+
+    try {
+      ConfigRepository.appendAdminAudit({
+        created_at: new Date().toISOString(),
+        actor: found.displayName || found.username,
+        action: 'LOGIN_SUCCESS',
+        status: 'SUCCESS',
+        message: 'Login berhasil: ' + found.username
+      });
+    } catch (e) { console.error('audit LOGIN_SUCCESS gagal: ' + e.message); }
+
     return { sessionId: sessionId, accountId: session.accountId, username: session.username, role: session.role, displayName: session.displayName, loggedInAt: session.loggedInAt };
   },
 
   logout: function (payload) {
     const sessionId = payload && payload._sessionId;
     if (sessionId) {
+      let actorName = '';
+      try {
+        const data = PropertiesService.getScriptProperties().getProperty('sess_' + sessionId);
+        if (data) { const s = JSON.parse(data); actorName = s.displayName || s.username || ''; }
+      } catch (e) { /* ignore */ }
       PropertiesService.getScriptProperties().deleteProperty('sess_' + sessionId);
+      try {
+        ConfigRepository.appendAdminAudit({
+          created_at: new Date().toISOString(),
+          actor: actorName || 'unknown',
+          action: 'LOGOUT',
+          status: 'SUCCESS',
+          message: 'Logout'
+        });
+      } catch (e) { console.error('audit LOGOUT gagal: ' + e.message); }
     }
     return { loggedOut: true };
   },
@@ -180,6 +204,15 @@ const AuthService = {
     const password = generatePassword_();
     const hash = hashPasswordV1_(password, 'admin');
     sheet.appendRow([Utilities.getUuid(), 'admin', hash, 'admin', 'Administrator', 'TRUE', new Date().toISOString(), new Date().toISOString()]);
+    try {
+      ConfigRepository.appendAdminAudit({
+        created_at: new Date().toISOString(),
+        actor: 'Sistem',
+        action: 'ADMIN_INITIALIZED',
+        status: 'SUCCESS',
+        message: 'Membuat akun admin default'
+      });
+    } catch (e) { console.error('audit ADMIN_INITIALIZED gagal: ' + e.message); }
     return { created: true, defaultPassword: password };
   },
 

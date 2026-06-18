@@ -48,7 +48,11 @@ assert(spreadsheetService.includes('function getDetailStartColumn_'), 'Spreadshe
 assert(configConstants.includes('DETAIL_FALLBACK_START_COL = 2'), 'Spreadsheet detail fallback column must be B.');
 assert(!workspaceSetup.includes('hasRekapSheet: false'), 'Every laci workbook must include a rekap sheet.');
 assert(workspaceSetup.includes("'error_message', 'metadata_json'"), 'Workspace setup must create archive_log with metadata_json.');
-assert(read('AppController.gs').includes('initializeWorkspace: function (payload) { requireAdminIfWorkspaceSecured_(payload);'), 'First workspace initialization must not require an existing admin session.');
+const initWorkspaceBody = read('AppController.gs').match(/initializeWorkspace: function \(payload\) \{([\s\S]*?)\n {2}\},/);
+assert(
+  !!initWorkspaceBody && /requireAdminIfWorkspaceSecured_\(payload\)/.test(initWorkspaceBody[1]) && !/requireAdmin_\(payload\)/.test(initWorkspaceBody[1]),
+  'First workspace initialization must not require an existing admin session.'
+);
 assert(read('AppController.gs').includes('function requireAdminIfWorkspaceSecured_') && read('AppController.gs').includes('hasActiveAdminAccount_'), 'Workspace auth guard must allow first-run or half-initialized recovery before an admin exists.');
 assert(read('SettingsController.gs').includes('const adminResult = AuthService.saveDefaultAdmin();'), 'Workspace initialization must create the default admin through the internal auth service.');
 assert(!read('SettingsController.gs').includes('AppController.saveDefaultAdmin()'), 'Workspace initialization must not call the admin-protected saveDefaultAdmin endpoint.');

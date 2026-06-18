@@ -284,6 +284,7 @@ function cleanupTrashedSubActivities(payload) {
 function runArchiveMaintenance() {
   try {
     SubActivityController.cleanupTrashedSubActivities({});
+    auditAction_({ displayName: 'Sistem' }, 'MAINTENANCE_CLEANUP', { message: 'Pembersihan harian sub-kegiatan terhapus (trigger)' });
   } catch (error) {
     console.error('runArchiveMaintenance: cleanup gagal: ' + error.message);
   }

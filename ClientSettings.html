@@ -1336,8 +1336,49 @@
     if (!rows.length) return '<div class="empty settings-audit-empty">Belum ada audit log admin.</div>';
 
     const auditActionLabels = {
+      // Arsip surat
+      'ARCHIVE_CREATED': 'Arsipkan Surat',
+      'ARCHIVE_DELETED': 'Hapus Surat',
+      'ARCHIVE_ADOPTED': 'Adopsi Arsip',
       'METADATA_UPDATED': 'Ubah Metadata',
+      'DRAFT_SAVED': 'Simpan Draf',
+      'DRAFT_DELETED': 'Hapus Draf',
+      'SOURCE_UPLOADED': 'Unggah File Sumber',
+      // File & folder arsip
+      'FOLDER_CREATED': 'Buat Folder',
+      'FOLDER_RENAMED': 'Ganti Nama Folder',
+      'FOLDER_TRASHED': 'Hapus Folder',
+      'FILE_RENAMED': 'Ganti Nama File',
+      'FILE_TRASHED': 'Hapus File',
+      'DOCLINK_ADDED': 'Tambah Tautan Dokumen',
+      'DOCLINK_UPDATED': 'Ubah Tautan Dokumen',
+      'DOCLINK_BULK_ADDED': 'Tambah Tautan (Massal)',
+      // Sub-kegiatan
+      'SUBACT_CREATED': 'Buat Sub-kegiatan',
+      'SUBACT_RENAMED': 'Ganti Nama Sub-kegiatan',
+      'SUBACT_TRASHED': 'Hapus Sub-kegiatan',
+      'SUBACT_DELETED': 'Hapus Sub-kegiatan',
+      'SUBACT_RESTORED': 'Pulihkan Sub-kegiatan',
+      'SUBACT_PURGED': 'Hapus Permanen Sub-kegiatan',
+      'SUBACT_CONVERTED': 'Ubah Jadi Folder Induk',
+      'SUBACT_SYNCED': 'Sinkronisasi Sub-kegiatan',
+      'SUBACT_META_UPDATED': 'Ubah Metadata Sub-kegiatan',
+      'PARENT_FOLDER_CREATED': 'Buat Folder Induk',
+      // Workspace & admin
+      'WORKSPACE_INIT': 'Inisialisasi Ruang Kerja',
+      'WORKSPACE_RESET': 'Reset Ruang Kerja',
+      'YEAR_DELETED': 'Hapus Tahun',
+      'SETTINGS_SAVED': 'Ubah Pengaturan',
+      'ACTIVITY_MAPPING_UPDATED': 'Ubah Mapping Kegiatan',
+      'SUBACT_MAPPING_UPDATED': 'Ubah Mapping Sub-kegiatan',
+      'TRIGGER_INSTALLED': 'Pasang Trigger Maintenance',
+      'DRIVE_ITEM_RENAMED': 'Ganti Nama Item Drive',
+      'MAINTENANCE_CLEANUP': 'Pembersihan Otomatis',
+      // Akun & sesi
+      'LOGIN_SUCCESS': 'Login',
       'LOGIN_FAILED': 'Login Gagal',
+      'LOGOUT': 'Logout',
+      'ADMIN_INITIALIZED': 'Inisialisasi Admin',
       'ACCOUNT_CREATED': 'Buat Akun',
       'ACCOUNT_UPDATED': 'Update Akun',
       'ACCOUNT_DELETED': 'Nonaktifkan Akun'
@@ -1348,23 +1389,21 @@
     }
 
     function auditTarget(row) {
-      if (row.folder_id) {
+      // Prioritas: resolve nama Kegiatan/Sub dari config selama masih ada.
+      if (row.activity_id) {
         const activityName = getActivityName(row.activity_id);
-        const subActivityName = getSubActivityName(row.activity_id, row.sub_activity_id);
-        if (activityName && subActivityName) {
-          return esc(activityName) + '<br><span class="muted small">' + esc(subActivityName) + '</span>';
+        if (activityName) {
+          const subActivityName = row.sub_activity_id ? getSubActivityName(row.activity_id, row.sub_activity_id) : '';
+          return subActivityName
+            ? esc(activityName) + '<br><span class="muted small">' + esc(subActivityName) + '</span>'
+            : esc(activityName);
         }
-        return esc(row.folder_id);
       }
+      // Fallback: ambil subjek setelah ":" pada pesan (nama surat/folder/sub/akun).
+      // Tidak pernah menampilkan ID mentah.
       if (row.message) {
-        if (row.action === 'ACCOUNT_CREATED' || row.action === 'ACCOUNT_UPDATED' || row.action === 'ACCOUNT_DELETED') {
-          const m = row.message.match(/:\s*(.+)/);
-          return m ? esc(m[1].trim()) : '-';
-        }
-        if (row.action === 'LOGIN_FAILED') {
-          const m = row.message.match(/:\s*(.+)/);
-          return m ? esc(m[1].trim()) : '-';
-        }
+        const m = row.message.match(/:\s*(.+)$/);
+        if (m) return esc(m[1].trim());
       }
       return '-';
     }
