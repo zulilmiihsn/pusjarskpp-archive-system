@@ -321,12 +321,12 @@ function getCurrentUser(payload) {
   return wrapApi(() => AppController.getCurrentUser(payload || {}));
 }
 
-function saveDefaultAdmin() {
-  return wrapApi(() => AppController.saveDefaultAdmin());
+function saveDefaultAdmin(payload) {
+  return wrapApi(() => AppController.saveDefaultAdmin(payload || {}));
 }
 
-function resetWorkspace() {
-  return wrapApi(() => AppController.resetWorkspace());
+function resetWorkspace(payload) {
+  return wrapApi(() => AppController.resetWorkspace(payload || {}));
 }
 
 function renameSubActivity(payload) {
@@ -337,8 +337,8 @@ function updateSubActivityMetadata(payload) {
   return wrapApi(() => AppController.updateSubActivityMetadata(payload || {}));
 }
 
-function listAccounts() {
-  return wrapApi(() => AppController.listAccounts());
+function listAccounts(payload) {
+  return wrapApi(() => AppController.listAccounts(payload || {}));
 }
 
 function saveAccount(payload) {

@@ -13,6 +13,8 @@
   }
 
   const ARCHIVE_FOLDER_PAGE_SIZE = 60;
+  let archiveFolderObserver = null;
+  let archiveFolderLoadingMore = false;
 
   function renderArchiveFolder() {
     const context = getArchiveFolderContext();
@@ -310,11 +312,12 @@
     const container = document.getElementById('archive-folder-content');
     if (!container) return;
     const cacheParams = { folderId: context.folderId, pageSize: ARCHIVE_FOLDER_PAGE_SIZE };
-    const cached = isViewCacheValid('archive_folder', cacheParams) ? getCachedView('archive_folder', cacheParams) : null;
+    // SWR: selalu paint dari cache yang ada (abaikan versi) supaya tidak flash
+    // spinner saat refresh. Revalidasi versi ditangani getCachedOrFetch di bawah.
+    const cached = getCachedView('archive_folder', cacheParams);
     if (cached) {
       state.selectedFolderName = cached.data.current ? cached.data.current.name : context.folderName;
-      container.innerHTML = archiveFolderContentHtml(cached.data, context);
-      bindArchiveFolderContent(cached.data, context);
+      paintArchiveFolderContent(cached.data, context);
     } else {
       container.innerHTML = loadingHtml('Memuat isi folder...');
     }
@@ -326,9 +329,7 @@
       if (wrapped.source === 'fresh' || wrapped.source === 'stale-revalidated' || wrapped.source === 'cache') {
         const result = wrapped.data;
         state.selectedFolderName = result.current ? result.current.name : context.folderName;
-        container.innerHTML = archiveFolderContentHtml(result, context);
-
-        bindArchiveFolderContent(result, context);
+        paintArchiveFolderContent(result, context);
       }
 
       // Drive link is rendered synchronously as Buka Folder Persuratan
@@ -352,17 +353,30 @@
     };
   }
 
-  async function loadMoreArchiveFolderContent(context, button) {
-    if (!button || button.disabled) return;
+  function bindArchiveFolderSentinelObserver(context) {
+    if (archiveFolderObserver) { archiveFolderObserver.disconnect(); archiveFolderObserver = null; }
+    const sentinel = document.querySelector('[data-archive-folder-sentinel]');
+    if (!sentinel) return;
+    const root = document.getElementById('content');
+    archiveFolderObserver = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; })) {
+        loadMoreArchiveFolderContent(context);
+      }
+    }, { root: root, rootMargin: '300px' });
+    archiveFolderObserver.observe(sentinel);
+  }
+
+  async function loadMoreArchiveFolderContent(context) {
+    if (archiveFolderLoadingMore) return;
     const cacheParams = { folderId: context.folderId, pageSize: ARCHIVE_FOLDER_PAGE_SIZE };
     const cached = getCachedView('archive_folder', cacheParams);
     const currentData = cached && cached.data ? cached.data : null;
     const nextPageToken = currentData && currentData.nextPageToken;
     if (!nextPageToken) return;
 
-    button.disabled = true;
-    const oldText = button.textContent;
-    button.textContent = 'Memuat...';
+    archiveFolderLoadingMore = true;
+    // Hentikan observer selama fetch supaya tidak memicu page berikutnya berkali-kali.
+    if (archiveFolderObserver) { archiveFolderObserver.disconnect(); archiveFolderObserver = null; }
     try {
       const page = await api('listArchiveFolder', {
         folderId: context.folderId,
@@ -371,28 +385,37 @@
       }, { timeoutMs: 45000 });
       const merged = mergeArchiveFolderPage(currentData, page);
       setCachedView('archive_folder', cacheParams, merged, getCurrentDataVersion());
-      const container = document.getElementById('archive-folder-content');
-      if (container) container.innerHTML = archiveFolderContentHtml(merged, context);
-      const countEl = document.getElementById('archive-folder-count');
-      if (countEl) countEl.innerText = `(${merged.folders ? merged.folders.length : 0}${merged.nextPageToken ? '+' : ''})`;
-      bindArchiveFolderContent(merged, context);
+      paintArchiveFolderContent(merged, context);
     } catch (error) {
       showToast('Gagal memuat lanjutan folder: ' + errorMessage(error));
-      button.disabled = false;
-      button.textContent = oldText;
+      // Error: ganti loader dengan tombol retry manual agar tidak loop terus.
+      const sentinel = document.querySelector('[data-archive-folder-sentinel]');
+      if (sentinel) {
+        sentinel.innerHTML = '<div class="button-row justify-center mt-12"><button class="btn" data-archive-folder-retry>Coba muat lagi</button></div>';
+        const retry = sentinel.querySelector('[data-archive-folder-retry]');
+        if (retry) retry.addEventListener('click', function () {
+          sentinel.innerHTML = loadingHtml('Memuat lebih banyak...');
+          loadMoreArchiveFolderContent(context);
+        });
+      }
+    } finally {
+      archiveFolderLoadingMore = false;
     }
   }
 
-  function archiveFolderContentHtml(result, context) {
-    const folders = result.folders || [];
+  /* ── Helper per-region (gaya B: rangka tetap, isi region bisa di-swap) ── */
+  function splitArchiveFiles_(result) {
     const allFiles = result.files || [];
     const SHORTCUT_MIME = 'application/vnd.google-apps.shortcut';
-    const surat = allFiles.filter(f => f.mimeType !== SHORTCUT_MIME);
-    const dokumen = allFiles.filter(f => f.mimeType === SHORTCUT_MIME);
-    const activityId = context.activity ? context.activity.activity_id : '';
-    const hasMore = !!result.nextPageToken;
-    const suffix = hasMore ? '+' : '';
-    const folderSection = folders.length > 0 ? `
+    return {
+      surat: allFiles.filter(f => f.mimeType !== SHORTCUT_MIME),
+      dokumen: allFiles.filter(f => f.mimeType === SHORTCUT_MIME)
+    };
+  }
+
+  function archiveFoldersSectionHtml(folders, context, suffix) {
+    if (!folders.length) return '';
+    return `
       <div class="section-header">
         <div>
           <h2 class="section-title">Folder Turunan <span id="archive-folder-count">(${folders.length}${suffix})</span></h2>
@@ -401,56 +424,131 @@
       <div class="folders-grid">
         ${folders.map(folder => archiveChildFolderRow(folder, context)).join('')}
       </div>
-    ` : '';
+    `;
+  }
+
+  function archiveSuratBodyHtml(surat) {
+    if (surat.length > 0) {
+      return `<div class="archive-file-list archive-file-list-scrollable" id="archive-surat-list">${surat.map(file => archiveFileRow(file)).join('')}</div>`;
+    }
     return `
-      ${folderSection}
-      
+      <div class="archive-empty-block">
+        <strong>Belum ada surat.</strong>
+        <span>Klik <strong>Tambah Surat</strong> di atas untuk mengarsipkan surat pertama di folder ini.</span>
+      </div>
+    `;
+  }
+
+  function archiveDokumenBodyHtml(dokumen) {
+    if (dokumen.length > 0) {
+      return `<div class="archive-file-list" id="archive-dokumen-list">${dokumen.map(file => archiveDokumenRow(file)).join('')}</div>`;
+    }
+    return `
+      <div class="archive-empty-block">
+        <strong>Belum ada dokumen.</strong>
+        <span>Klik <strong>Tambah Dokumen</strong> di atas untuk menautkan dokumen Drive ke folder ini.</span>
+      </div>
+    `;
+  }
+
+  function archiveSentinelHtml(hasMore) {
+    if (!hasMore) return '';
+    return `
+      <div class="archive-folder-sentinel" data-archive-folder-sentinel style="padding:16px 0;">
+        ${loadingHtml('Memuat lebih banyak...')}
+      </div>
+    `;
+  }
+
+  function archiveFolderContentHtml(result, context) {
+    const folders = result.folders || [];
+    const split = splitArchiveFiles_(result);
+    const surat = split.surat;
+    const dokumen = split.dokumen;
+    const hasMore = !!result.nextPageToken;
+    const suffix = hasMore ? '+' : '';
+    return `
+      <div id="archive-folders-region">${archiveFoldersSectionHtml(folders, context, suffix)}</div>
+
       <div class="archive-folder-grid">
         <div>
           <div class="section-header">
             <div>
-                <h2 class="section-title">Surat <span class="muted" style="font-size:0.85em;font-weight:400;">(${surat.length}${suffix})</span></h2>
+                <h2 class="section-title">Surat <span class="muted" id="archive-surat-count" style="font-size:0.85em;font-weight:400;">(${surat.length}${suffix})</span></h2>
             </div>
           </div>
-          ${surat.length > 0 ? `
-            <div class="archive-file-list archive-file-list-scrollable">
-              ${surat.map(file => archiveFileRow(file)).join('')}
-            </div>
-          ` : `
-            <div class="archive-empty-block">
-              <strong>Belum ada surat.</strong>
-              <span>Klik <strong>Tambah Surat</strong> di atas untuk mengarsipkan surat pertama di folder ini.</span>
-            </div>
-          `}
+          <div id="archive-surat-body">${archiveSuratBodyHtml(surat)}</div>
         </div>
 
         <div>
           <div class="section-header">
             <div>
-                <h2 class="section-title">Dokumen <span class="muted" style="font-size:0.85em;font-weight:400;">(${dokumen.length}${suffix})</span></h2>
+                <h2 class="section-title">Dokumen <span class="muted" id="archive-dokumen-count" style="font-size:0.85em;font-weight:400;">(${dokumen.length}${suffix})</span></h2>
             </div>
           </div>
-          ${dokumen.length > 0 ? `
-            <div class="archive-file-list">
-              ${dokumen.map(file => archiveDokumenRow(file)).join('')}
-            </div>
-          ` : `
-            <div class="archive-empty-block">
-              <strong>Belum ada dokumen.</strong>
-              <span>Klik <strong>Tambah Dokumen</strong> di atas untuk menautkan dokumen Drive ke folder ini.</span>
-            </div>
-          `}
+          <div id="archive-dokumen-body">${archiveDokumenBodyHtml(dokumen)}</div>
         </div>
       </div>
 
-      ${hasMore ? `
-        <div class="button-row justify-center mt-20">
-          <button class="btn" data-load-more-archive-folder>
-            Muat lagi
-          </button>
-        </div>
-      ` : ''}
+      ${archiveSentinelHtml(hasMore)}
     `;
+  }
+
+  /* Swap bedah: update HANYA isi region (folder grid, daftar surat, daftar
+     dokumen, count, sentinel) tanpa membangun ulang seluruh blok. Daftar surat
+     punya scroll sendiri — scrollTop-nya dijaga supaya tidak loncat ke atas saat
+     auto-refresh. Return false jika rangka belum ada (caller fallback full render). */
+  function updateArchiveFolderSections(result, context) {
+    const container = document.getElementById('archive-folder-content');
+    if (!container) return false;
+    const grid = container.querySelector('.archive-folder-grid');
+    const suratCount = document.getElementById('archive-surat-count');
+    if (!grid || !suratCount) return false; // rangka belum terpasang
+
+    const folders = result.folders || [];
+    const split = splitArchiveFiles_(result);
+    const surat = split.surat;
+    const dokumen = split.dokumen;
+    const hasMore = !!result.nextPageToken;
+    const suffix = hasMore ? '+' : '';
+
+    const foldersRegion = document.getElementById('archive-folders-region');
+    if (foldersRegion) foldersRegion.innerHTML = archiveFoldersSectionHtml(folders, context, suffix);
+
+    suratCount.textContent = `(${surat.length}${suffix})`;
+    const suratBody = document.getElementById('archive-surat-body');
+    if (suratBody) {
+      const existingList = document.getElementById('archive-surat-list');
+      if (existingList && surat.length > 0) {
+        const prevScroll = existingList.scrollTop;
+        existingList.innerHTML = surat.map(file => archiveFileRow(file)).join('');
+        existingList.scrollTop = prevScroll; // jaga posisi scroll daftar surat
+      } else {
+        suratBody.innerHTML = archiveSuratBodyHtml(surat);
+      }
+    }
+
+    const dokumenCount = document.getElementById('archive-dokumen-count');
+    if (dokumenCount) dokumenCount.textContent = `(${dokumen.length}${suffix})`;
+    const dokumenBody = document.getElementById('archive-dokumen-body');
+    if (dokumenBody) dokumenBody.innerHTML = archiveDokumenBodyHtml(dokumen);
+
+    const oldSentinel = container.querySelector('[data-archive-folder-sentinel]');
+    if (oldSentinel) oldSentinel.remove();
+    if (hasMore) container.insertAdjacentHTML('beforeend', archiveSentinelHtml(true));
+
+    bindArchiveFolderContent(result, context);
+    return true;
+  }
+
+  /* Paint isi folder: coba swap bedah dulu (jaga scroll); kalau rangka belum
+     ada (mis. paint pertama), bangun penuh. */
+  function paintArchiveFolderContent(result, context) {
+    if (updateArchiveFolderSections(result, context)) return;
+    const container = document.getElementById('archive-folder-content');
+    if (!container) return;
+    container.innerHTML = archiveFolderContentHtml(result, context);
+    bindArchiveFolderContent(result, context);
   }
 
   function archiveChildFolderRow(folder, context) {
@@ -569,9 +667,7 @@
   }
 
   function bindArchiveFolderContent(result, context) {
-    document.querySelector('[data-load-more-archive-folder]')?.addEventListener('click', function () {
-      loadMoreArchiveFolderContent(context, this);
-    });
+    bindArchiveFolderSentinelObserver(context);
 
     var dropdownMenu = document.getElementById('doc-add-dropdown-menu');
     if (dropdownMenu) {

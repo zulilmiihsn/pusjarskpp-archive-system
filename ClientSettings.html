@@ -1277,7 +1277,9 @@
   async function renderAuditLog() {
     const rid = currentRenderId();
     const cacheParams = { limit: 150 };
-    const cached = isViewCacheValid('audit', cacheParams) ? getCachedView('audit', cacheParams) : null;
+    // Gaya B: paint dari cache apa adanya (abaikan versi) supaya tidak flash
+    // spinner saat auto-refresh. Swap tabel ditangani jalur stale-revalidated.
+    const cached = getCachedView('audit', cacheParams);
     
     if (cached) {
       setContent(auditPageHtml(cached.data || []));
@@ -1401,7 +1403,9 @@
     const rid = currentRenderId();
     const year = state.bootstrap && state.bootstrap.settings ? state.bootstrap.settings.currentYear : null;
     const params = { year: year };
-    const cached = isViewCacheValid('inactive', params) ? getCachedView('inactive', params) : null;
+    // Gaya B: paint dari cache apa adanya (abaikan versi) supaya tidak flash
+    // spinner saat auto-refresh. Swap tabel ditangani jalur stale-revalidated.
+    const cached = getCachedView('inactive', params);
     
     if (cached) {
       setContent(inactivePageHtml(cached.data || []));

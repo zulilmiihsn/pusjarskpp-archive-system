@@ -943,7 +943,10 @@
     if (!_versionTracker.pendingRefresh) return;
     if (typeof isAnyModalOpen === 'function' && isAnyModalOpen()) return;
     _versionTracker.pendingRefresh = false;
-    invalidateViewCache();
+    // Jangan wipe cache di sini. Versi yang sudah naik otomatis bikin entry
+    // "version-stale", dan getCachedOrFetch akan revalidasi via SWR (tampilkan
+    // data lama dulu, refetch di background). Blanket invalidate bikin cache
+    // kosong -> loadXContent jatuh ke spinner dingin tiap poll.
     await smartRefresh();
   }
 
