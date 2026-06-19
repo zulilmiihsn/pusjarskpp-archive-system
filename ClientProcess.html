@@ -1419,6 +1419,14 @@
         finalBtn.disabled = true;
       }
 
+      // Tunggu unggahan latar yang masih berjalan supaya tidak mengunggah ulang
+      // (file dobel di Drive) atau menyimpan draf tanpa fileId.
+      if (_pendingUpload) {
+        var savePendingToast = showToast('Menyelesaikan unggahan berkas...', true);
+        try { await _pendingUpload; } catch (e) {}
+        if (savePendingToast) removeToast(savePendingToast);
+      }
+
       let sourceFileId = state.draft.sourceFile ? state.draft.sourceFile.id : '';
       const fileInput = document.getElementById('source-file');
 
@@ -1681,7 +1689,9 @@
   }
 
   function getProcessStateKey() {
-    const year = state.currentYear || 'default_year';
+    const year = (typeof getCurrentYear === 'function' && getCurrentYear())
+      || (state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.currentYear)
+      || 'default_year';
     const folderId = state.draft ? state.draft.targetFolderId : state.preselectedTargetFolderId;
     const isLocked = state.draft ? state.draft.targetLocked : Boolean(state.preselectedTargetFolderId);
     if (isLocked && folderId) {
@@ -1834,6 +1844,7 @@
         var delDraftToast = showToast('Menghapus draf...', true);
         try {
           await api('deleteDraft', { archiveId: row.archive_id, year: row.year });
+          await loadBootstrap();
           if (delDraftToast) removeToast(delDraftToast);
           showToast('Draf berhasil dihapus.');
           loadInboxQueue();

@@ -272,7 +272,7 @@ const ArchiveController = {
     });
   },
 
-  _processArchiveInLock: function (payload, activity, subActivity, metadata, sourceFile) {
+  _processArchiveInLock: function (payload, activity, subActivity, metadata, sourceFile, logContext) {
     return withLock_(() => {
       // Uniqueness diperiksa di dalam lock agar read-validate-write atomik
       // terhadap arsip lain yang dikerjakan bersamaan.
@@ -290,17 +290,31 @@ const ArchiveController = {
 
       metadata.lokasi_simpan = finalFile.getName();
       metadata._lokasi_simpan_url = finalFile.getUrl();
-      
+
       const writeResult = SpreadsheetService.appendArchiveRow(activity, subActivity, metadata);
       SpreadsheetApp.flush();
       const rekapResult = SpreadsheetService.updateRekapSummary(activity, subActivity, metadata);
+
+      // Catat log penyelesaian DI DALAM lock yang sama dengan penulisan baris.
+      // Kalau ditulis setelah lock dilepas, ada celah crash: file + baris sheet
+      // sudah ada tapi log arsip belum — arsip jadi tak tercatat / bisa di-import
+      // ganda saat sync. (LockService reentrant untuk eksekusi yang sama.)
+      let logWarning = '';
+      if (logContext) {
+        logWarning = ArchiveController._logArchiveCompletion(
+          logContext.archiveId, logContext.year, activity, subActivity,
+          logContext.sourceFileId, finalFile, writeResult, logContext.createdBy,
+          targetFolderInfo, metadata
+        );
+      }
 
       return {
         finalFile: finalFile,
         writeResult: writeResult,
         rekapResult: rekapResult,
         metadata: metadata,
-        targetFolder: targetFolderInfo
+        targetFolder: targetFolderInfo,
+        logWarning: logWarning
       };
     }, 30000);
   },
@@ -346,8 +360,13 @@ const ArchiveController = {
     let result;
     try {
       const initialMetadata = ArchiveController._prepareMetadata(payload, activity, subActivity, sourceFile.getName());
-      result = ArchiveController._processArchiveInLock(payload, activity, subActivity, initialMetadata, sourceFile);
-      var logWarning = ArchiveController._logArchiveCompletion(archiveId, year, activity, subActivity, sourceFile.getId(), result.finalFile, result.writeResult, archiveCreatedBy, result.targetFolder, result.metadata);
+      result = ArchiveController._processArchiveInLock(payload, activity, subActivity, initialMetadata, sourceFile, {
+        archiveId: archiveId,
+        year: year,
+        sourceFileId: sourceFile.getId(),
+        createdBy: archiveCreatedBy
+      });
+      var logWarning = result.logWarning || '';
     } catch (error) {
       ConfigRepository.appendArchiveLog({
         archive_id: archiveId,

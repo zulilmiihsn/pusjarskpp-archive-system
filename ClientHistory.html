@@ -23,7 +23,8 @@
           if (row.metadata_json) {
              state.draft = JSON.parse(row.metadata_json);
              try {
-                localStorage.setItem(typeof getProcessStateKey === 'function' ? getProcessStateKey() : ('portal_arsip_' + (state.currentYear || 'default_year') + '_process_state_general'), JSON.stringify({ draft: state.draft, inputState: {} }));
+                const histYear = (typeof getCurrentYear === 'function' && getCurrentYear()) || (state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.currentYear) || 'default_year';
+                localStorage.setItem(typeof getProcessStateKey === 'function' ? getProcessStateKey() : ('portal_arsip_' + histYear + '_process_state_general'), JSON.stringify({ draft: state.draft, inputState: {} }));
               } catch(e) { console.warn('localStorage set failed:', e); }
               setView('process');
              showToast('Melanjutkan draf...');
