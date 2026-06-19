@@ -95,11 +95,19 @@ const SpreadsheetService = {
       .setVerticalAlignment('middle');
     sortDetailSheetByNoBerkas_(sheet);
 
+    // Sort mengubah urutan baris; cari ulang posisi baris via URL file agar
+    // spreadsheet_row_number yang dicatat tidak basi (edit/hapus bisa salah baris).
+    let finalRow = rowIndex;
+    if (metadata._lokasi_simpan_url) {
+      const located = locateDetailRowByUrl_(sheet, metadata._lokasi_simpan_url);
+      if (located) finalRow = located;
+    }
+
     return {
       spreadsheetId: ss.getId(),
       spreadsheetUrl: ss.getUrl(),
       sheetName: sheet.getName(),
-      rowNumber: rowIndex
+      rowNumber: finalRow
     };
   },
 
@@ -138,11 +146,16 @@ const SpreadsheetService = {
     sortDetailSheetByNoBerkas_(sheet);
 
     return metadataList.map(function(meta, i) {
+      var finalRow = rowIndex + i;
+      if (meta._lokasi_simpan_url) {
+        var located = locateDetailRowByUrl_(sheet, meta._lokasi_simpan_url);
+        if (located) finalRow = located;
+      }
       return {
         spreadsheetId: ss.getId(),
         spreadsheetUrl: ss.getUrl(),
         sheetName: sheet.getName(),
-        rowNumber: rowIndex + i
+        rowNumber: finalRow
       };
     });
   },
@@ -210,11 +223,19 @@ const SpreadsheetService = {
     }
     sortDetailSheetByNoBerkas_(sheet);
 
+    // Sort mengubah urutan baris; cari ulang posisi baris via URL file agar
+    // spreadsheet_row_number yang dicatat tidak basi (edit/hapus bisa salah baris).
+    let finalRow = rowIndex;
+    if (metadata._lokasi_simpan_url) {
+      const located = locateDetailRowByUrl_(sheet, metadata._lokasi_simpan_url);
+      if (located) finalRow = located;
+    }
+
     return {
       spreadsheetId: ss.getId(),
       spreadsheetUrl: ss.getUrl(),
       sheetName: sheet.getName(),
-      rowNumber: rowIndex
+      rowNumber: finalRow
     };
   },
 

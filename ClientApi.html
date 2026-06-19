@@ -26,16 +26,30 @@
             if (response.success) {
               done(resolve, response.data);
             } else {
-              done(reject, new Error(response.error || 'Terjadi kesalahan dari peladen'));
+              var srvErr = new Error(response.error || 'Terjadi kesalahan dari peladen');
+              handleSessionError_(srvErr);
+              done(reject, srvErr);
             }
           } else {
             done(resolve, response);
           }
         })
         .withFailureHandler(function (error) {
+          handleSessionError_(error);
           done(reject, error);
         })[name](payload);
     });
+  }
+
+  // Saat peladen menolak karena sesi habis/tidak ditemukan, bersihkan sesi lokal
+  // dan munculkan modal login otomatis supaya user tidak terjebak error generik.
+  function handleSessionError_(error) {
+    var msg = error && (error.message || error) ? String(error.message || error) : '';
+    if (msg.indexOf('Sesi login') === -1) return;
+    try { localStorage.removeItem('portal_session_id'); } catch (e) {}
+    if (typeof showLoginModal === 'function' && !document.getElementById('login-modal-backdrop')) {
+      try { showLoginModal(); } catch (e) {}
+    }
   }
 
   function setContent(html) {

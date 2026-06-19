@@ -170,6 +170,7 @@ const AuthService = {
         if (data) {
           const session = JSON.parse(data);
           if (session.expiresAt && Date.now() < session.expiresAt) {
+            slideSession_(sessionId, session);
             return { accountId: session.accountId, username: session.username, role: session.role, displayName: session.displayName, loggedInAt: session.loggedInAt };
           }
           PropertiesService.getScriptProperties().deleteProperty('sess_' + sessionId);
@@ -239,6 +240,7 @@ function requireAuth_(payload) {
     if (data) {
       var session = JSON.parse(data);
       if (session.expiresAt && Date.now() < session.expiresAt) {
+        slideSession_(sessionId, session);
         return {
           accountId: session.accountId,
           username: session.username,
@@ -249,6 +251,20 @@ function requireAuth_(payload) {
     }
   } catch (_) {}
   throw new Error('Sesi login telah berakhir. Silakan login kembali.');
+}
+
+/**
+ * Sliding session: perpanjang masa berlaku selama user masih aktif. Hanya menulis
+ * ulang ketika sudah melewati separuh TTL agar tidak boros tulis Script Properties.
+ */
+function slideSession_(sessionId, session) {
+  try {
+    var remaining = session.expiresAt - Date.now();
+    if (remaining < SESSION_TTL_MS / 2) {
+      session.expiresAt = Date.now() + SESSION_TTL_MS;
+      PropertiesService.getScriptProperties().setProperty('sess_' + sessionId, JSON.stringify(session));
+    }
+  } catch (_) {}
 }
 
 /**

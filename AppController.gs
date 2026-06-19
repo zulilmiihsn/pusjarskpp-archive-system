@@ -52,7 +52,7 @@ const AppController = {
   },
   renameDriveItem: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const r = SettingsController.renameDriveItem(payload);
     bumpVersion();
     auditAction_(actor, 'DRIVE_ITEM_RENAMED', { folderId: payload.itemId, message: 'Mengganti nama item Drive: ' + (payload.name || '-') });
@@ -314,9 +314,9 @@ const AppController = {
     }
     return result;
   },
-  initInboxResumableUpload: function (payload) { return ArchiveController.initInboxResumableUpload(payload); },
-  initTemplateResumableUpload: function (payload) { return DriveService.initTemplateResumableUpload(payload); },
-  uploadResumableChunk: function (payload) { return DriveService.uploadResumableChunk(payload); },
+  initInboxResumableUpload: function (payload) { requireAuth_(payload); return ArchiveController.initInboxResumableUpload(payload); },
+  initTemplateResumableUpload: function (payload) { requireAuth_(payload); return DriveService.initTemplateResumableUpload(payload); },
+  uploadResumableChunk: function (payload) { requireAuth_(payload); return DriveService.uploadResumableChunk(payload); },
   uploadSourceFile: function (payload) {
     payload = payload || {};
     const actor = requireAuth_(payload);
@@ -393,7 +393,7 @@ const AppController = {
   listInboxFiles: function (payload) { return ArchiveController.listInboxFiles(payload); },
   addSubActivity: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const r = SubActivityController.addSubActivity(payload);
     bumpVersion();
     auditAction_(actor, 'SUBACT_CREATED', {
@@ -406,7 +406,7 @@ const AppController = {
   },
   createParentFolder: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const r = SubActivityController.createParentFolder(payload);
     bumpVersion();
     auditAction_(actor, 'PARENT_FOLDER_CREATED', { year: payload.year, activityId: payload.activityId, message: 'Membuat folder induk: ' + (payload.folderName || '-') });
@@ -414,7 +414,7 @@ const AppController = {
   },
   convertSubActivityToParent: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const nama = auditSubName_(payload);
     const r = SubActivityController.convertSubActivityToParent(payload);
     bumpVersion();
@@ -423,7 +423,7 @@ const AppController = {
   },
   syncSubActivities: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const r = SubActivityController.syncSubActivities(payload);
     bumpVersion();
     if (r && r.updated) auditAction_(actor, 'SUBACT_SYNCED', { year: payload.year, activityId: payload.activityId, message: 'Sinkronisasi sub-kegiatan dari folder Drive' });
@@ -431,7 +431,7 @@ const AppController = {
   },
   deleteSubActivity: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const nama = auditSubName_(payload);
     const r = SubActivityController.deleteSubActivity(payload);
     bumpVersion();
@@ -440,7 +440,7 @@ const AppController = {
   },
   trashSubActivityFolder: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const nama = auditSubName_(payload);
     const r = SubActivityController.trashSubActivityFolder(payload);
     bumpVersion();
@@ -455,7 +455,7 @@ const AppController = {
   },
   renameSubActivity: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const r = SubActivityController.renameSubActivity(payload);
     bumpVersion();
     auditAction_(actor, 'SUBACT_RENAMED', { year: payload.year, activityId: payload.activityId, subActivityId: payload.subActivityId, message: 'Mengganti nama sub-kegiatan menjadi: ' + (payload.newName || '-') });
@@ -463,7 +463,7 @@ const AppController = {
   },
   updateSubActivityMetadata: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const nama = auditSubName_(payload);
     const r = SubActivityController.updateSubActivityMetadata(payload);
     bumpVersion();
@@ -473,7 +473,7 @@ const AppController = {
   getInactiveSubActivities: function (payload) { return SubActivityController.getInactiveSubActivities(payload); },
   restoreSubActivity: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const nama = auditSubName_(payload);
     const r = SubActivityController.restoreSubActivity(payload);
     bumpVersion();
@@ -482,7 +482,7 @@ const AppController = {
   },
   purgeSubActivity: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireAdmin_(payload);
     const nama = auditSubName_(payload);
     const r = SubActivityController.purgeSubActivity(payload);
     bumpVersion();
@@ -582,7 +582,18 @@ function stripAccountSecrets_(account) {
 function requireAdminIfWorkspaceSecured_(payload) {
   const settings = ConfigService.getSettings();
   if (!settings.configSpreadsheetId) return null;
-  if (!hasActiveAdminAccount_()) return null;
+  let hasAdmin;
+  try {
+    hasAdmin = ConfigService.listAccounts().some(function (account) {
+      return String(account.role || '').trim().toLowerCase() === 'admin';
+    });
+  } catch (error) {
+    // Cek admin gagal (bukan benar-benar kosong) → fail-closed: wajibkan admin
+    // daripada membuka akses ke saveSettings/initializeWorkspace.
+    console.warn('Admin account check failed, fail-closed: ' + error.message);
+    return requireAdmin_(payload);
+  }
+  if (!hasAdmin) return null; // benar-benar belum ada admin (bootstrap awal)
   return requireAdmin_(payload);
 }
 

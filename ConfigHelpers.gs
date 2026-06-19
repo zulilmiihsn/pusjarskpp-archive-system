@@ -102,12 +102,12 @@ function normalizeHeader_(value) {
 
 function generateSalt_(length) {
   const len = length || 16;
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let salt = '';
-  for (let i = 0; i < len; i++) {
-    salt += chars.charAt(Math.floor(Math.random() * chars.length));
+  // Pakai entropi UUID platform, bukan Math.random (yang bukan CSPRNG).
+  let pool = '';
+  while (pool.length < len) {
+    pool += Utilities.getUuid().replace(/-/g, '');
   }
-  return salt;
+  return pool.slice(0, len);
 }
 
 function pbkdf2Like_(password, username, salt, iterations) {
@@ -152,11 +152,15 @@ function verifyPassword_(password, username, storedHash) {
 }
 
 function generatePassword_(length) {
-  const len = length || 6;
+  const len = length || 14;
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  // Sumber indeks dari entropi UUID, bukan Math.random.
+  let pool = '';
+  while (pool.length < len * 2) pool += Utilities.getUuid().replace(/-/g, '');
   let result = '';
   for (let i = 0; i < len; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+    const idx = parseInt(pool.substr(i * 2, 2), 16) % chars.length;
+    result += chars.charAt(idx);
   }
   return result;
 }

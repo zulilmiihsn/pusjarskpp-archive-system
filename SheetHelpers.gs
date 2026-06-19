@@ -852,6 +852,28 @@ function setRekapStaticCell_(sheet, rowIndex, headerMap, aliases, value) {
   cell.setValue(sanitizeCellValue_(value));
 }
 
+// Cari nomor baris detail berdasarkan URL/ID file di kolom lokasi_simpan.
+// Dipakai setelah sort agar nomor baris yang dicatat ke log tidak basi.
+// Mengembalikan 0 jika tidak ketemu.
+function locateDetailRowByUrl_(sheet, url) {
+  if (!url) return 0;
+  const startCol = getDetailStartColumn_(sheet);
+  const lokasiIdx = DETAIL_FIELD_ORDER.indexOf('lokasi_simpan');
+  if (lokasiIdx < 0) return 0;
+  const dataRows = Math.max(0, sheet.getLastRow() - DETAIL_DATA_START_ROW + 1);
+  if (dataRows <= 0) return 0;
+  // Pakai segmen ID Drive (>=25 char) bila ada, kalau tidak pakai URL utuh.
+  const m = String(url).match(/[-\w]{25,}/);
+  const needle = m ? m[0] : String(url);
+  const rich = sheet.getRange(DETAIL_DATA_START_ROW, startCol + lokasiIdx, dataRows, 1).getRichTextValues();
+  for (let i = 0; i < rich.length; i++) {
+    const cell = rich[i][0];
+    const cellUrl = cell ? (cell.getLinkUrl() || cell.getText() || '') : '';
+    if (cellUrl.indexOf(needle) !== -1) return DETAIL_DATA_START_ROW + i;
+  }
+  return 0;
+}
+
 function sortDetailSheetByNoBerkas_(sheet) {
   try {
     const noteRow = findNoteRow_(sheet) || sheet.getLastRow() + 1;

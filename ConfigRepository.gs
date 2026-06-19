@@ -355,7 +355,17 @@ const ConfigRepository = {
 
     const existingRows = readSheetObjects_(ss, CONFIG_SHEETS.SUB_ACTIVITIES)
       .filter(row => Number(row.year) === Number(payload.year) && row.activity_id === payload.activityId);
-    const subActivityId = payload.subActivityId || slug_(payload.subActivityName);
+    let subActivityId = payload.subActivityId || slug_(payload.subActivityName);
+    // Cegah tabrakan sub_activity_id: dua nama berbeda bisa menghasilkan slug sama.
+    // findConfigRow_/findSubActivity hanya cocokkan yang pertama, jadi ID dobel
+    // bikin update/hapus/restore salah sasaran. Beri sufiks unik bila bentrok.
+    const existingIds = {};
+    existingRows.forEach(function (r) { existingIds[String(r.sub_activity_id || '')] = true; });
+    if (existingIds[subActivityId]) {
+      let suffix = 2;
+      while (existingIds[subActivityId + '_' + suffix]) suffix++;
+      subActivityId = subActivityId + '_' + suffix;
+    }
     const values = {
       year: payload.year,
       activity_id: payload.activityId,
@@ -368,7 +378,7 @@ const ConfigRepository = {
       default_kode_klasifikasi: payload.defaultKodeKlasifikasi || '',
       allow_non_letter_document: payload.allowNonLetterDocument ? 'TRUE' : 'FALSE',
       is_active: 'TRUE',
-      sort_order: existingRows.length + 1,
+      sort_order: existingRows.reduce(function (max, r) { var n = Number(r.sort_order) || 0; return n > max ? n : max; }, 0) + 1,
       target_sheet_name: payload.targetSheetName || payload.subActivityName,
       mapping_status: payload.mappingStatus || 'PERLU_REVIEW',
       mapping_note: payload.mappingNote || '',
