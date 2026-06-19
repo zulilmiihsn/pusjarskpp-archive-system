@@ -418,20 +418,44 @@ function ensureDetailSheet_(ss, activity, subActivity) {
   let sheet = ss.getSheetByName(targetName);
   if (sheet) return sheet;
 
+  // Cek-lalu-bikin di atas tidak atomik (TOCTOU). Dua eksekusi yang jalan
+  // bersamaan bisa sama-sama lolos cek getSheetByName(null) lalu sama-sama bikin
+  // sheet bernama sama — yang kalah dapat error native "Sudah ada sheet dengan
+  // nama tersebut" dan simpan gagal. Tangani race-nya: bersihkan sheet orphan
+  // dari copyTo yang gagal, lalu pakai sheet yang sudah ada bikinan eksekusi lain.
+
   // Jangan pernah pakai sheet Rekap sebagai template Detail — bikin layout Detail berantakan.
   const template = ss.getSheetByName('Template Detail Item') ||
     ss.getSheetByName(DEFAULT_DETAIL_SHEET_NAME) ||
     null;
 
   if (template && template.getName() !== REKAP_SHEET_NAME) {
-    sheet = template.copyTo(ss).setName(targetName);
+    const copied = template.copyTo(ss);
+    try {
+      sheet = copied.setName(targetName);
+    } catch (e) {
+      // Kalah race: setName gagal karena nama sudah dipakai. Buang salinan orphan
+      // ("Copy of ...") dan pakai sheet yang sudah ada.
+      try { ss.deleteSheet(copied); } catch (_) {}
+      SpreadsheetApp.flush();
+      const racedSheet = ss.getSheetByName(targetName);
+      if (racedSheet) return racedSheet;
+      throw e;
+    }
     clearDetailRows_(sheet);
     const clearNoteRow = findNoteRow_(sheet) || DETAIL_NOTE_FALLBACK_ROW;
     const clearDataRows = Math.max(clearNoteRow - DETAIL_DATA_START_ROW, 24);
     sheet.getRange(DETAIL_DATA_START_ROW, getDetailStartColumn_(sheet) + DETAIL_ITEM_NUMBER_OFFSET, clearDataRows, 1)
       .setNumberFormat('00');
   } else {
-    sheet = ss.insertSheet(targetName);
+    try {
+      sheet = ss.insertSheet(targetName);
+    } catch (e) {
+      SpreadsheetApp.flush();
+      const racedSheet = ss.getSheetByName(targetName);
+      if (racedSheet) return racedSheet;
+      throw e;
+    }
     formatBasicDetailSheet_(sheet, activity, subActivity);
   }
   return sheet;
