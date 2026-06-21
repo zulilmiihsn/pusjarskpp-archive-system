@@ -695,9 +695,9 @@ var ParseEngine = (function () {
       var pat1 = /dokumen\s+ini\s+telah\s+ditandatangani\s+secara\s+elektronik\s+menggunakan\s+sertifikat\s+elektronik/i;
       var pat2 = /ditandatangani\s+secara\s+elektronik\s+menggunakan\s+sertifikat/i;
       if (pat1.test(optimizedText) || pat2.test(optimizedText)) {
-        return { value: 'Srikandi', score: 0.99, confidence: 'high', source: 'electronic_signature_detection' };
+        return { value: 'Asli', score: 0.99, confidence: 'high', source: 'electronic_signature_detection' };
       }
-      return { value: 'Asli', score: 0.99, confidence: 'high', source: 'default_asli' };
+      return { value: 'Salinan', score: 0.99, confidence: 'high', source: 'default_salinan' };
     })();
 
     // Pass 5: Build result
@@ -719,9 +719,9 @@ var ParseEngine = (function () {
     uraianFallback = uraianFallback.replace(/\s+/g, ' ').trim();
 
     if (uraian && uraian.value) {
-      fields.uraian_informasi_berkas = uraian;
+      fields.uraian_informasi_item = uraian;
     } else if (uraianFallback) {
-      fields.uraian_informasi_berkas = { value: uraianFallback, score: 0.4, confidence: 'low', source: 'filename_fallback' };
+      fields.uraian_informasi_item = { value: uraianFallback, score: 0.4, confidence: 'low', source: 'filename_fallback' };
     }
     if (klasifikasiAkses) fields.klasifikasi_akses = klasifikasiAkses;
     if (pengirim) fields.pengirim = pengirim;

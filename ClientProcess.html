@@ -3,7 +3,7 @@
     kepemimpinan: {
       no_berkas:       { hint: 'Contoh: 01/LKG-PK/2026' },
       kode_klasifikasi:{ hint: 'Contoh: DL.01.01 (Diklat Kepemimpinan)' },
-      uraian_informasi_berkas: { hint: 'Isi: Jenis Diklat, Angkatan, Tahun. Contoh: Berkas Kurikulum, Daftar Hadir, dan Evaluasi Kelulusan PKA Angkatan 1 Tahun 2026' },
+      uraian_informasi_item: { hint: 'Isi: Jenis Diklat, Angkatan, Tahun. Contoh: Berkas Kurikulum, Daftar Hadir, dan Evaluasi Kelulusan PKA Angkatan 1 Tahun 2026' },
       no_filing_cabinet:{ hint: 'FC-01' },
       no_laci:         { hint: '1 (Laci Kepemimpinan)' },
       no_folder:       { hint: 'Folder 1 (Pelatihan Kepemimpinan)' },
@@ -13,7 +13,7 @@
     latsar_cpns: {
       no_berkas:       { hint: 'Contoh: 02/LKG-LATSAR/2026' },
       kode_klasifikasi:{ hint: 'Contoh: DL.02.01 (Diklat Latsar CPNS)' },
-      uraian_informasi_berkas: { hint: 'Cantumkan Angkatan & Instansi. Contoh: Berkas Kelengkapan Administrasi dan Evaluasi Akademik Latsar CPNS Angkatan III Tahun 2026' },
+      uraian_informasi_item: { hint: 'Cantumkan Angkatan & Instansi. Contoh: Berkas Kelengkapan Administrasi dan Evaluasi Akademik Latsar CPNS Angkatan III Tahun 2026' },
       no_filing_cabinet:{ hint: 'FC-01' },
       no_laci:         { hint: '2 (Laci Latsar CPNS)' },
       no_folder:       { hint: 'Folder 2 (Latsar CPNS)' },
@@ -23,7 +23,7 @@
     teknis: {
       no_berkas:       { hint: 'Contoh: 03/LKG-TEKNIS/2026' },
       kode_klasifikasi:{ hint: 'Contoh: DL.03.00 (Teknis/Fungsional)' },
-      uraian_informasi_berkas: { hint: 'Sebutkan Nama Program Spesifik. Contoh: Berkas Pelaksanaan Coaching bagi ASN Tahun 2026' },
+      uraian_informasi_item: { hint: 'Sebutkan Nama Program Spesifik. Contoh: Berkas Pelaksanaan Coaching bagi ASN Tahun 2026' },
       no_filing_cabinet:{ hint: 'FC-02' },
       no_laci:         { hint: '3 (Laci Teknis)' },
       no_folder:       { hint: 'Folder 3 (Pelatihan Teknis dan Lainnya)' },
@@ -33,7 +33,7 @@
     lain_lain: {
       no_berkas:       { hint: 'Contoh: 04/LKG-LAIN/2026' },
       kode_klasifikasi:{ hint: 'Contoh: KP.01 (Kepegawaian) / OT (Organisasi)' },
-      uraian_informasi_berkas: { hint: 'Sebutkan Nama Kegiatan Pendukung. Contoh: Data Nominatif Jabatan Fungsional Tahun 2026' },
+      uraian_informasi_item: { hint: 'Sebutkan Nama Kegiatan Pendukung. Contoh: Data Nominatif Jabatan Fungsional Tahun 2026' },
       no_filing_cabinet:{ hint: 'FC-02' },
       no_laci:         { hint: '4 (Laci Lain-lain)' },
       no_folder:       { hint: 'Folder 4 (Lain-lain)' },
@@ -235,7 +235,7 @@
       + '<line x1="12" y1="3" x2="12" y2="15"/>'
       + '</svg>'
       + '<div class="dropzone-text">Pilih atau tarik dokumen</div>'
-      + '<div class="dropzone-sub">PDF / DOCX &mdash; Maks. 50 MB (lebih besar otomatis)</div>';
+      + '<div class="dropzone-sub">PDF / DOCX &mdash; Mendukung semua ukuran berkas</div>';
   }
 
   var _localDataCache = {};
@@ -476,8 +476,8 @@
   function autoFillParseFields_(fields) {
     var filledCount = 0;
     var labels = {
-      nomor_surat: 'Nomor Surat', kode_klasifikasi: 'Kode Klasifikasi',
-      uraian_informasi_berkas: 'Uraian', tanggal: 'Tanggal',
+      nomor_surat: 'Nomor Surat', kode_klasifikasi: 'Kode Klasifikasi (Jika Surat Keluar)',
+      uraian_informasi_item: 'Uraian', tanggal: 'Tanggal',
       klasifikasi_akses: 'Klasifikasi Akses', jumlah: 'Jumlah Halaman',
       pengirim: 'Pengirim', penerima: 'Penerima',
       tanda_tangan: 'Tanda Tangan', lampiran: 'Lampiran'
@@ -556,7 +556,7 @@
 
       fields.forEach(f => {
         let val = f.default_value || '';
-        if (f.field_name === 'no_filing_cabinet') val = (state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.defaultFilingCabinet) || '02';
+        if (f.field_name === 'no_filing_cabinet') val = '02';
         if (f.field_name === 'no_laci') val = (activity ? activity.laci_no : '') || '';
         if (f.field_name === 'no_folder') val = (sub ? sub.no_folder : '') || (activity ? activity.folder_no : '') || '';
         if (f.field_name === 'no_berkas') val = (sub ? sub.sort_order : '') || '';
@@ -900,7 +900,7 @@
         newMetadata[key] = oldMetadata[key];
       } else {
         let val = f.default_value || '';
-        if (key === 'no_filing_cabinet') val = (state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.defaultFilingCabinet) || '02';
+        if (key === 'no_filing_cabinet') val = '02';
         if (key === 'no_laci') val = activity.laci_no || '';
         if (key === 'no_folder') val = sub.no_folder || activity.folder_no || '';
         if (key === 'no_berkas') val = sub.sort_order || '';
@@ -1073,7 +1073,7 @@
     const metadata = draft.metadata;
     const fields = orderMetadataFields_(draft.fields || []).filter(f => f.field_name !== 'ket' && f.field_name !== 'no_berkas');
 
-    const section2 = ['nomor_item_arsip', 'nomor_surat', 'kode_klasifikasi', 'uraian_informasi_berkas', 'tanggal'];
+    const section2 = ['nomor_item_arsip', 'nomor_surat', 'kode_klasifikasi', 'perihal', 'kepada', 'dari', 'uraian_informasi_item', 'tanggal'];
     const section3 = ['tingkat_perkembangan', 'jumlah', 'satuan', 'no_filing_cabinet', 'no_laci', 'no_folder', 'klasifikasi_akses'];
 
     const section2Fields = fields.filter(f => section2.includes(f.field_name));
@@ -1099,9 +1099,9 @@
 
     let section2Html = '';
     if (section2Fields.length) {
-      const gridFields = section2Fields.filter(f => f.field_name !== 'tanggal' && f.field_name !== 'uraian_informasi_berkas');
+      const gridFields = section2Fields.filter(f => f.field_name !== 'tanggal' && f.field_name !== 'uraian_informasi_item');
       const tanggalField = section2Fields.find(f => f.field_name === 'tanggal');
-      const uraianField = section2Fields.find(f => f.field_name === 'uraian_informasi_berkas');
+      const uraianField = section2Fields.find(f => f.field_name === 'uraian_informasi_item');
 
       let inner = gridFields.map(f => metadataField(f, metadata[f.field_name], hints)).join('');
 
@@ -1197,9 +1197,11 @@
     result.forEach(f => { byName[f.field_name] = f; });
     [
       ['nomor_surat', 'Nomor Surat', false, 'text', 2.5],
+      ['perihal', 'Perihal', false, 'text', 2.6],
+      ['kepada', 'Kepada', false, 'text', 2.7],
+      ['dari', 'Dari', false, 'text', 2.8],
       ['no_filing_cabinet', 'No Filing Cabinet', false, 'text', 9],
       ['no_laci', 'No Laci', true, 'text', 10],
-      ['no_folder', 'No Folder', true, 'text', 11],
       ['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', false, 'select', 12]
     ].forEach(item => {
       if (byName[item[0]]) return;
@@ -1220,7 +1222,7 @@
 
   function orderMetadataFields_(fields) {
     const preferred = [
-      'nomor_item_arsip', 'nomor_surat', 'kode_klasifikasi', 'tanggal', 'uraian_informasi_berkas',
+      'nomor_item_arsip', 'nomor_surat', 'kode_klasifikasi', 'perihal', 'kepada', 'dari', 'tanggal', 'uraian_informasi_item',
       'tingkat_perkembangan', 'jumlah', 'satuan', 'no_filing_cabinet', 'no_laci', 'no_folder',
       'klasifikasi_akses', 'ket', 'lokasi_simpan'
     ];
@@ -1235,7 +1237,7 @@
   const METADATA_TOOLTIPS = {
     nomor_surat: 'Nomor surat dari dokumen. Terisi otomatis dari nama file jika terbaca, tetapi tetap bisa dikoreksi manual.',
     kode_klasifikasi: 'Kode arsip sesuai JRA, contoh: DL.01.01 untuk Diklat Kepemimpinan',
-    tingkat_perkembangan: 'Status dokumen dalam sistem Srikandi, misal: Srikandi (dokumen digital), Asli, atau Salinan',
+    tingkat_perkembangan: 'Wujud dokumen: Asli (dokumen asli/elektronik bertanda tangan) atau Salinan (turunan/fotokopi/cetak).',
     jumlah: 'Jumlah dokumen. Gunakan tombol + dan - atau ketik langsung.',
     no_filing_cabinet: 'Nomor lemari arsip fisik tempat dokumen disimpan, contoh: FC-01',
     klasifikasi_akses: 'Biasa: dapat diakses semua. Terbatas: hanya unit terkait. Rahasia: akses terbatas pimpinan.'
@@ -1251,16 +1253,16 @@
     if (key === 'tanggal') {
       current = normalizeDateToIso(current);
     }
-    if ((key === 'nomor_item_arsip' || key === 'no_filing_cabinet') && current && !isNaN(current)) {
+    if (key === 'nomor_item_arsip' && current && !isNaN(current)) {
       current = String(Number(current)).padStart(2, '0');
     }
-    const full = key === 'uraian_informasi_berkas' || key === 'lokasi_simpan';
+    const full = key === 'uraian_informasi_item' || key === 'lokasi_simpan';
     const cls = 'form-field metadata-field metadata-field-' + key + (full ? ' full' : '');
     const hint = getCategoryHint(
       state.draft && state.draft.activity ? state.draft.activity.activity_id : '',
       key
     );
-    const hintHtml = (hint && key !== 'uraian_informasi_berkas' && key !== 'kode_klasifikasi') ? '<div class="field-hint">' + esc(hint) + '</div>' : '';
+    const hintHtml = (hint && key !== 'uraian_informasi_item' && key !== 'kode_klasifikasi') ? '<div class="field-hint">' + esc(hint) + '</div>' : '';
     const safeKey = esc(key);
     const safeCur = esc(current);
     const safeHint = esc(hint || label);
@@ -1273,7 +1275,93 @@
     let inputHtml;
     let extraAttrs = '';
 
-    if (key === 'uraian_informasi_berkas') {
+    if (key === 'no_filing_cabinet') {
+      const laciOptions = [];
+      if (state.bootstrap && state.bootstrap.activities) {
+        const seen = {};
+        state.bootstrap.activities.forEach(function(a) {
+          if (a.laci_folder_id && !seen[a.laci_folder_id]) {
+            seen[a.laci_folder_id] = true;
+            laciOptions.push({ id: a.laci_folder_id, label: 'LACI NO ' + a.laci_no + ' (' + a.activity_name.toUpperCase() + ')' });
+          }
+        });
+      }
+      
+      const isCustomValue = safeCur && !laciOptions.find(o => o.id === safeCur) && safeCur !== 'custom';
+      const selectValue = isCustomValue ? 'custom' : (safeCur || '');
+
+      let optsHtml = '<option value="">-- Pilih Filing Cabinet --</option>';
+      laciOptions.forEach(function(o) {
+        optsHtml += '<option value="' + esc(o.id) + '"' + (o.id === selectValue ? ' selected' : '') + '>' + esc(o.label) + '</option>';
+      });
+      optsHtml += '<option value="custom"' + (selectValue === 'custom' ? ' selected' : '') + '>Custom (Tulis ID Folder...)</option>';
+
+      inputHtml = `
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <select id="meta-${safeKey}-select" class="form-select" onchange="
+            const val = this.value;
+            const customInput = document.getElementById('meta-${safeKey}');
+            if(val === 'custom') {
+              customInput.style.display = 'block';
+              customInput.value = '';
+              customInput.focus();
+            } else {
+              customInput.style.display = 'none';
+              customInput.value = val;
+            }
+            if(window.state && window.state.draft) window.state.draft.metadata['${safeKey}'] = customInput.value;
+          ">${optsHtml}</select>
+          
+          <input type="text" id="meta-${safeKey}" data-field="${safeKey}" class="form-input" style="display:${selectValue === 'custom' ? 'block' : 'none'};" value="${safeCur}" placeholder="Masukkan ID Folder Drive..." oninput="
+            if(window.state && window.state.draft) window.state.draft.metadata['${safeKey}'] = this.value;
+          " />
+        </div>
+      `;
+    } else if (key === 'no_laci') {
+      var laciNameOptions = [];
+      if (state.bootstrap && state.bootstrap.subActivities && state.draft && state.draft.activity) {
+        var seenLaci = {};
+        state.bootstrap.subActivities.forEach(function(sub) {
+          if (sub.activity_id === state.draft.activity.activity_id && sub.parent_folder_name && !seenLaci[sub.parent_folder_name]) {
+            seenLaci[sub.parent_folder_name] = true;
+            laciNameOptions.push(sub.parent_folder_name);
+          }
+        });
+      }
+      
+      var selectValue = safeCur;
+      var optionExists = laciNameOptions.includes(selectValue);
+      var isCustomValue = selectValue && !optionExists;
+      if (isCustomValue) selectValue = 'custom';
+
+      var loptsHtml = '<option value="">-- Pilih No Laci --</option>';
+      laciNameOptions.forEach(function(name) {
+        loptsHtml += '<option value="' + esc(name) + '"' + (name === selectValue ? ' selected' : '') + '>' + esc(name) + '</option>';
+      });
+      loptsHtml += '<option value="custom"' + (selectValue === 'custom' ? ' selected' : '') + '>Custom (Ketik Manual...)</option>';
+
+      inputHtml = `
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <select id="meta-${safeKey}-select" class="form-select" onchange="
+            const val = this.value;
+            const customInput = document.getElementById('meta-${safeKey}');
+            if(val === 'custom') {
+              customInput.style.display = 'block';
+              customInput.value = '';
+              customInput.focus();
+            } else {
+              customInput.style.display = 'none';
+              customInput.value = val;
+            }
+            if(window.state && window.state.draft) window.state.draft.metadata['${safeKey}'] = customInput.value;
+          ">${loptsHtml}</select>
+          
+          <input type="text" id="meta-${safeKey}" data-field="${safeKey}" class="form-input" style="display:${selectValue === 'custom' ? 'block' : 'none'};" value="${safeCur}" placeholder="Ketik Nama Laci Manual..." autocomplete="off" oninput="
+            if(window.state && window.state.draft) window.state.draft.metadata['${safeKey}'] = this.value;
+          " />
+        </div>
+      `;
+    } else if (key === 'uraian_informasi_item') {
       inputHtml = '<textarea id="meta-' + safeKey + '" data-field="' + safeKey + '" placeholder="' + safeHint + '"' + required + '>' + safeCur + '</textarea>';
     } else if (SELECT_OPTIONS[key]) {
       const opts = SELECT_OPTIONS[key].map(function (o) {
@@ -1285,21 +1373,36 @@
       if (key === 'tanggal') {
         type = 'date';
         extraAttrs = ' inputmode="numeric"';
-      } else if (key === 'nomor_item_arsip' || key === 'no_filing_cabinet') {
+      } else if (key === 'nomor_item_arsip') {
         type = 'text';
         extraAttrs = ' inputmode="numeric" pattern="[0-9]*"';
       } else if (key === 'jumlah') {
         type = 'text';
         extraAttrs = ' inputmode="numeric" pattern="[0-9]*"';
-      } else if (key === 'no_laci' || key === 'no_folder') {
-        type = 'text';
-        extraAttrs = ' inputmode="numeric" pattern="[0-9]*"';
       }
+
       const readonlyAttr = (key === 'lokasi_simpan') ? ' readonly' : '';
       inputHtml = '<input id="meta-' + safeKey + '" data-field="' + safeKey + '" type="' + type + '" value="' + safeCur + '" placeholder="' + safeHint + '"' + extraAttrs + required + readonlyAttr + '>';
     }
 
     return '<div class="' + cls + '">' + labelHtml + inputHtml + hintHtml + '</div>';
+  }
+
+  // Rakit kolom Uraian dari komponen: nomor surat/perihal/kepada/dari.
+  // Bagian kosong dilewati (tanpa garis miring dobel). Uraian tetap bisa
+  // ditimpa manual; mengubah salah satu komponen merakit ulang.
+  const URAIAN_PARTS = ['nomor_surat', 'perihal', 'kepada', 'dari'];
+  function assembleUraian_() {
+    if (!state.draft || !state.draft.metadata) return;
+    const m = state.draft.metadata;
+    const uraian = URAIAN_PARTS
+      .map(k => String(m[k] == null ? '' : m[k]).trim())
+      .filter(Boolean)
+      .join('/');
+    m.uraian_informasi_item = uraian;
+    const el = document.getElementById('meta-uraian_informasi_item');
+    if (el && el.value !== uraian) el.value = uraian;
+    updateFileName();
   }
 
   function bindMetadataReview() {
@@ -1310,14 +1413,19 @@
     fields.forEach(input => {
       const handler = () => {
         if (!state.draft) return;
-        state.draft.metadata[input.dataset.field] = input.value;
-        updateFileName();
+        const f = input.dataset.field;
+        state.draft.metadata[f] = input.value;
+        if (URAIAN_PARTS.indexOf(f) !== -1) {
+          assembleUraian_();
+        } else {
+          updateFileName();
+        }
       };
 
       input.addEventListener('input', handler);
       input.addEventListener('change', handler);
 
-      if (input.dataset.field === 'nomor_item_arsip' || input.dataset.field === 'no_filing_cabinet') {
+      if (input.dataset.field === 'nomor_item_arsip') {
         const padInput = () => {
           let val = input.value.trim();
           if (val && !isNaN(val)) {
@@ -1349,7 +1457,7 @@
         });
       }
 
-      if (input.dataset.field === 'no_laci' || input.dataset.field === 'no_folder' || input.dataset.field === 'jumlah') {
+      if (input.dataset.field === 'jumlah') {
         input.addEventListener('keydown', function(e) {
           if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
             e.preventDefault();
@@ -1364,7 +1472,7 @@
         });
       }
 
-      if (input.dataset.field === 'nomor_item_arsip' || input.dataset.field === 'uraian_informasi_berkas') {
+      if (input.dataset.field === 'nomor_item_arsip' || input.dataset.field === 'uraian_informasi_item') {
         input.addEventListener('blur', function () {
           validateFieldOnBlur_(input.dataset.field, input.value);
         });
@@ -1666,7 +1774,7 @@
       activityId: state.draft.activity.activity_id,
       subActivityId: state.draft.subActivity.sub_activity_id,
       nomor_item_arsip: fieldName === 'nomor_item_arsip' ? val : '',
-      uraian_informasi_berkas: fieldName === 'uraian_informasi_berkas' ? val : ''
+      uraian_informasi_item: fieldName === 'uraian_informasi_item' ? val : ''
     }).then(function (result) {
       if (!state.draft) return;
       if (!result || result.valid) {

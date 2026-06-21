@@ -19,3 +19,15 @@ skills-lock.json
 /*.pdf
 *.xlsx
 *.docx
+
+# Generated/throwaway scripts (output dari extract*.js dll)
+test.js
+test_*.js
+extract.js
+extract2.js
+find_unquoted.js
+rewrite.js
+
+# Misc tooling
+.jshintrc
+eslint.config.js

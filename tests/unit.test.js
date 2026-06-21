@@ -93,8 +93,8 @@ test('extractTingkatPerkembangan_ - asli', () => {
   assert.strictEqual(extractTingkatPerkembangan_('Surat_Asli_Undangan.pdf'), 'Asli');
 });
 
-test('extractTingkatPerkembangan_ - copy', () => {
-  assert.strictEqual(extractTingkatPerkembangan_('Copy_of_Undangan.pdf'), 'Copy');
+test('extractTingkatPerkembangan_ - copy menjadi Salinan', () => {
+  assert.strictEqual(extractTingkatPerkembangan_('Copy_of_Undangan.pdf'), 'Salinan');
 });
 
 test('extractTingkatPerkembangan_ - default/none', () => {
@@ -226,8 +226,8 @@ test('extractDate_ - slash separated date', () => {
   assert.strictEqual(extractDate_('2026/05/30'), '2026-05-30');
 });
 
-test('extractTingkatPerkembangan_ - cetak', () => {
-  assert.strictEqual(extractTingkatPerkembangan_('Cetak_Surat.pdf'), 'Cetak');
+test('extractTingkatPerkembangan_ - cetak menjadi Salinan', () => {
+  assert.strictEqual(extractTingkatPerkembangan_('Cetak_Surat.pdf'), 'Salinan');
 });
 
 test('extractTingkatPerkembangan_ - empty string returns empty', () => {
@@ -333,7 +333,7 @@ test('parseExistingFileName_ - standard compliant format with No', () => {
   const result = parseExistingFileName_('02. (Asli) No: B-123/2026_Undangan Rapat.pdf');
   assert.strictEqual(result.nomor_item_arsip, '02');
   assert.strictEqual(result.no_berkas, '2');
-  assert.strictEqual(result.tingkat_perkembangan, 'Asli');
+  assert.strictEqual(result.tingkat_perkembangan, 'Salinan'); // legacy Asli -> Salinan
   assert.strictEqual(result.nomor_surat, 'B-123/2026');
   assert.strictEqual(result.uraian_informasi_berkas, 'Undangan Rapat');
 });
@@ -342,7 +342,7 @@ test('parseExistingFileName_ - standard compliant format without No', () => {
   const result = parseExistingFileName_('15. (Copy) Laporan Bulanan.docx');
   assert.strictEqual(result.nomor_item_arsip, '15');
   assert.strictEqual(result.no_berkas, '15');
-  assert.strictEqual(result.tingkat_perkembangan, 'Copy');
+  assert.strictEqual(result.tingkat_perkembangan, 'Salinan'); // legacy Copy -> Salinan
   assert.strictEqual(result.nomor_surat, '');
   assert.strictEqual(result.uraian_informasi_berkas, 'Laporan Bulanan');
 });
@@ -351,7 +351,7 @@ test('parseExistingFileName_ - simple number prefix format without parenthesis',
   const result = parseExistingFileName_('03. Surat Tugas Panitia.pdf');
   assert.strictEqual(result.nomor_item_arsip, '03');
   assert.strictEqual(result.no_berkas, '3');
-  assert.strictEqual(result.tingkat_perkembangan, 'Srikandi'); // default fallback
+  assert.strictEqual(result.tingkat_perkembangan, 'Asli'); // default fallback
   assert.strictEqual(result.nomor_surat, '');
   assert.strictEqual(result.uraian_informasi_berkas, 'Surat Tugas Panitia');
 });
@@ -360,7 +360,7 @@ test('parseExistingFileName_ - simple number prefix format single digit', () => 
   const result = parseExistingFileName_('5. Kuitansi Pembayaran.docx');
   assert.strictEqual(result.nomor_item_arsip, '05');
   assert.strictEqual(result.no_berkas, '5');
-  assert.strictEqual(result.tingkat_perkembangan, 'Srikandi');
+  assert.strictEqual(result.tingkat_perkembangan, 'Asli');
   assert.strictEqual(result.nomor_surat, '');
   assert.strictEqual(result.uraian_informasi_berkas, 'Kuitansi Pembayaran');
 });
@@ -369,9 +369,14 @@ test('parseExistingFileName_ - non-numbered format fallback', () => {
   const result = parseExistingFileName_('Dokumen Kegiatan Diklat.pdf');
   assert.strictEqual(result.nomor_item_arsip, '01');
   assert.strictEqual(result.no_berkas, '1');
-  assert.strictEqual(result.tingkat_perkembangan, 'Srikandi');
+  assert.strictEqual(result.tingkat_perkembangan, 'Asli');
   assert.strictEqual(result.nomor_surat, '');
   assert.strictEqual(result.uraian_informasi_berkas, 'Dokumen Kegiatan Diklat');
+});
+
+test('parseExistingFileName_ - legacy Srikandi menjadi Asli', () => {
+  const result = parseExistingFileName_('06. (Srikandi) No: 85/P.3/PDP.07.1_Surat Pemanggilan.pdf');
+  assert.strictEqual(result.tingkat_perkembangan, 'Asli');
 });
 
 // 12. isEmpty_

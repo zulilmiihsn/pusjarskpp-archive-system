@@ -43,17 +43,38 @@ function sanitizeError_(message) {
 }
 
 /**
- * Wrap a GAS-callable action in {success, data|error}.
+ * Determine error code from error message content.
+ * @param {string} msg
+ * @return {string}
+ */
+function getErrorCode_(msg) {
+  const m = String(msg || '').toLowerCase();
+  if (m.indexOf('sesi login') >= 0 || m.indexOf('akses ditolak') >= 0 || m.indexOf('hanya admin') >= 0) return 'AUTH_ERROR';
+  if (m.indexOf('terlalu banyak percobaan') >= 0) return 'RATE_LIMIT_ERROR';
+  if (m.indexOf('wajib diisi') >= 0 || m.indexOf('tidak valid') >= 0 || m.indexOf('harus berupa teks') >= 0) return 'VALIDATION_ERROR';
+  if (m.indexOf('tidak ditemukan') >= 0) return 'NOT_FOUND_ERROR';
+  if (m.indexOf('sedang sibuk') >= 0 || m.indexOf('lock') >= 0) return 'LOCK_ERROR';
+  if (m.indexOf('limit') >= 0 || m.indexOf('quota') >= 0 || m.indexOf('timeout') >= 0) return 'QUOTA_ERROR';
+  return 'INTERNAL_ERROR';
+}
+
+/**
+ * Wrap a GAS-callable action in {success, data|error, errorCode}.
  * Every public API function uses this for uniform error handling.
  * @param {function(): *} action
- * @return {{success: boolean, data?: *, error?: string}}
+ * @return {{success: boolean, data?: *, error?: string, errorCode?: string}}
  */
 function wrapApi(action) {
   try {
     return { success: true, data: action() };
   } catch (error) {
     console.error(error.message);
-    return { success: false, error: sanitizeError_(error.message) };
+    const sanitizedMsg = sanitizeError_(error.message);
+    return { 
+      success: false, 
+      error: sanitizedMsg,
+      errorCode: getErrorCode_(error.message)
+    };
   }
 }
 
@@ -290,6 +311,35 @@ function runArchiveMaintenance() {
   }
 }
 
+/** Endpoint manual (admin) untuk paksa sinkron kolom tipe dokumen. */
+function syncDocumentTypes(payload) {
+  return wrapApi(() => AppController.syncDocumentTypes(payload || {}));
+}
+
+/**
+ * Handler onEdit (installable) pada config spreadsheet. Saat admin menambah/
+ * mengubah baris di sheet `config_document_types`, kolom dokumen di SEMUA
+ * spreadsheet Rekap langsung disinkronkan. Konteks trigger (owner, TANPA sesi).
+ */
+function onConfigDocumentTypesEdit(e) {
+  try {
+    if (!e || !e.range) return;
+    const sheet = e.range.getSheet();
+    if (!sheet || sheet.getName() !== CONFIG_SHEETS.DOCUMENT_TYPES) return;
+
+    // Debounce: rentetan edit (mis. isi banyak sel) cukup memicu satu sweep.
+    const cache = CacheService.getScriptCache();
+    if (cache.get('doctypes_sync_lock')) return;
+    cache.put('doctypes_sync_lock', '1', 8);
+
+    const year = ConfigService.getSettings().currentYear || DEFAULT_YEAR;
+    const r = SettingsController.syncDocumentTypeColumns(year);
+    auditAction_({ displayName: 'Sistem' }, 'DOCTYPES_SYNCED', { year: r.year, message: 'Sinkron otomatis tipe dokumen (onEdit): ' + r.spreadsheetsSynced + ' spreadsheet' });
+  } catch (error) {
+    console.error('onConfigDocumentTypesEdit gagal: ' + error.message);
+  }
+}
+
 function getInactiveSubActivities(payload) {
   return wrapApi(() => AppController.getInactiveSubActivities(payload || {}));
 }
@@ -366,4 +416,15 @@ function convertSubActivityToParent(payload) {
   return wrapApi(() => AppController.convertSubActivityToParent(payload || {}));
 }
 
+function forceResetAdmin() {
+  return wrapApi(() => AppController.forceResetAdmin());
+}
+
+function syncExistingPhysicalFiles(payload) {
+  return wrapApi(() => AppController.syncExistingPhysicalFiles(payload || {}));
+}
+
+function getUserEmail() {
+  return wrapApi(() => AppController.getUserEmail());
+}
 

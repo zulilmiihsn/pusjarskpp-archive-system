@@ -126,7 +126,7 @@
     updateLockUI_(field, newLockState);
 
     if (newLockState === false && _currentEditSub) {
-      showToast('Menghitung nilai default dari detail sheet...');
+      var processToast = showToast('Menghitung nilai default dari detail sheet...');
       try {
         var year = state.bootstrap.settings.currentYear;
         var res = await api('getArchiveMetadataDefaults', {
@@ -149,6 +149,7 @@
           var jEl = document.getElementById('rename-sub-jumlah');
           if (jEl && meta.jumlah) jEl.value = meta.jumlah;
         }
+        removeToast(processToast);
       } catch (e) {
         showToast('Gagal menghitung nilai default: ' + e.message);
       }

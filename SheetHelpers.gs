@@ -7,40 +7,139 @@
  * All functions use the trailing-underscore convention to signal internal use.
  */
 
+// ── Akses tipe dokumen (dinamis dari sheet, memo per-eksekusi) ──
+// GAS membuat scope global baru tiap request, jadi `var` modul = cache 1 request.
+var _docTypesActiveMemo_ = null;
+var _docTypesRemovedMemo_ = null;
+
+function getRekapDocColumns_() {
+  if (_docTypesActiveMemo_) return _docTypesActiveMemo_;
+  try {
+    _docTypesActiveMemo_ = ConfigRepository.getDocumentTypes();
+  } catch (e) {
+    console.warn('getRekapDocColumns_ fallback ke default: ' + e.message);
+    _docTypesActiveMemo_ = null;
+  }
+  if (!_docTypesActiveMemo_ || !_docTypesActiveMemo_.length) _docTypesActiveMemo_ = REKAP_DOC_COLUMNS.slice();
+  return _docTypesActiveMemo_;
+}
+
+function getRemovedRekapDocColumns_() {
+  if (_docTypesRemovedMemo_) return _docTypesRemovedMemo_;
+  try {
+    _docTypesRemovedMemo_ = ConfigRepository.getRemovedDocumentTypes() || [];
+  } catch (e) {
+    console.warn('getRemovedRekapDocColumns_ gagal: ' + e.message);
+    _docTypesRemovedMemo_ = [];
+  }
+  return _docTypesRemovedMemo_;
+}
+
 function resolveRekapDocumentCategory_(categoryName) {
   const normalized = normalizeHeaderKey_(categoryName);
   if (!normalized) return null;
-  if (normalized.indexOf('data fix') >= 0 || normalized.indexOf('peserta') >= 0) return REKAP_DOC_COLUMNS[0];
-  if (normalized.indexOf('materi') >= 0) return REKAP_DOC_COLUMNS[1];
-  if (normalized.indexOf('laporan') >= 0) return REKAP_DOC_COLUMNS[2];
-  if (normalized.indexOf('sertifikat') >= 0) return REKAP_DOC_COLUMNS[3];
+  // Cocokkan terhadap setiap tipe dokumen via alias-nya (substring).
+  // Pakai frasa penuh di `match` agar tidak bentrok antar-tipe
+  // (mis. "Evaluasi Peserta" tidak nyangkut ke "Data Fix Peserta").
+  const docTypes = getRekapDocColumns_();
+  for (let i = 0; i < docTypes.length; i++) {
+    const column = docTypes[i];
+    const aliases = column.match || [];
+    for (let j = 0; j < aliases.length; j++) {
+      if (normalized.indexOf(normalizeHeaderKey_(aliases[j])) >= 0) return column;
+    }
+  }
   return null;
 }
 
 function ensureRekapDocumentColumns_(sheet) {
+  const activeTypes = getRekapDocColumns_();
+  const activeKeys = {};
+  activeTypes.forEach(function (t) { activeKeys[t.key] = true; });
+
+  // 1) Hapus kolom milik tipe yang dinonaktifkan (is_active=FALSE di sheet).
+  //    Cari ulang tiap iterasi karena deleteColumn menggeser indeks.
+  //    GUARD: hanya hapus kolom di AREA DOKUMEN (setelah kolom ringkasan
+  //    terakhir) supaya kolom ringkasan tak ikut terhapus bila ada tipe yang
+  //    namanya kebetulan menyerempet (mis. tipe bernama "Ket").
+  const removedTypes = getRemovedRekapDocColumns_();
+  if (removedTypes.length) {
+    const summaryMap = getRekapHeaderMap_(sheet);
+    let summaryMaxCol = REKAP_FALLBACK_START_COL;
+    Object.keys(REKAP_SUMMARY_COLUMNS).forEach(function (k) {
+      const c = findRekapHeaderColumnFromMap_(summaryMap, REKAP_SUMMARY_COLUMNS[k]);
+      if (c) summaryMaxCol = Math.max(summaryMaxCol, c);
+    });
+    const activeLabelKeys = {};
+    activeTypes.forEach(function (t) { activeLabelKeys[normalizeHeaderKey_(t.label)] = true; });
+    removedTypes.forEach(function (removed) {
+      if (activeKeys[removed.key]) return; // diaktifkan lagi → jangan hapus
+      // Targetkan kolom HANYA via label (cara kolom dibuat), bukan alias —
+      // mencegah alias generik menghapus kolom tipe aktif yang lain.
+      if (activeLabelKeys[normalizeHeaderKey_(removed.label)]) return;
+      const col = findRekapHeaderColumn_(sheet, [removed.label]);
+      if (col && col > summaryMaxCol) sheet.deleteColumn(col);
+    });
+  }
+
+  // 2) Tambah kolom untuk tipe aktif yang belum ada.
   const existingMap = getRekapHeaderMap_(sheet);
   let nextCol = Math.max(findLastRekapHeaderColumn_(sheet) + 1, REKAP_FALLBACK_START_COL + 10);
-  REKAP_DOC_COLUMNS.forEach(function (column) {
+  let addedColsCount = 0;
+  activeTypes.forEach(function (column) {
     if (findRekapHeaderColumnFromMap_(existingMap, column.match)) return;
     sheet.getRange(REKAP_HEADER_ROW, nextCol).setValue(column.label);
     sheet.getRange(REKAP_SUBHEADER_ROW, nextCol).setValue('');
     sheet.getRange(REKAP_NUMBERING_ROW, nextCol).setValue(nextCol - REKAP_FALLBACK_START_COL + 1);
+    
+    // Gabungkan (merge) baris 5 dan 6 secara vertikal
+    sheet.getRange(REKAP_HEADER_ROW, nextCol, 2, 1).merge();
+
     sheet.getRange(REKAP_HEADER_ROW, nextCol, 3, 1)
-      .setBorder(true, true, true, true, true, true)
+      .setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID)
       .setHorizontalAlignment('center')
       .setVerticalAlignment('middle')
-      .setFontFamily('Arial')
+      .setFontFamily('Bookman Old Style')
       .setFontSize(11)
-      .setFontWeight('bold')
-      .setBackground('#bfbfbf')
       .setWrap(true);
+    sheet.getRange(REKAP_HEADER_ROW, nextCol, 2, 1)
+      .setFontWeight('normal')
+      .setBackground('#bfbfbf');
     sheet.getRange(REKAP_NUMBERING_ROW, nextCol)
       .setBackground('#ffffff')
       .setFontSize(7)
-      .setFontWeight('bold');
+      .setFontWeight('normal');
+    
+    sheet.setColumnWidth(nextCol, 90);
+
     existingMap[normalizeHeaderKey_(column.label)] = nextCol;
     nextCol++;
+    addedColsCount++;
   });
+
+  if (addedColsCount > 0) {
+    const startCol = nextCol - addedColsCount;
+    const noteRow = findNoteRow_(sheet);
+    let dataRowsCount = 14;
+    if (noteRow && noteRow > REKAP_DATA_START_ROW) {
+      dataRowsCount = noteRow - REKAP_DATA_START_ROW;
+    }
+    
+    sheet.getRange(REKAP_DATA_START_ROW, startCol, dataRowsCount, addedColsCount)
+      .setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID)
+      .setFontFamily('Bookman Old Style')
+      .setFontSize(11)
+      .setVerticalAlignment('middle')
+      .setWrap(true);
+  }
+
+  // 3) Perluas merger title (baris 1) supaya tetap rata tengah ke seluruh tabel
+  const finalLastCol = findLastRekapHeaderColumn_(sheet);
+  if (finalLastCol >= REKAP_FALLBACK_START_COL) {
+    const titleRange = sheet.getRange(1, REKAP_FALLBACK_START_COL, 1, finalLastCol - REKAP_FALLBACK_START_COL + 1);
+    titleRange.breakApart();
+    titleRange.mergeAcross();
+  }
 }
 
 /**
@@ -142,12 +241,12 @@ function buildRekapSummary_(ss, activity, subActivity, metadata) {
   return {
     nomorBerkas: subActivity.sort_order || '',
     kodeKlasifikasi: subActivity.default_kode_klasifikasi || '',
-    uraian: getSubActivityFormalName_(subActivity) || metadata.uraian_informasi_berkas || '',
+    uraian: getSubActivityFormalName_(subActivity) || metadata.uraian_informasi_item || '',
     kurunWaktu: formatDateRange_(startDate, endDate),
-    jumlah: detailSummary.count ? detailSummary.count + ' dokumen' : '',
-    filingCabinet: metadata.no_filing_cabinet || ConfigService.getSettings().defaultFilingCabinet || '02',
+    jumlah: detailSummary.sumLembar ? detailSummary.sumLembar + ' lembar' : '',
+    filingCabinet: metadata.no_filing_cabinet || '02',
     noLaci: metadata.no_laci || activity.laci_no || '',
-    noFolder: metadata.no_folder || subActivity.no_folder || activity.folder_no || '',
+    noFolder: subActivity.sort_order || '',
     akses: detailSummary.akses || metadata.klasifikasi_akses || 'Terbatas',
     ket: metadata.ket || ''
   };
@@ -182,7 +281,7 @@ function writeRekapIdentity_(sheet, rowIndex, activity, subActivity) {
     uraian: getSubActivityFormalName_(subActivity),
     filingCabinet: '02',
     noLaci: activity && activity.laci_no ? activity.laci_no : '',
-    noFolder: noFolder,
+    noFolder: subActivity.sort_order || '',
     akses: 'Terbatas'
   };
 
@@ -216,14 +315,22 @@ function getSubActivityFormalName_(subActivity) {
 function summarizeDetailSheet_(sheet, subActivity) {
   const data = getDetailDataValues_(sheet);
   if (!data) {
-    return { count: 0, startDate: null, endDate: null, filingCabinet: '', noLaci: '', noFolder: '', akses: '', lastRow: null };
+    return { sumLembar: 0, startDate: null, endDate: null, filingCabinet: '', noLaci: '', noFolder: '', akses: '', lastRow: null };
   }
 
   const values = data.values;
   const columnMap = data.columnMap;
+  const dateCol = columnMap.tanggal || (DETAIL_FALLBACK_START_COL + 4);
+  const jumlahCol = columnMap.jumlah || (DETAIL_FALLBACK_START_COL + 6);
 
+  let sumLembar = 0;
+  let startDate = null;
+  let endDate = null;
   let lastRow = null;
+  const aksesByKey = {};
 
+  // SATU lintasan untuk semua agregat — objek metadata per baris dibangun
+  // sekali saja (sebelumnya 4x). Hemat & lebih mudah dibaca.
   values.forEach(function (row) {
     const metadata = {};
     DETAIL_FIELD_ORDER.forEach(function (field, fallbackIndex) {
@@ -231,19 +338,49 @@ function summarizeDetailSheet_(sheet, subActivity) {
       const val = row[col - 1];
       metadata[field] = (val === null || val === undefined) ? '' : String(val).trim();
     });
+
+    // Jumlah (lembar): predikat identik dgn SUMIFS (lihat buildJumlahFormula_),
+    // pakai nilai mentah sel agar semantik angka sama persis.
+    if (isLembarCountableRow_(metadata)) {
+      const raw = row[jumlahCol - 1];
+      const n = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/[^0-9.\-]/g, ''));
+      if (!isNaN(n)) sumLembar += n;
+    }
+
+    // Agregat lain pakai predikat "baris bermakna".
     if (!hasMeaningfulDetailData_(metadata)) return;
     lastRow = metadata;
+
+    const dateValue = parseDateCell_(row[dateCol - 1]);
+    if (dateValue) {
+      if (!startDate || dateValue.getTime() < startDate.getTime()) startDate = dateValue;
+      if (!endDate || dateValue.getTime() > endDate.getTime()) endDate = dateValue;
+    }
+
+    const akses = normalizeAccessSummaryValue_(metadata.klasifikasi_akses);
+    if (akses) aksesByKey[normalizeLooseLabel_(akses)] = akses;
   });
 
-  const dateRange = calculateDetailKurunWaktuDatesFromValues_(values, columnMap);
-
   return {
-    count: calculateDetailJumlahFromValues_(values, columnMap),
-    startDate: dateRange.startDate,
-    endDate: dateRange.endDate,
-    akses: calculateDetailAksesFromValues_(values, columnMap),
+    sumLembar: sumLembar,
+    startDate: startDate,
+    endDate: endDate,
+    akses: formatAccessSummary_(aksesByKey),
     lastRow: lastRow
   };
+}
+
+// Predikat baris yang dihitung untuk kolom Jumlah Rekap. SENGAJA dibuat
+// identik dengan penjaga SUMIFS di buildJumlahFormula_ (nomor item terisi &
+// bukan baris catatan) supaya mode gembok-tertutup (formula live) dan
+// gembok-terbuka (snapshot JS) SELALU menghasilkan angka yang sama.
+function isLembarCountableRow_(metadata) {
+  const item = String(metadata.nomor_item_arsip || '').trim();
+  if (!item) return false;
+  const noteRe = /^(keterangan|kolom)/i;
+  if (noteRe.test(item)) return false;
+  if (noteRe.test(String(metadata.no_berkas || '').trim())) return false;
+  return true;
 }
 
 function getDetailDataValues_(sheet) {
@@ -254,57 +391,6 @@ function getDetailDataValues_(sheet) {
   const rowCount = noteRow - DETAIL_DATA_START_ROW;
   const values = sheet.getRange(DETAIL_DATA_START_ROW, 1, rowCount, width).getValues();
   return { values: values, columnMap: columnMap };
-}
-
-function calculateDetailJumlahFromValues_(values, columnMap) {
-  let count = 0;
-  values.forEach(function (row) {
-    const metadata = {};
-    DETAIL_FIELD_ORDER.forEach(function (field, fallbackIndex) {
-      const col = columnMap[field] || (DETAIL_FALLBACK_START_COL + fallbackIndex);
-      const val = row[col - 1];
-      metadata[field] = (val === null || val === undefined) ? '' : String(val).trim();
-    });
-    if (hasMeaningfulDetailData_(metadata)) count++;
-  });
-  return count;
-}
-
-function calculateDetailKurunWaktuDatesFromValues_(values, columnMap) {
-  let startDate = null;
-  let endDate = null;
-  values.forEach(function (row) {
-    const metadata = {};
-    DETAIL_FIELD_ORDER.forEach(function (field, fallbackIndex) {
-      const col = columnMap[field] || (DETAIL_FALLBACK_START_COL + fallbackIndex);
-      const val = row[col - 1];
-      metadata[field] = (val === null || val === undefined) ? '' : String(val).trim();
-    });
-    if (!hasMeaningfulDetailData_(metadata)) return;
-    const dateCol = columnMap.tanggal || (DETAIL_FALLBACK_START_COL + 4);
-    const dateValue = parseDateCell_(row[dateCol - 1]);
-    if (dateValue) {
-      if (!startDate || dateValue.getTime() < startDate.getTime()) startDate = dateValue;
-      if (!endDate || dateValue.getTime() > endDate.getTime()) endDate = dateValue;
-    }
-  });
-  return { startDate: startDate, endDate: endDate };
-}
-
-function calculateDetailAksesFromValues_(values, columnMap) {
-  const aksesByKey = {};
-  values.forEach(function (row) {
-    const metadata = {};
-    DETAIL_FIELD_ORDER.forEach(function (field, fallbackIndex) {
-      const col = columnMap[field] || (DETAIL_FALLBACK_START_COL + fallbackIndex);
-      const val = row[col - 1];
-      metadata[field] = (val === null || val === undefined) ? '' : String(val).trim();
-    });
-    if (!hasMeaningfulDetailData_(metadata)) return;
-    const akses = normalizeAccessSummaryValue_(metadata.klasifikasi_akses);
-    if (akses) aksesByKey[normalizeLooseLabel_(akses)] = akses;
-  });
-  return formatAccessSummary_(aksesByKey);
 }
 
 function normalizeAccessSummaryValue_(value) {
@@ -505,7 +591,7 @@ function formatBasicDetailSheet_(sheet, activity, subActivity) {
   sheet.getRange('B6:B7').merge().setValue('No\nBerkas');
   sheet.getRange('C6:C7').merge().setValue('Nomor Item\nArsip');
   sheet.getRange('D6:D7').merge().setValue('Kode\nKlasifikasi');
-  sheet.getRange('E6:E7').merge().setValue('Uraian informasi Berkas');
+  sheet.getRange('E6:E7').merge().setValue('Uraian Informasi Item');
   sheet.getRange('F6:F7').merge().setValue('Tgl');
   sheet.getRange('G6:G7').merge().setValue('Tingkat\nPengembangan');
   sheet.getRange('H6:I6').merge().setValue('Jumlah');
@@ -651,7 +737,7 @@ function getDetailColumnMap_(sheet, width) {
     no_berkas: ['no berkas'],
     nomor_item_arsip: ['nomor item arsip'],
     kode_klasifikasi: ['kode klasifikasi'],
-    uraian_informasi_berkas: ['uraian informasi berkas', 'uraian informasi arsip', 'uraian informasi'],
+    uraian_informasi_item: ['uraian informasi item', 'uraian informasi berkas', 'uraian informasi arsip', 'uraian informasi'],
     tanggal: ['tgl', 'tanggal'],
     tingkat_perkembangan: ['tingkat perkembangan', 'tingkat pengembangan'],
     jumlah: ['jumlah'],
@@ -695,7 +781,7 @@ function hasMeaningfulDetailData_(metadata) {
   return !!(
     metadata.nomor_item_arsip ||
     metadata.kode_klasifikasi ||
-    metadata.uraian_informasi_berkas ||
+    metadata.uraian_informasi_item ||
     metadata.tanggal ||
     metadata.jumlah ||
     metadata.lokasi_simpan
@@ -819,14 +905,18 @@ function buildKurunWaktuFormula_(detailSheet) {
 
 function buildJumlahFormula_(detailSheet) {
   const ref = detailSheetFormulaRef_(detailSheet);
-  const colLetter = getDetailColumnLetter_(detailSheet, 'nomor_item_arsip', 'C');
+  // Jumlah = SUM kolom "jumlah" (lembar) tiap dokumen, bukan hitungan baris.
+  // Pakai SUMIFS dgn penjaga yg sama (item terisi & bukan baris catatan).
+  const jumlahLetter = getDetailColumnLetter_(detailSheet, 'jumlah', 'H');
+  const itemLetter = getDetailColumnLetter_(detailSheet, 'nomor_item_arsip', 'C');
   const bLetter = getDetailColumnLetter_(detailSheet, 'no_berkas', 'B');
-  const rangeRef = ref + '!' + colLetter + '9:' + colLetter;
+  const sumRange = ref + '!' + jumlahLetter + '9:' + jumlahLetter;
+  const itemRange = ref + '!' + itemLetter + '9:' + itemLetter;
   const bRange = ref + '!' + bLetter + '9:' + bLetter;
   const s = formulaSep_(detailSheet.getParent());
-  return "=COUNTIFS(" + rangeRef + s + " \"<>\"" + s + " " +
+  return "=SUMIFS(" + sumRange + s + " " + itemRange + s + " \"<>\"" + s + " " +
          bRange + s + " \"<>Keterangan*\"" + s + " " + bRange + s + " \"<>Kolom*\"" + s + " " +
-         rangeRef + s + " \"<>Keterangan*\"" + s + " " + rangeRef + s + " \"<>Kolom*\") & \" dokumen\"";
+         itemRange + s + " \"<>Keterangan*\"" + s + " " + itemRange + s + " \"<>Kolom*\") & \" lembar\"";
 }
 
 function buildAksesFormula_(detailSheet) {

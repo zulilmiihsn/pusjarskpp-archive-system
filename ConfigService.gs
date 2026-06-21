@@ -32,8 +32,7 @@ const ConfigService = {
       referenceRootFolderId: props.getProperty(PROP_KEYS.REFERENCE_ROOT_FOLDER_ID) || '',
       systemFolderParentId: props.getProperty(PROP_KEYS.SYSTEM_FOLDER_PARENT_ID) || '',
       systemFolderName: props.getProperty(PROP_KEYS.SYSTEM_FOLDER_NAME) || '00. Sistem Portal',
-      configFolderId: props.getProperty(PROP_KEYS.CONFIG_FOLDER_ID) || '',
-      defaultFilingCabinet: props.getProperty(PROP_KEYS.DEFAULT_FILING_CABINET) || '02'
+      configFolderId: props.getProperty(PROP_KEYS.CONFIG_FOLDER_ID) || ''
     };
   },
 
@@ -59,9 +58,6 @@ const ConfigService = {
     }
     if (payload.configFolderId !== undefined) {
       props.setProperty(PROP_KEYS.CONFIG_FOLDER_ID, cleanId_(payload.configFolderId));
-    }
-    if (payload.defaultFilingCabinet !== undefined) {
-      props.setProperty(PROP_KEYS.DEFAULT_FILING_CABINET, String(payload.defaultFilingCabinet).padStart(2, '0'));
     }
     return this.getSettings();
   },
@@ -90,14 +86,14 @@ const ConfigService = {
             updated_at: new Date().toISOString()
           };
           if (payload.passwordHash) {
-            updates.password_hash = hashPasswordV1_(payload.passwordHash, payload.username);
+            updates.password_hash = hashPasswordV2_(payload.passwordHash, payload.username);
           }
           updateConfigRow_(sheet, rowIndex, updates);
           return objectFromHeaders_(getHeaders_(sheet), sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getDisplayValues()[0]);
         }
       }
       const accountId = payload.accountId || Utilities.getUuid();
-      sheet.appendRow([accountId, payload.username || '', payload.passwordHash ? hashPasswordV1_(payload.passwordHash, payload.username) : '', payload.role || 'user', payload.displayName || '', 'TRUE', new Date().toISOString(), new Date().toISOString()]);
+      sheet.appendRow([accountId, payload.username || '', payload.passwordHash ? hashPasswordV2_(payload.passwordHash, payload.username) : '', payload.role || 'user', payload.displayName || '', 'TRUE', new Date().toISOString(), new Date().toISOString()]);
       return { account_id: accountId };
     });
   },

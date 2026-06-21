@@ -63,9 +63,9 @@
       const extMatch = String(sourceName || '').match(/\.[a-z0-9]+$/i);
       const ext = extMatch ? extMatch[0].toLowerCase() : '.pdf';
       const item = String(metadata.nomor_item_arsip || '01').padStart(2, '0');
-      const tingkat = metadata.tingkat_perkembangan || 'Srikandi';
+      const tingkat = metadata.tingkat_perkembangan || 'Asli';
       const nomor = metadata.nomor_surat || '';
-      const uraian = sanitizeFilePart(metadata.uraian_informasi_berkas || 'Dokumen Surat');
+      const uraian = sanitizeFilePart(metadata.uraian_informasi_item || 'Dokumen Surat');
 
       if (nomor) {
         return item + '. (' + tingkat + ') No: ' + nomor + '_' + uraian + ext;

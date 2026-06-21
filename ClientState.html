@@ -24,16 +24,31 @@
   }
 
   function getCachedView(viewName, params) {
-    return viewCache[cacheKey(viewName, params)] || null;
+    const key = cacheKey(viewName, params);
+    if (viewCache[key]) return viewCache[key];
+    try {
+      const stored = sessionStorage.getItem('pa_cache_' + key);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        viewCache[key] = parsed;
+        return parsed;
+      }
+    } catch (e) {}
+    return null;
   }
 
   function setCachedView(viewName, params, data, version) {
-    viewCache[cacheKey(viewName, params)] = {
+    const key = cacheKey(viewName, params);
+    const entry = {
       data: data,
       version: version,
       params: params || null,
       ts: Date.now()
     };
+    viewCache[key] = entry;
+    try {
+      sessionStorage.setItem('pa_cache_' + key, JSON.stringify(entry));
+    } catch (e) {}
     trimViewCache(VIEW_CACHE_MAX_ENTRIES);
   }
 
@@ -80,12 +95,18 @@
 
   function invalidateViewCache(viewName) {
     if (!viewName) {
-      for (const k of Object.keys(viewCache)) delete viewCache[k];
+      for (const k of Object.keys(viewCache)) {
+        delete viewCache[k];
+        try { sessionStorage.removeItem('pa_cache_' + k); } catch (e) {}
+      }
       return;
     }
     const prefix = viewName + ':';
     for (const k of Object.keys(viewCache)) {
-      if (k === viewName || k.indexOf(prefix) === 0) delete viewCache[k];
+      if (k === viewName || k.indexOf(prefix) === 0) {
+        delete viewCache[k];
+        try { sessionStorage.removeItem('pa_cache_' + k); } catch (e) {}
+      }
     }
   }
 
@@ -127,8 +148,11 @@
     no_berkas: 'Nomor Berkas',
     nomor_item_arsip: 'Nomor Item Arsip',
     nomor_surat: 'Nomor Surat',
-    kode_klasifikasi: 'Kode Klasifikasi',
-    uraian_informasi_berkas: 'Uraian Informasi Berkas',
+    perihal: 'Perihal',
+    kepada: 'Kepada',
+    dari: 'Dari',
+    kode_klasifikasi: 'Kode Klasifikasi (Jika Surat Keluar)',
+    uraian_informasi_item: 'Uraian Informasi Item',
     tanggal: 'Tanggal',
     tingkat_perkembangan: 'Tingkat Perkembangan',
     jumlah: 'Jumlah',
@@ -142,7 +166,7 @@
   };
 
   const SELECT_OPTIONS = {
-    tingkat_perkembangan: ['Srikandi', 'Asli', 'Salinan', 'Cetak'],
+    tingkat_perkembangan: ['Asli', 'Salinan'],
     klasifikasi_akses: ['Biasa', 'Terbatas', 'Rahasia'],
     satuan: ['Lembar', 'Dokumen', 'Berkas', 'Paket']
   };

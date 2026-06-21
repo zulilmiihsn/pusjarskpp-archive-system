@@ -253,17 +253,17 @@ const ArchiveController = {
     const existingPairs = SpreadsheetService.listExistingItemUraianPairs(activity, subActivity);
     const rawIncomingItem = String(payload.metadata.nomor_item_arsip || '').trim();
     const incomingItemNumber = rawIncomingItem ? rawIncomingItem.replace(/^0+/, '').padStart(2, '0') : '';
-    const incomingUraian = String(payload.metadata.uraian_informasi_berkas || '').trim().toLowerCase();
+    const incomingUraian = String(payload.metadata.uraian_informasi_item || '').trim().toLowerCase();
 
     existingPairs.forEach(function(pair) {
       if (currentRowNumber && pair.rowNumber === currentRowNumber) return;
 
       var existingItem = String(pair.nomor_item_arsip || '').trim();
       var existingItemNumber = existingItem ? existingItem.replace(/^0+/, '').padStart(2, '0') : '';
-      var existingUraian = String(pair.uraian_informasi_berkas || '').trim().toLowerCase();
+      var existingUraian = String(pair.uraian_informasi_item || '').trim().toLowerCase();
 
       if (incomingUraian && existingUraian === incomingUraian) {
-        throw new Error('Uraian informasi berkas "' + payload.metadata.uraian_informasi_berkas + '" sudah ada. Harap gunakan uraian yang berbeda.');
+        throw new Error('Uraian informasi item "' + payload.metadata.uraian_informasi_item + '" sudah ada. Harap gunakan uraian yang berbeda.');
       }
 
       if (incomingItemNumber && existingItemNumber === incomingItemNumber) {
@@ -468,12 +468,12 @@ const ArchiveController = {
       });
     }
 
-    var incomingUraian = String(payload.uraian_informasi_berkas || '').trim().toLowerCase();
+    var incomingUraian = String(payload.uraian_informasi_item || '').trim().toLowerCase();
     if (incomingUraian) {
       existingData.rows.forEach(function (row) {
-        var existingUraian = String(row.metadata.uraian_informasi_berkas || '').trim().toLowerCase();
+        var existingUraian = String(row.metadata.uraian_informasi_item || '').trim().toLowerCase();
         if (existingUraian === incomingUraian) {
-          errors.push({ field: 'uraian_informasi_berkas', message: 'Uraian informasi berkas "' + payload.uraian_informasi_berkas + '" sudah ada.' });
+          errors.push({ field: 'uraian_informasi_item', message: 'Uraian informasi item "' + payload.uraian_informasi_item + '" sudah ada.' });
         }
       });
     }
@@ -580,32 +580,51 @@ const ArchiveController = {
     const rootFolder = DriveApp.getFolderById(yearConfig.root_folder_id);
     const systemFolder = DriveService.resolveSystemFolder(settings, rootFolder);
 
-    const inbox = yearConfig.inbox_folder_id
-      ? DriveApp.getFolderById(cleanId_(yearConfig.inbox_folder_id))
-      : DriveService.getOrCreateChildFolder(systemFolder, 'Inbox Dokumen Masuk');
+    const inboxId = yearConfig.inbox_folder_id
+      ? cleanId_(yearConfig.inbox_folder_id)
+      : DriveService.getOrCreateChildFolder(systemFolder, 'Inbox Dokumen Masuk').getId();
 
     const list = [];
 
-    function traverse(folder) {
-      const files = folder.getFiles();
-      while (files.hasNext()) {
-        let file = files.next();
-        if (!file.isTrashed()) {
-          list.push({
-            id: file.getId(), name: file.getName(), url: file.getUrl(),
-            downloadUrl: DriveService.getDownloadUrl(file.getId(), file.getMimeType()),
-            mimeType: file.getMimeType(), size: file.getSize(),
-            created: file.getDateCreated().getTime()
+    function traverse(folderId) {
+      let pageToken = null;
+      do {
+        let result;
+        try {
+          result = Drive.Files.list({
+            q: "'" + folderId + "' in parents and trashed = false",
+            fields: "nextPageToken, files(id, name, webViewLink, mimeType, size, createdTime)",
+            pageSize: 1000,
+            pageToken: pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true
           });
+        } catch (e) {
+          break;
         }
-      }
-      const subfolders = folder.getFolders();
-      while (subfolders.hasNext()) {
-        traverse(subfolders.next());
-      }
+
+        const items = result.files || [];
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item.mimeType === 'application/vnd.google-apps.folder') {
+            traverse(item.id);
+          } else {
+            list.push({
+              id: item.id, 
+              name: item.name, 
+              url: item.webViewLink,
+              downloadUrl: DriveService.getDownloadUrl(item.id, item.mimeType),
+              mimeType: item.mimeType, 
+              size: item.size || 0,
+              created: new Date(item.createdTime).getTime()
+            });
+          }
+        }
+        pageToken = result.nextPageToken;
+      } while (pageToken);
     }
 
-    traverse(inbox);
+    traverse(inboxId);
     list.sort(function (a, b) { return b.created - a.created; });
     return list;
   },
@@ -652,51 +671,9 @@ const ArchiveController = {
     }
 
     if (!text || text.length < 100) {
-      try {
-        // Method 2: OCR conversion to Google Doc via create (v3 requirement for conversion)
-        var blob = DriveApp.getFileById(file.getId()).getBlob();
-        var resource = { 
-          name: fileName + ' (Temp OCR)',
-          mimeType: 'application/vnd.google-apps.document' 
-        };
-        var copy = Drive.Files.create(resource, blob, { ocrLanguage: 'id', supportsAllDrives: true });
-        tempDocId = copy.id;
-        
-        // Export doc to plain text via UrlFetchApp to bypass GAS Advanced Service JSON parsing issue
-        var url = 'https://www.googleapis.com/drive/v3/files/' + tempDocId + '/export?mimeType=text/plain';
-        var response = UrlFetchApp.fetch(url, {
-          method: 'get',
-          headers: {
-            Authorization: 'Bearer ' + ScriptApp.getOAuthToken()
-          },
-          muteHttpExceptions: true
-        });
-        
-        if (response.getResponseCode() === 200) {
-          var ocrText = response.getContentText();
-          if (ocrText && ocrText.length > text.length) {
-            text = ocrText;
-            extractionMethods.push('ocr_gdoc');
-          }
-          // Fallback page count calculation if Drive API didn't provide it
-          if (!pageCount || pageCount <= 0) {
-            var ffPages = ocrText ? ocrText.split('\f').filter(function(page) {
-              return page.trim().length > 0;
-            }).length : 0;
-            if (ffPages > 0) {
-              pageCount = ffPages;
-            } else {
-              var paragraphs = ocrText.split(/\r?\n/).length;
-              pageCount = Math.max(1, Math.round(paragraphs / 30));
-            }
-          }
-        } else {
-          throw new Error('Export failed with code ' + response.getResponseCode() + ': ' + response.getContentText());
-        }
-      } catch (e) {
-        console.warn('Method 2 failed: ' + e.message);
-        extractionErrors.push('Method 2: ' + e.message);
-      }
+      // Method 2: OCR via Drive.Files.create has been moved to OcrBackgroundJob
+      // to prevent UI freezing. The background job will fill missing data later.
+      extractionMethods.push('ocr_deferred');
     }
 
     // Method 3 removed because it unsafely calls getDataAsString on binary files like PDFs
@@ -746,7 +723,7 @@ const ArchiveController = {
       structure: engineResult.structure,
       documentType: engineResult.documentType,
       fieldsFound: Object.keys(fields),
-      fieldsMissing: ['nomor_surat','kode_klasifikasi','tanggal','uraian_informasi_berkas','klasifikasi_akses','pengirim','penerima','tanda_tangan','lampiran']
+      fieldsMissing: ['nomor_surat','kode_klasifikasi','tanggal','uraian_informasi_item','klasifikasi_akses','pengirim','penerima','tanda_tangan','lampiran']
         .filter(function(k) { return !fields[k]; })
     };
     console.log('ParseEngine debug:', JSON.stringify(debugInfo, null, 2));
@@ -830,10 +807,10 @@ function _adoptRow_(row, listing, activity, subActivity, result, activityResult,
     return;
   }
 
-  const finalFileName = row.metadata.lokasi_simpan || row.metadata.uraian_informasi_berkas || '';
+  const finalFileName = row.metadata.lokasi_simpan || row.metadata.uraian_informasi_item || row.metadata.uraian_informasi_item || '';
   const finalFileMatch = lookupArchiveFile_(fileIndex, finalFileName);
   const finalFile = finalFileMatch ? finalFileMatch.file : null;
-  const targetFolderInfo = finalFileMatch ? getArchiveTargetFolderInfo_(finalFileMatch.folder) : null;
+  const targetFolderInfo = finalFileMatch ? finalFileMatch.folderInfo : null;
   if (!finalFile && finalFileName) {
     result.missingFileMatches++;
     activityResult.missingFileMatches++;
@@ -887,31 +864,57 @@ function _adoptRow_(row, listing, activity, subActivity, result, activityResult,
 function buildArchiveFileIndex_(folderId) {
   const index = { exact: {}, normalized: {} };
   if (!folderId) return index;
-  let root = null;
-  try { root = DriveApp.getFolderById(cleanId_(folderId)); } catch (error) {
-    console.warn('buildArchiveFileIndex_: ' + error.message);
-    return index;
-  }
-  const stack = [{ folder: root, depth: 0 }];
+
+  let rootName = 'Unknown';
+  try {
+    const meta = Drive.Files.get(cleanId_(folderId), {fields: 'name', supportsAllDrives: true});
+    rootName = meta.name;
+  } catch (e) {}
+
+  const stack = [{ id: cleanId_(folderId), name: rootName, path: rootName, depth: 0 }];
+  
   while (stack.length) {
     const cur = stack.pop();
-    if (!cur.folder || cur.depth > 6) continue;
-    const files = cur.folder.getFiles();
-    while (files.hasNext()) {
-      const file = files.next();
-      if (file.isTrashed()) continue;
-      const name = file.getName();
-      const entry = { file: file, folder: cur.folder };
-      if (!(name in index.exact)) index.exact[name] = entry;          // exact match diutamakan
-      const norm = normalizeFileLookupName_(name);
-      if (norm && !(norm in index.normalized)) index.normalized[norm] = entry;
-    }
-    const childFolders = cur.folder.getFolders();
-    while (childFolders.hasNext()) {
-      const child = childFolders.next();
-      if (child.isTrashed && child.isTrashed()) continue;
-      stack.push({ folder: child, depth: cur.depth + 1 });
-    }
+    if (cur.depth > 6) continue;
+
+    let pageToken = null;
+    do {
+      let result;
+      try {
+        result = Drive.Files.list({
+          q: "'" + cur.id + "' in parents and trashed = false",
+          fields: "nextPageToken, files(id, name, mimeType)",
+          pageSize: 1000,
+          pageToken: pageToken,
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true
+        });
+      } catch (e) {
+        break;
+      }
+      
+      const items = result.files || [];
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.mimeType === 'application/vnd.google-apps.folder') {
+          stack.push({
+            id: item.id,
+            name: item.name,
+            path: cur.path + ' > ' + item.name,
+            depth: cur.depth + 1
+          });
+        } else {
+          const entry = { 
+            file: { getId: () => item.id, getName: () => item.name }, 
+            folderInfo: { id: cur.id, name: cur.name, path: cur.path } 
+          };
+          if (!(item.name in index.exact)) index.exact[item.name] = entry;
+          const norm = normalizeFileLookupName_(item.name);
+          if (norm && !(norm in index.normalized)) index.normalized[norm] = entry;
+        }
+      }
+      pageToken = result.nextPageToken;
+    } while (pageToken);
   }
   return index;
 }

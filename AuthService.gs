@@ -91,6 +91,7 @@ const AuthService = {
 
       if (verifyPassword_(payload.password, row[idx.username], String(row[idx.password] || ''))) {
         found = {
+          rowIndex: i,
           accountId: row[idx.id] || '',
           username: row[idx.username],
           role: idx.role >= 0 ? (row[idx.role] || 'user') : 'user',
@@ -203,8 +204,23 @@ const AuthService = {
     }
 
     const password = generatePassword_();
-    const hash = hashPasswordV1_(password, 'admin');
+    const hash = hashPasswordV2_(password, 'admin');
     sheet.appendRow([Utilities.getUuid(), 'admin', hash, 'admin', 'Administrator', 'TRUE', new Date().toISOString(), new Date().toISOString()]);
+    
+    // Auto-login the new admin so subsequent sync operations don't fail
+    const sessionId = Utilities.getUuid();
+    const now = new Date();
+    const session = {
+      sessionId: sessionId,
+      accountId: 'admin',
+      username: 'admin',
+      role: 'admin',
+      displayName: 'Administrator',
+      loggedInAt: now.toISOString(),
+      expiresAt: now.getTime() + SESSION_TTL_MS
+    };
+    PropertiesService.getScriptProperties().setProperty('sess_' + sessionId, JSON.stringify(session));
+
     try {
       ConfigRepository.appendAdminAudit({
         created_at: new Date().toISOString(),
@@ -214,7 +230,7 @@ const AuthService = {
         message: 'Membuat akun admin default'
       });
     } catch (e) { console.error('audit ADMIN_INITIALIZED gagal: ' + e.message); }
-    return { created: true, defaultPassword: password };
+    return { created: true, defaultPassword: password, sessionId: sessionId };
   },
 
   getUserEmail: function () {

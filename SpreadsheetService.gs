@@ -15,6 +15,12 @@ function buildDetailRowValues_(metadata) {
     if (key === 'lokasi_simpan' && metadata._lokasi_simpan_url) {
       return sanitizeCellValue_(metadata._lokasi_simpan_url);
     }
+    if (key === 'no_filing_cabinet' && metadata._no_filing_cabinet_path) {
+      return sanitizeCellValue_(metadata._no_filing_cabinet_path);
+    }
+    if (key === 'no_filing_cabinet' && !metadata._no_filing_cabinet_path && metadata.no_filing_cabinet !== '02') {
+      return ''; // Jika bukan '02' tapi ga ada path, kosongin aja drpd nulis ID folder
+    }
     if (key === 'jumlah_satuan') {
       return sanitizeCellValue_(metadata.satuan || metadata.jumlah_satuan || '');
     }
@@ -76,19 +82,70 @@ const SpreadsheetService = {
     const rowValues = buildDetailRowValues_(metadata);
     const startCol = getDetailStartColumn_(sheet);
 
-    sheet.getRange(rowIndex, startCol, 1, rowValues.length).setValues([rowValues]);
-    sheet.getRange(rowIndex, startCol + DETAIL_ITEM_NUMBER_OFFSET, 1, 1).setNumberFormat('00');
+    const rowData = { values: [] };
+    for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
+      const fieldName = DETAIL_FIELD_ORDER[c];
+      const val = rowValues[c] || '';
+      const cellData = {
+        userEnteredValue: { stringValue: String(val) },
+        userEnteredFormat: {
+          wrapStrategy: 'WRAP',
+          verticalAlignment: 'MIDDLE',
+          borders: {
+            top: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+            bottom: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+            left: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+            right: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } }
+          }
+        }
+      };
 
-    const lokasiSimpanIdx = DETAIL_FIELD_ORDER.indexOf('lokasi_simpan');
-    if (lokasiSimpanIdx >= 0 && metadata._lokasi_simpan_url && SpreadsheetApp.newRichTextValue) {
-      const cell = sheet.getRange(rowIndex, startCol + lokasiSimpanIdx);
-      const url = metadata._lokasi_simpan_url;
+      if (fieldName === 'item_number') {
+         cellData.userEnteredFormat.numberFormat = { type: 'TEXT' };
+         if (val && String(val).length < 2) {
+           cellData.userEnteredValue.stringValue = ('00' + val).slice(-2);
+         }
+      }
+
+      if (fieldName === 'lokasi_simpan' && metadata._lokasi_simpan_url) {
+         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._lokasi_simpan_url } };
+      }
+
+      if (fieldName === 'no_filing_cabinet' && metadata._no_filing_cabinet_url) {
+         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_filing_cabinet_url } };
+      }
+
+      rowData.values.push(cellData);
+    }
+
+    const request = {
+      updateCells: {
+        rows: [rowData],
+        fields: "userEnteredValue,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.borders,userEnteredFormat.numberFormat,userEnteredFormat.textFormat",
+        range: {
+          sheetId: sheet.getSheetId(),
+          startRowIndex: rowIndex - 1,
+          endRowIndex: rowIndex,
+          startColumnIndex: startCol - 1,
+          endColumnIndex: startCol - 1 + DETAIL_FIELD_ORDER.length
+        }
+      }
+    };
+
+    Sheets.Spreadsheets.batchUpdate({ requests: [request] }, ss.getId());
+    
+    const fcIdx = DETAIL_FIELD_ORDER.indexOf('no_filing_cabinet');
+    if (fcIdx >= 0 && metadata._no_filing_cabinet_url && metadata._no_filing_cabinet_path && SpreadsheetApp.newRichTextValue) {
+      const cell = sheet.getRange(rowIndex, startCol + fcIdx);
+      const url = metadata._no_filing_cabinet_url;
+      const pathText = metadata._no_filing_cabinet_path;
       const richText = SpreadsheetApp.newRichTextValue()
-        .setText(url)
+        .setText(pathText)
         .setLinkUrl(url)
         .build();
       cell.setRichTextValue(richText);
     }
+
     sheet.getRange(rowIndex, startCol, 1, rowValues.length)
       .setBorder(true, true, true, true, true, true)
       .setWrap(true)
@@ -115,34 +172,96 @@ const SpreadsheetService = {
     if (!metadataList || metadataList.length === 0) return [];
     const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = ensureDetailSheet_(ss, activity, subActivity);
-    const rowIndex = findWritableDetailRow_(sheet);
     const startCol = getDetailStartColumn_(sheet);
+    const checkCol = startCol + DETAIL_WRITABLE_CHECK_OFFSET;
+    
+    let noteRow = findNoteRow_(sheet) || sheet.getLastRow() + 1;
+    let lastFilledRow = DETAIL_DATA_START_ROW - 1;
+    
+    const numCheckRows = noteRow - DETAIL_DATA_START_ROW;
+    if (numCheckRows > 0) {
+       const checkValues = sheet.getRange(DETAIL_DATA_START_ROW, checkCol, numCheckRows, 1).getValues();
+       for (let i = numCheckRows - 1; i >= 0; i--) {
+          if (String(checkValues[i][0]).trim() !== '') {
+             lastFilledRow = DETAIL_DATA_START_ROW + i;
+             break;
+          }
+       }
+    }
+    
+    const rowIndex = lastFilledRow + 1;
+    const blanksAvailable = noteRow - rowIndex;
+    const numRows = metadataList.length;
+    
+    if (blanksAvailable < numRows) {
+       sheet.insertRowsBefore(noteRow, numRows - blanksAvailable);
+       invalidateNoteRowCache_(sheet);
+    }
 
     const allRowValues = metadataList.map(function(meta) { return buildDetailRowValues_(meta); });
 
-    sheet.getRange(rowIndex, startCol, allRowValues.length, DETAIL_FIELD_ORDER.length).setValues(allRowValues);
-    sheet.getRange(rowIndex, startCol + DETAIL_ITEM_NUMBER_OFFSET, allRowValues.length, 1).setNumberFormat('00');
+    const requests = [];
+    const rowsData = [];
+    const sheetId = sheet.getSheetId();
 
-    const lokasiSimpanIdx = DETAIL_FIELD_ORDER.indexOf('lokasi_simpan');
-    if (lokasiSimpanIdx >= 0 && SpreadsheetApp.newRichTextValue) {
-      const richTextArray = [];
-      for (let i = 0; i < metadataList.length; i++) {
-        const meta = metadataList[i];
-        const url = meta._lokasi_simpan_url;
-        if (url) {
-          richTextArray.push([SpreadsheetApp.newRichTextValue().setText(url).setLinkUrl(url).build()]);
-        } else {
-          const val = allRowValues[i][lokasiSimpanIdx];
-          richTextArray.push([SpreadsheetApp.newRichTextValue().setText(val || '').build()]);
+    for (let r = 0; r < metadataList.length; r++) {
+      const meta = metadataList[r];
+      const rowVals = allRowValues[r];
+      
+      const rowData = { values: [] };
+      for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
+        const fieldName = DETAIL_FIELD_ORDER[c];
+        const val = rowVals[c] || '';
+        
+        const cellData = {
+          userEnteredValue: { stringValue: String(val) },
+          userEnteredFormat: {
+            wrapStrategy: 'WRAP',
+            verticalAlignment: 'MIDDLE',
+            borders: {
+              top: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+              bottom: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+              left: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+              right: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } }
+            }
+          }
+        };
+
+        if (fieldName === 'item_number') {
+           cellData.userEnteredFormat.numberFormat = { type: 'TEXT' };
+           if (val && String(val).length < 2) {
+             cellData.userEnteredValue.stringValue = ('00' + val).slice(-2);
+           }
+        }
+
+        if (fieldName === 'lokasi_simpan' && meta._lokasi_simpan_url) {
+           cellData.userEnteredFormat.textFormat = { link: { uri: meta._lokasi_simpan_url } };
+        }
+
+        if (fieldName === 'no_filing_cabinet' && meta._no_filing_cabinet_url) {
+           cellData.userEnteredFormat.textFormat = { link: { uri: meta._no_filing_cabinet_url } };
+        }
+
+        rowData.values.push(cellData);
+      }
+      rowsData.push(rowData);
+    }
+
+    requests.push({
+      updateCells: {
+        rows: rowsData,
+        fields: "userEnteredValue,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.borders,userEnteredFormat.numberFormat,userEnteredFormat.textFormat",
+        range: {
+          sheetId: sheetId,
+          startRowIndex: rowIndex - 1,
+          endRowIndex: rowIndex - 1 + metadataList.length,
+          startColumnIndex: startCol - 1,
+          endColumnIndex: startCol - 1 + DETAIL_FIELD_ORDER.length
         }
       }
-      sheet.getRange(rowIndex, startCol + lokasiSimpanIdx, allRowValues.length, 1).setRichTextValues(richTextArray);
-    }
-    
-    sheet.getRange(rowIndex, startCol, allRowValues.length, DETAIL_FIELD_ORDER.length)
-      .setBorder(true, true, true, true, true, true)
-      .setWrap(true)
-      .setVerticalAlignment('middle');
+    });
+
+    Sheets.Spreadsheets.batchUpdate({ requests: requests }, ss.getId());
     sortDetailSheetByNoBerkas_(sheet);
 
     return metadataList.map(function(meta, i) {
@@ -208,19 +327,57 @@ const SpreadsheetService = {
     const rowValues = buildDetailRowValues_(metadata);
     const startCol = getDetailStartColumn_(sheet);
 
-    sheet.getRange(rowIndex, startCol, 1, rowValues.length).setValues([rowValues]);
-    sheet.getRange(rowIndex, startCol + DETAIL_ITEM_NUMBER_OFFSET, 1, 1).setNumberFormat('00');
+    const rowData = { values: [] };
+    for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
+      const fieldName = DETAIL_FIELD_ORDER[c];
+      const val = rowValues[c] || '';
+      const cellData = {
+        userEnteredValue: { stringValue: String(val) },
+        userEnteredFormat: {
+          wrapStrategy: 'WRAP',
+          verticalAlignment: 'MIDDLE',
+          borders: {
+            top: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+            bottom: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+            left: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+            right: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } }
+          }
+        }
+      };
 
-    const lokasiSimpanIdx = DETAIL_FIELD_ORDER.indexOf('lokasi_simpan');
-    if (lokasiSimpanIdx >= 0 && metadata._lokasi_simpan_url && SpreadsheetApp.newRichTextValue) {
-      const cell = sheet.getRange(rowIndex, startCol + lokasiSimpanIdx);
-      const url = metadata._lokasi_simpan_url;
-      const richText = SpreadsheetApp.newRichTextValue()
-        .setText(url)
-        .setLinkUrl(url)
-        .build();
-      cell.setRichTextValue(richText);
+      if (fieldName === 'item_number') {
+         cellData.userEnteredFormat.numberFormat = { type: 'TEXT' };
+         if (val && String(val).length < 2) {
+           cellData.userEnteredValue.stringValue = ('00' + val).slice(-2);
+         }
+      }
+
+      if (fieldName === 'lokasi_simpan' && metadata._lokasi_simpan_url) {
+         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._lokasi_simpan_url } };
+      }
+
+      if (fieldName === 'no_filing_cabinet' && metadata._no_filing_cabinet_url) {
+         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_filing_cabinet_url } };
+      }
+
+      rowData.values.push(cellData);
     }
+
+    const request = {
+      updateCells: {
+        rows: [rowData],
+        fields: "userEnteredValue,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.borders,userEnteredFormat.numberFormat,userEnteredFormat.textFormat",
+        range: {
+          sheetId: sheet.getSheetId(),
+          startRowIndex: rowIndex - 1,
+          endRowIndex: rowIndex,
+          startColumnIndex: startCol - 1,
+          endColumnIndex: startCol - 1 + DETAIL_FIELD_ORDER.length
+        }
+      }
+    };
+
+    Sheets.Spreadsheets.batchUpdate({ requests: [request] }, ss.getId());
     sortDetailSheetByNoBerkas_(sheet);
 
     // Sort mengubah urutan baris; cari ulang posisi baris via URL file agar
@@ -266,17 +423,17 @@ const SpreadsheetService = {
 
     var rekapKode = '', rekapFC = '', rekapLaci = '', rekapFolder = '', rekapAkses = '';
     var rekapNomorBerkas = '', rekapKurunWaktu = '', rekapJumlah = '', rekapKet = '';
-    var rekapSheet, rowIndex, dfpCol, materiCol, laporanCol, sertifikatCol;
+    var rekapSheet, rowIndex, docCols = [];
     try {
       rekapSheet = findRekapSheet_(ss);
       if (rekapSheet) {
         rowIndex = findRekapRowForSubActivity_(rekapSheet, subActivity);
         if (rowIndex) {
           var headerMap = getRekapHeaderMap_(rekapSheet);
-          dfpCol        = findRekapHeaderColumnFromMap_(headerMap, ['data fix peserta']);
-          materiCol     = findRekapHeaderColumnFromMap_(headerMap, ['kumpulan materi']);
-          laporanCol    = findRekapHeaderColumnFromMap_(headerMap, ['laporan']);
-          sertifikatCol = findRekapHeaderColumnFromMap_(headerMap, ['sertifikat']);
+          // Resolusi kolom URL untuk SEMUA tipe dokumen aktif (data-driven).
+          docCols = getRekapDocColumns_().map(function (c) {
+            return { key: c.key, col: findRekapHeaderColumnFromMap_(headerMap, c.match) };
+          });
           var kodeCol       = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.kodeKlasifikasi);
           var fcCol         = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.filingCabinet);
           var laciCol       = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noLaci);
@@ -288,7 +445,8 @@ const SpreadsheetService = {
           var ketCol        = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.ket);
 
           // Batch-read entire rekap row in one call
-          var allCols = [dfpCol, materiCol, laporanCol, sertifikatCol, kodeCol, fcCol, laciCol, folderCol, aksesCol, nomorBerkasCol, kurunWaktuCol, jumlahCol, ketCol].filter(Boolean);
+          var docColNums = docCols.map(function (d) { return d.col; });
+          var allCols = docColNums.concat([kodeCol, fcCol, laciCol, folderCol, aksesCol, nomorBerkasCol, kurunWaktuCol, jumlahCol, ketCol]).filter(Boolean);
           var maxCol = Math.max.apply(null, allCols);
           var rowValues = rekapSheet.getRange(rowIndex, 1, 1, maxCol).getDisplayValues()[0];
           var cell = function (col) { return col ? String(rowValues[col - 1] || '').trim() : ''; };
@@ -309,22 +467,23 @@ const SpreadsheetService = {
     }
 
     var showJsComputed = forceCalculate;
+    var nextItemNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
     var meta = {
       no_berkas: rekapNomorBerkas || (subActivity && subActivity.sort_order ? subActivity.sort_order : ''),
-      kode_klasifikasi: rekapKode || (subActivity && subActivity.default_kode_klasifikasi) || '',
+      kode_klasifikasi: '',
       kurun_waktu: (showJsComputed ? '' : rekapKurunWaktu) || formatDateRange_(summary.startDate, summary.endDate),
-      jumlah: (showJsComputed ? '' : rekapJumlah) || ((summary.count || 0) + ' dokumen'),
-      no_filing_cabinet: (showJsComputed ? '' : rekapFC) || ConfigService.getSettings().defaultFilingCabinet || '02',
-      no_laci: (showJsComputed ? '' : rekapLaci) || (activity && activity.laci_no) || '',
-      no_folder: (showJsComputed ? '' : rekapFolder) || (subActivity && subActivity.no_folder) || (activity && activity.folder_no) || '',
+      jumlah: (showJsComputed ? '' : rekapJumlah) || ((summary.sumLembar || 0) + ' lembar'),
+      no_filing_cabinet: (showJsComputed ? '' : rekapFC) || (activity && activity.laci_folder_id) || '',
+      no_laci: (showJsComputed ? '' : rekapLaci) || (subActivity && subActivity.parent_folder_name) || '',
+      no_folder: showJsComputed ? '' : nextItemNum,
       klasifikasi_akses: (showJsComputed ? '' : rekapAkses) || summary.akses || 'Terbatas',
       ket: rekapKet || '',
-      next_item_number: SpreadsheetService.getNextItemNumber(activity, subActivity)
+      next_item_number: nextItemNum
     };
 
     if (rekapSheet && rowIndex) {
       // Batch-read formulas for URL columns in one call
-      var urlCols = [dfpCol, materiCol, laporanCol, sertifikatCol].filter(Boolean);
+      var urlCols = docCols.map(function (d) { return d.col; }).filter(Boolean);
       if (urlCols.length) {
         var urlMaxCol = Math.max.apply(null, urlCols);
         var formulas = rekapSheet.getRange(rowIndex, 1, 1, urlMaxCol).getFormulas()[0];
@@ -334,10 +493,10 @@ const SpreadsheetService = {
           var match = formula.match(/=HYPERLINK\(\s*["']([^"']+)["']/i);
           return match && match[1] ? match[1] : '';
         };
-        if (dfpCol) meta.url_dfp = extractUrl(dfpCol);
-        if (materiCol) meta.url_materi = extractUrl(materiCol);
-        if (laporanCol) meta.url_laporan = extractUrl(laporanCol);
-        if (sertifikatCol) meta.url_sertifikat = extractUrl(sertifikatCol);
+        // Emit per tipe dokumen: meta['url_' + key]
+        docCols.forEach(function (d) {
+          if (d.col) meta['url_' + d.key] = extractUrl(d.col);
+        });
       }
     }
 
@@ -355,7 +514,7 @@ const SpreadsheetService = {
     var width = Math.max(sheet.getLastColumn(), DETAIL_FALLBACK_START_COL + DETAIL_FIELD_ORDER.length);
     var headerColumns = getDetailColumnMap_(sheet, width);
     var itemCol = headerColumns.nomor_item_arsip || (DETAIL_FALLBACK_START_COL + 1);
-    var uraianCol = headerColumns.uraian_informasi_berkas || (DETAIL_FALLBACK_START_COL + 3);
+    var uraianCol = headerColumns.uraian_informasi_item || (DETAIL_FALLBACK_START_COL + 3);
 
     var rowCount = noteRow - DETAIL_DATA_START_ROW;
     var itemValues = sheet.getRange(DETAIL_DATA_START_ROW, itemCol, rowCount, 1).getDisplayValues();
@@ -369,7 +528,7 @@ const SpreadsheetService = {
       pairs.push({
         rowNumber: DETAIL_DATA_START_ROW + i,
         nomor_item_arsip: item,
-        uraian_informasi_berkas: uraian
+        uraian_informasi_item: uraian
       });
     }
     return pairs;
@@ -440,14 +599,14 @@ const SpreadsheetService = {
       invalidateNoteRowCache_(sheet);
     }
 
-    const nomorBerkas = nextNumberInColumn_(sheet, REKAP_DATA_START_ROW, rowIndex - 1, 2);
+    const nomorBerkas = subActivity.sort_order || '';
     const row = [
       sanitizeCellValue_(nomorBerkas),
       sanitizeCellValue_(subActivity.default_kode_klasifikasi || ''),
       sanitizeCellValue_(getSubActivityFormalName_(subActivity) || ''),
       '',
       '',
-      '02',
+      activity.laci_folder_id || '',
       sanitizeCellValue_(activity.laci_no || ''),
       sanitizeCellValue_(subActivity.no_folder || activity.folder_no || ''),
       'Terbatas',
@@ -731,7 +890,7 @@ const SpreadsheetService = {
     const headerMap = getRekapHeaderMap_(sheet);
     const detailSheet = ensureDetailSheet_(ss, activity, subActivity);
     const summary = summarizeDetailSheet_(detailSheet, subActivity);
-    const computedJumlah = summary.count ? summary.count + ' dokumen' : '';
+    const computedJumlah = summary.sumLembar ? summary.sumLembar + ' lembar' : '';
 
     setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, metadata.nomorBerkas, true);
     setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.kodeKlasifikasi, metadata.kodeKlasifikasi, true);
@@ -786,6 +945,62 @@ const SpreadsheetService = {
       console.error('SpreadsheetService.renameSubActivitySheet failed: ' + e.message);
       return false;
     }
+  },
+
+  cascadeNomorBerkasShift: function (year, shiftedSubActivities) {
+    if (!shiftedSubActivities || shiftedSubActivities.length === 0) return;
+
+    // Group shifts by activityId
+    const grouped = {};
+    shiftedSubActivities.forEach(function (shift) {
+      if (!grouped[shift.activityId]) grouped[shift.activityId] = [];
+      grouped[shift.activityId].push(shift);
+    });
+
+    const activities = ConfigRepository.getActivities(year);
+    const actMap = {};
+    activities.forEach(function(a) { actMap[a.activity_id] = a; });
+
+    Object.keys(grouped).forEach(function (actId) {
+      const act = actMap[actId];
+      if (!act || !act.spreadsheet_file_id) return;
+
+      let ss;
+      try {
+        ss = SpreadsheetApp.openById(act.spreadsheet_file_id);
+      } catch (e) {
+        return; // Spreadsheet deleted or inaccessible
+      }
+
+      const rekapSheet = findRekapSheet_(ss);
+      const shifts = grouped[actId];
+
+      shifts.forEach(function (shift) {
+        const subAct = ConfigRepository.getSubActivityById(year, actId, shift.subActivityId);
+        if (!subAct) return;
+
+        const newSortOrder = shift.newSortOrder;
+
+        // 1. Update Rekap Sheet
+        // 2. Update Detail Sheet
+        if (subAct.target_sheet_name) {
+          const detailSheet = ss.getSheetByName(subAct.target_sheet_name);
+          if (detailSheet) {
+            const noteRowDetail = findNoteRow_(detailSheet) || detailSheet.getLastRow() + 1;
+            const maxRowsDetail = Math.max(0, noteRowDetail - DETAIL_DATA_START_ROW);
+            if (maxRowsDetail > 0) {
+              const startCol = getDetailStartColumn_(detailSheet);
+              const noBerkasCol = startCol + DETAIL_FIELD_ORDER.indexOf('no_berkas');
+              const values = [];
+              for(let i=0; i<maxRowsDetail; i++) {
+                 values.push([sanitizeCellValue_(newSortOrder)]);
+              }
+              detailSheet.getRange(DETAIL_DATA_START_ROW, noBerkasCol, maxRowsDetail, 1).setValues(values);
+            }
+          }
+        }
+      });
+    });
   }
 };
 // Private helper functions moved to SheetHelpers.gs

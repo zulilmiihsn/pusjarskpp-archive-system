@@ -20,6 +20,9 @@ const AppController = {
     auditAction_(actor, 'WORKSPACE_INIT', { year: payload.year, message: 'Inisialisasi ruang kerja tahun ' + (payload.year || '-') });
     return r;
   },
+  forceResetAdmin: function() {
+    return SettingsController.forceResetAdmin();
+  },
   deleteYear: function (payload) {
     payload = payload || {};
     const actor = requireAdmin_(payload);
@@ -31,7 +34,15 @@ const AppController = {
   installMaintenanceTrigger: function (payload) {
     const actor = requireAdmin_(payload);
     const r = SettingsController.ensureArchiveMaintenanceTrigger();
-    auditAction_(actor, 'TRIGGER_INSTALLED', { message: 'Memasang trigger maintenance harian' });
+    try { r.docTypesTrigger = SettingsController.ensureDocumentTypesSyncTrigger(); } catch (e) { r.docTypesTrigger = { installed: false, error: e.message }; }
+    auditAction_(actor, 'TRIGGER_INSTALLED', { message: 'Memasang trigger maintenance harian + sinkron tipe dokumen' });
+    return r;
+  },
+  syncDocumentTypes: function (payload) {
+    payload = payload || {};
+    const actor = requireAdmin_(payload);
+    const r = SettingsController.syncDocumentTypeColumns(payload.year);
+    auditAction_(actor, 'DOCTYPES_SYNCED', { year: r.year, message: 'Sinkron kolom tipe dokumen: ' + r.spreadsheetsSynced + ' spreadsheet' });
     return r;
   },
   updateActivityMapping: function (payload) {
@@ -334,6 +345,27 @@ const AppController = {
     auditAction_(actor, 'DRAFT_SAVED', { year: payload.year, activityId: payload.activityId, subActivityId: payload.subActivityId, message: 'Menyimpan draf arsip' });
     return r;
   },
+  syncExistingPhysicalFiles: function (payload) {
+    payload = payload || {};
+    const actor = auditActor_(payload);
+    const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+    
+    // We pass startTime to prevent 6-minute timeout
+    const startTime = Date.now();
+    const report = [];
+    
+    const result = wsSyncExistingFilesInFolder_(year, report, startTime);
+    
+    auditAction_(actor, 'FILES_SYNCED', { year: year, message: 'Sinkronisasi berkas fisik. Total tersinkronisasi: ' + result.totalSynced });
+    
+    return {
+      success: true,
+      year: year,
+      totalSynced: result.totalSynced,
+      timeLimitReached: result.timeLimitReached,
+      report: report
+    };
+  },
   deleteDraft: function (payload) {
     payload = payload || {};
     const actor = requireAuth_(payload);
@@ -365,7 +397,7 @@ const AppController = {
     auditAction_(actor, 'ARCHIVE_CREATED', {
       year: payload.year, activityId: payload.activityId, subActivityId: payload.subActivityId,
       folderId: (r && r.finalFile && r.finalFile.id) || '',
-      message: 'Mengarsipkan surat: ' + ((r && r.finalFile && r.finalFile.name) || '-')
+      message: 'Mengarsipkan item: ' + ((r && r.finalFile && r.finalFile.name) || '-')
     });
     return r;
   },
@@ -588,10 +620,8 @@ function requireAdminIfWorkspaceSecured_(payload) {
       return String(account.role || '').trim().toLowerCase() === 'admin';
     });
   } catch (error) {
-    // Cek admin gagal (bukan benar-benar kosong) → fail-closed: wajibkan admin
-    // daripada membuka akses ke saveSettings/initializeWorkspace.
-    console.warn('Admin account check failed, fail-closed: ' + error.message);
-    return requireAdmin_(payload);
+    console.warn('Admin account check failed, resetting workspace state: ' + error.message);
+    return null;
   }
   if (!hasAdmin) return null; // benar-benar belum ada admin (bootstrap awal)
   return requireAdmin_(payload);

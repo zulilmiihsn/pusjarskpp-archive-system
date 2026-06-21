@@ -501,13 +501,13 @@
                 </div>
               </div>
               <div style="flex-shrink: 0;">
-                <button class="btn btn-sm" id="run-cleanup-now" style="display: inline-flex; align-items: center; gap: 6px;">
+                <button class="btn btn-sm btn-danger-outline" id="run-cleanup-now" ${trashedCount > 0 ? '' : 'disabled'} style="display: inline-flex; align-items: center; gap: 6px;">
                   ${iconSvg('trash')}
                   Bersihkan Sekarang
                 </button>
               </div>
             </div>
-
+            
           </div>
         </div>
 
@@ -547,150 +547,8 @@
     }
 
     return `
-      <!-- Card: Pengaturan Default Arsip -->
-      <div class="settings-section-card" style="margin-bottom: 24px;">
-        <div class="settings-section-header">
-          <h3 class="settings-section-title">
-            ${iconSvg('settingsGear')}
-            Pengaturan Default Arsip
-          </h3>
-          <p class="settings-section-subtitle">Nilai bawaan untuk isian arsip baru — otomatis diterapkan di seluruh ruang kerja.</p>
-        </div>
-        <div class="filing-cabinet-stepper">
-          <div class="fcs-input-group">
-            <div class="fcs-input-wrap">
-              <input type="text" id="default-filing-cabinet"
-                value="${esc((state.bootstrap.settings || {}).defaultFilingCabinet || '02')}"
-                maxlength="2" inputmode="numeric" autocomplete="off"
-                class="fcs-input"
-                aria-label="No Filing Cabinet Bawaan">
-              <div class="fcs-stepper">
-                <button class="fcs-btn fcs-btn-up" title="Naikkan" aria-label="Naikkan nilai">
-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 5l4-4 4 4"/></svg>
-                </button>
-                <button class="fcs-btn fcs-btn-down" title="Turunkan" aria-label="Turunkan nilai">
-                  <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg>
-                </button>
-              </div>
-            </div>
-            <div class="fcs-meta">
-              <label class="fcs-label">No Filing Cabinet Bawaan</label>
-              <span class="fcs-hint">2 digit — ↑↓ atau klik panah — simpan otomatis</span>
-            </div>
-          </div>
-          <div id="fcs-status" class="fcs-status">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.75l6 6 9-13.5"/></svg>
-            <span>Tersimpan</span>
-          </div>
-        </div>
-        <style>
-          .filing-cabinet-stepper {
-            display: flex;
-            align-items: center;
-            gap: 24px;
-            flex-wrap: wrap;
-          }
-          .fcs-input-group {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-          }
-          .fcs-input-wrap {
-            position: relative;
-            display: flex;
-            align-items: stretch;
-            width: 100px;
-          }
-          .fcs-input {
-            width: 100%;
-            padding: 10px 36px 10px 14px;
-            font-size: 20px;
-            font-weight: 800;
-            letter-spacing: 0.12em;
-            text-align: center;
-            border: 2px solid var(--border);
-            border-radius: var(--radius-md);
-            background: var(--surface);
-            color: var(--text);
-            font-family: inherit;
-            transition: border-color 150ms, box-shadow 150ms;
-            outline: none;
-          }
-          .fcs-input:focus {
-            border-color: var(--accent-mid);
-            box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
-          }
-          .fcs-stepper {
-            position: absolute;
-            right: 0;
-            top: 0;
-            bottom: 0;
-            display: flex;
-            flex-direction: column;
-            width: 28px;
-            border-left: 1px solid var(--border);
-          }
-          .fcs-btn {
-            flex: 1;
-            display: grid;
-            place-items: center;
-            border: none;
-            background: var(--surface-soft);
-            color: var(--muted);
-            cursor: pointer;
-            padding: 0;
-            transition: background 120ms, color 120ms;
-            min-height: 0;
-          }
-          .fcs-btn:first-child {
-            border-bottom: 1px solid var(--border);
-            border-radius: 0 var(--radius-sm) 0 0;
-          }
-          .fcs-btn:last-child {
-            border-radius: 0 0 var(--radius-sm) 0;
-          }
-          .fcs-btn:hover {
-            background: var(--accent-light);
-            color: var(--accent-mid);
-          }
-          .fcs-btn:active {
-            background: var(--accent-mid);
-            color: #fff;
-          }
-          .fcs-meta {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-          }
-          .fcs-label {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text);
-          }
-          .fcs-hint {
-            font-size: 12px;
-            color: var(--muted);
-          }
-          .fcs-status {
-            display: none;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            font-weight: 500;
-            color: var(--ok);
-            background: rgba(16,185,129,0.1);
-            padding: 6px 12px;
-            border-radius: 20px;
-            white-space: nowrap;
-            opacity: 0;
-            transition: opacity 300ms;
-          }
-          .fcs-status.show {
-            display: inline-flex;
-            opacity: 1;
-          }
-        </style>
-      </div>
+      <!-- Kartu "Pengaturan Default Arsip" (No Filing Cabinet global) dihapus.
+           Default FC kini dari Rekap/sub-kegiatan; fallback '02' di kode. -->
 
       <div class="settings-section-card">
         <div class="settings-section-header">
@@ -988,56 +846,6 @@
       });
     }
 
-    // Filing cabinet stepper
-    var fcInput = document.getElementById('default-filing-cabinet');
-    var fcStatus = document.getElementById('fcs-status');
-    if (fcInput) {
-      var flashStatus = function() {
-        fcStatus.style.display = 'inline-flex';
-        fcStatus.classList.add('show');
-        clearTimeout(fcStatus._hideTimer);
-        fcStatus._hideTimer = setTimeout(function(){ fcStatus.classList.remove('show'); }, 2000);
-      };
-      var saveFc = async function(val) {
-        val = String(val).trim().padStart(2, '0').slice(0, 2);
-        fcInput.value = val;
-        if (!val || val === '00') { fcInput.value = '02'; val = '02'; }
-        try {
-          state.bootstrap = await api('saveSettings', { defaultFilingCabinet: val });
-          flashStatus();
-        } catch (e) {
-          showToast('Gagal simpan: ' + errorMessage(e));
-        }
-      };
-      fcInput.addEventListener('blur', function(){ saveFc(this.value); });
-      fcInput.addEventListener('keydown', function(e) {
-        var v = parseInt(this.value || '0', 10);
-        if (e.key === 'ArrowUp') { e.preventDefault(); if (v < 99) v++; this.value = String(v).padStart(2, '0'); saveFc(this.value); }
-        if (e.key === 'ArrowDown') { e.preventDefault(); if (v > 1) v--; this.value = String(v).padStart(2, '0'); saveFc(this.value); }
-        if (e.key === 'Enter') { this.blur(); }
-      });
-      fcInput.addEventListener('input', function() {
-        this.value = this.value.replace(/[^0-9]/g, '').slice(0, 2);
-      });
-    }
-    var upBtn = document.querySelector('.fcs-btn-up');
-    if (upBtn) {
-      upBtn.addEventListener('click', function(){
-        var v = parseInt(fcInput.value || '0', 10);
-        if (v < 99) v++;
-        fcInput.value = String(v).padStart(2, '0');
-        saveFc(fcInput.value);
-      });
-    }
-    var downBtn = document.querySelector('.fcs-btn-down');
-    if (downBtn) {
-      downBtn.addEventListener('click', function(){
-        var v = parseInt(fcInput.value || '0', 10);
-        if (v > 1) v--;
-        fcInput.value = String(v).padStart(2, '0');
-        saveFc(fcInput.value);
-      });
-    }
   }
 
   function bindSettingsForm() {
@@ -1059,20 +867,19 @@
       });
     }
 
-    const cleanupButton = document.getElementById('run-cleanup-now');
-    if (cleanupButton) {
-      cleanupButton.addEventListener('click', async () => {
+    const btnRunCleanup = document.getElementById('run-cleanup-now');
+    if (btnRunCleanup) {
+      btnRunCleanup.addEventListener('click', async () => {
+        btnRunCleanup.disabled = true;
+        btnRunCleanup.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Membersihkan...';
         try {
-          cleanupButton.disabled = true;
-          showToast('Menjalankan pembersihan konfigurasi...');
-          const result = await api('cleanupTrashedSubActivities', {});
-          state.bootstrap = await api('getBootstrap', {});
-          render();
-          showToast('Pembersihan selesai. Baris terhapus: ' + (result.removed || 0));
-        } catch (error) {
-          showToast(errorMessage(error));
-        } finally {
-          cleanupButton.disabled = false;
+          const res = await api('cleanupTrashedSubActivities');
+          showToast(res.message);
+          await loadSettings();
+        } catch (e) {
+          showToast(errorMessage(e));
+          btnRunCleanup.disabled = false;
+          btnRunCleanup.innerHTML = `${iconSvg('trash')} Bersihkan Sekarang`;
         }
       });
     }
@@ -1196,9 +1003,29 @@
           state.bootstrap = await api('initializeWorkspace', payload);
           state.workspaceSetup = state.bootstrap.workspaceSetup;
           state.workspaceInitTargetYear = null;
+          state.workspaceInitPhase = 'syncing';
+          render();
+          showToast('Selesai membangun konfigurasi. Mensinkronisasi berkas fisik...');
+          
+          if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.sessionId) {
+            localStorage.setItem('portal_session_id', state.bootstrap.workspaceSetup.sessionId);
+          }
+
+          try {
+            const syncResult = await api('syncExistingPhysicalFiles', { year: payload.year });
+            if (syncResult.timeLimitReached) {
+              showToast('Waktu eksekusi habis. Sebagian berkas tersinkronisasi. Lanjutkan lewat pengaturan.');
+            } else {
+              showToast('Ruang kerja berhasil dihubungkan dan berkas tersinkronisasi.');
+            }
+          } catch(syncError) {
+            showToast('Sinkronisasi berkas fisik terhenti: ' + errorMessage(syncError));
+          }
+
+          state.workspaceInitPhase = null;
           state.workspaceInitLoading = false;
           render();
-          showToast('Ruang kerja berhasil dihubungkan.');
+
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
             showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);
           }
@@ -1216,14 +1043,15 @@
     if (state.workspaceInitLoading) {
       const year = state.workspaceInitTargetYear ||
         ((state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.currentYear) || 2026);
+      const isSyncing = state.workspaceInitPhase === 'syncing';
       return `
         <div class="premium-checklist" style="border-style: dashed; opacity: 0.8;">
           <div class="premium-checklist-item">
             <span class="spinner"></span>
-            <span>Memeriksa folder tahun kerja ${esc(year)} dan struktur 4 kegiatan...</span>
+            <span>${isSyncing ? 'Mensinkronisasi berkas fisik tahun kerja ' + esc(year) + '...' : 'Memeriksa folder tahun kerja ' + esc(year) + ' dan struktur 4 kegiatan...'}</span>
           </div>
           <div class="small muted" style="margin-left: 28px;">
-            Aplikasi sedang membuat atau memverifikasi struktur folder tahun ${esc(year)}. Harap tunggu hingga proses selesai.
+            ${isSyncing ? 'Aplikasi sedang memeriksa dan memasukkan file lama ke sistem. Harap tunggu hingga proses sinkronisasi otomatis selesai.' : 'Aplikasi sedang membuat atau memverifikasi struktur folder tahun ' + esc(year) + '. Harap tunggu hingga proses selesai.'}
           </div>
         </div>
       `;
@@ -1337,7 +1165,7 @@
 
     const auditActionLabels = {
       // Arsip surat
-      'ARCHIVE_CREATED': 'Arsipkan Surat',
+      'ARCHIVE_CREATED': 'Arsipkan Item',
       'ARCHIVE_DELETED': 'Hapus Surat',
       'ARCHIVE_ADOPTED': 'Adopsi Arsip',
       'METADATA_UPDATED': 'Ubah Metadata',
@@ -1642,9 +1470,29 @@
           state.bootstrap = await api('initializeWorkspace', payload);
           state.workspaceSetup = state.bootstrap.workspaceSetup;
           state.workspaceInitTargetYear = null;
+          state.workspaceInitPhase = 'syncing';
+          render();
+          showToast('Selesai membangun konfigurasi. Mensinkronisasi berkas fisik...');
+          
+          if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.sessionId) {
+            localStorage.setItem('portal_session_id', state.bootstrap.workspaceSetup.sessionId);
+          }
+
+          try {
+            const syncResult = await api('syncExistingPhysicalFiles', { year: payload.year });
+            if (syncResult.timeLimitReached) {
+              showToast('Waktu eksekusi habis. Sebagian berkas tersinkronisasi. Lanjutkan lewat pengaturan.');
+            } else {
+              showToast('Tahun ' + payload.year + ' berhasil disiapkan!');
+            }
+          } catch(syncError) {
+            showToast('Sinkronisasi berkas fisik terhenti: ' + errorMessage(syncError));
+          }
+
+          state.workspaceInitPhase = null;
           state.workspaceInitLoading = false;
           render();
-          showToast('Tahun ' + payload.year + ' berhasil disiapkan!');
+
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
             showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);
           }

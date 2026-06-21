@@ -126,6 +126,18 @@ function hashPasswordV1_(password, username) {
   return HASH_PREFIX_V1 + salt + '$' + key;
 }
 
+/**
+ * Hash password with v2 scheme (50,000 iterations). All new hashes use this.
+ * @param {string} password
+ * @param {string} username
+ * @return {string}
+ */
+function hashPasswordV2_(password, username) {
+  const salt = generateSalt_(16);
+  const key = pbkdf2Like_(password, username, salt, HASH_ITERATIONS_V2);
+  return HASH_PREFIX_V2 + salt + '$' + key;
+}
+
 function timingSafeEqual_(a, b) {
   if (a.length !== b.length) return false;
   let result = 0;
@@ -136,6 +148,17 @@ function timingSafeEqual_(a, b) {
 }
 
 function verifyPassword_(password, username, storedHash) {
+  // v2 scheme: 50,000 iterations
+  if (storedHash.indexOf(HASH_PREFIX_V2) === 0) {
+    const raw = storedHash.slice(HASH_PREFIX_V2.length);
+    const parts = raw.split('$');
+    if (parts.length === 2) {
+      const computed = pbkdf2Like_(password, username, parts[0], HASH_ITERATIONS_V2);
+      return timingSafeEqual_(computed, parts[1]);
+    }
+    return false;
+  }
+  // v1 scheme: 800 iterations (legacy)
   const prefix = HASH_PREFIX_V1;
   if (storedHash.indexOf(prefix) === 0) {
     const raw = storedHash.slice(prefix.length);
@@ -149,6 +172,15 @@ function verifyPassword_(password, username, storedHash) {
   }
   const legacy = pbkdf2Like_(password, username, null, 500);
   return timingSafeEqual_(legacy, storedHash);
+}
+
+/**
+ * Check if a stored hash uses an outdated scheme and should be rehashed.
+ * @param {string} storedHash
+ * @return {boolean}
+ */
+function needsRehash_(storedHash) {
+  return storedHash.indexOf(HASH_PREFIX_V2) !== 0;
 }
 
 function generatePassword_(length) {

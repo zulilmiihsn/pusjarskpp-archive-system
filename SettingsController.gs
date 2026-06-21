@@ -12,6 +12,28 @@ const SettingsController = {
     }
 
     const config = CacheHelper.getConfig(settings.currentYear);
+    if (!config || !config.activities || config.activities.length === 0) {
+      return {
+        configured: false,
+        settings: settings,
+        message: 'Inisialisasi sebelumnya terputus atau gagal. Silakan ulangi Inisialisasi Ruang Kerja.'
+      };
+    }
+
+    // Auto-fix if initialization failed before creating admin account
+    try {
+      const adminResult = AuthService.saveDefaultAdmin();
+      if (adminResult && adminResult.created) {
+        return {
+          configured: false,
+          settings: settings,
+          message: 'Akun admin sebelumnya gagal dibuat. Sistem telah meresetnya. Silakan ulangi Inisialisasi Ruang Kerja.'
+        };
+      }
+    } catch (e) {
+      // Ignore
+    }
+
     const activities = config.activities.map((activity) => {
       const subs = config.subActivities
         .filter(sub => sub.activity_id === activity.activity_id)
@@ -74,6 +96,9 @@ const SettingsController = {
       selectedYear: config.selectedYear,
       years: config.years,
       activities: activities,
+      documentTypes: getRekapDocColumns_().map(function (c) {
+        return { key: c.key, label: c.formLabel || c.label };
+      }),
       history: config.history,
       progress: this.buildProgress(config.history, activities),
       maintenance: {
@@ -153,13 +178,69 @@ const SettingsController = {
       };
     }
 
+    try {
+      result.docTypesTrigger = this.ensureDocumentTypesSyncTrigger();
+    } catch (error) {
+      result.docTypesTrigger = {
+        installed: false,
+        error: error.message || String(error)
+      };
+    }
+
+    try {
+      result.ocrTrigger = this.ensureOcrTrigger();
+    } catch (error) {
+      result.ocrTrigger = {
+        installed: false,
+        error: error.message || String(error)
+      };
+    }
+
     if (adminResult && adminResult.created) {
       result.defaultPassword = adminResult.defaultPassword;
+      if (adminResult.sessionId) result.sessionId = adminResult.sessionId;
     }
 
     const bootstrap = this.getBootstrap();
     bootstrap.workspaceSetup = result;
     return bootstrap;
+  },
+
+  forceResetAdmin: function() {
+    const activeUser = Session.getEffectiveUser();
+    const activeEmail = activeUser ? activeUser.getEmail() : null;
+    if (!activeEmail) throw new Error('Identitas tidak ditemukan. Pastikan Anda menjalankan skrip sebagai diri sendiri.');
+
+    const ssId = PropertiesService.getScriptProperties().getProperty(PROP_KEYS.CONFIG_SPREADSHEET_ID);
+    if (!ssId) throw new Error('Workspace belum diinisialisasi.');
+
+    // Verifikasi bahwa user adalah pemilik file workspace untuk mencegah eksekusi sewenang-wenang
+    let isOwner = false;
+    try {
+      const file = DriveApp.getFileById(cleanId_(ssId));
+      isOwner = file.getOwner().getEmail() === activeEmail;
+    } catch (e) {
+      throw new Error('Gagal memverifikasi kepemilikan workspace. Pastikan Anda adalah pemilik file.');
+    }
+    if (!isOwner) throw new Error('Akses ditolak. Hanya pemilik workspace yang dapat melakukan reset admin.');
+
+    const ss = SpreadsheetApp.openById(ssId);
+    let sheet = ss.getSheetByName(CONFIG_SHEETS.ACCOUNTS);
+    if (!sheet) sheet = ss.insertSheet(CONFIG_SHEETS.ACCOUNTS);
+
+    const existing = sheet.getDataRange().getDisplayValues();
+    if (existing.length > 1) {
+      sheet.getRange(2, 1, existing.length - 1, existing[0].length).clearContent();
+    }
+
+    sheet.getRange(1, 1, 1, ACCOUNT_HEADERS.length).setValues([ACCOUNT_HEADERS]);
+    sheet.getRange(1, 1, 1, ACCOUNT_HEADERS.length).setFontWeight('normal');
+
+    const password = generatePassword_();
+    const hash = hashPasswordV2_(password, 'admin');
+    sheet.appendRow([Utilities.getUuid(), 'admin', hash, 'admin', 'Administrator', 'TRUE', new Date().toISOString(), new Date().toISOString()]);
+
+    return { password: password };
   },
 
   ensureArchiveMaintenanceTrigger: function () {
@@ -187,6 +268,76 @@ const SettingsController = {
       .create();
 
     return { installed: true, exists: false, handler: handlerName };
+  },
+
+  // Pasang trigger onEdit pada config spreadsheet supaya perubahan di sheet
+  // `config_document_types` langsung menyinkronkan kolom Rekap (tanpa nunggu lazy).
+  ensureDocumentTypesSyncTrigger: function () {
+    const handlerName = 'onConfigDocumentTypesEdit';
+    const settings = ConfigService.getSettings();
+    if (!settings.configSpreadsheetId) return { installed: false, reason: 'no_config_spreadsheet', handler: handlerName };
+    const triggers = ScriptApp.getProjectTriggers();
+    const exists = triggers.some(t => t.getHandlerFunction && t.getHandlerFunction() === handlerName);
+    if (exists) return { installed: false, exists: true, handler: handlerName };
+
+    ScriptApp.newTrigger(handlerName)
+      .forSpreadsheet(cleanId_(settings.configSpreadsheetId))
+      .onEdit()
+      .create();
+
+    return { installed: true, exists: false, handler: handlerName };
+  },
+
+  ensureOcrTrigger: function () {
+    const handlerName = 'processOcrQueue';
+    const triggers = ScriptApp.getProjectTriggers();
+    const exists = triggers.some(t => t.getHandlerFunction && t.getHandlerFunction() === handlerName);
+    if (exists) return { installed: false, exists: true, handler: handlerName };
+
+    ScriptApp.newTrigger(handlerName)
+      .timeBased()
+      .everyMinutes(15)
+      .create();
+
+    return { installed: true, exists: false, handler: handlerName };
+  },
+
+  // Sapu semua spreadsheet Rekap (per kegiatan/sub-kegiatan) untuk tahun terkait,
+  // tambah kolom tipe aktif + hapus kolom tipe nonaktif. Idempoten.
+  syncDocumentTypeColumns: function (year) {
+    const selectedYear = Number(year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+    return withLock_(() => {
+      const config = CacheHelper.getConfig(selectedYear);
+      const ids = {};
+      (config.activities || []).forEach(function (a) {
+        const id = cleanId_(a.spreadsheet_file_id || '');
+        if (id) ids[id] = true;
+      });
+      (config.subActivities || []).forEach(function (s) {
+        const id = cleanId_(s.spreadsheet_file_id || '');
+        if (id) ids[id] = true;
+      });
+
+      let spreadsheetsSynced = 0;
+      let errors = 0;
+      Object.keys(ids).forEach(function (id) {
+        try {
+          const ss = SpreadsheetApp.openById(id);
+          const rekap = findRekapSheet_(ss);
+          if (rekap) {
+            ensureRekapDocumentColumns_(rekap);
+            spreadsheetsSynced++;
+          }
+        } catch (e) {
+          errors++;
+          console.warn('syncDocumentTypeColumns gagal utk ' + id + ': ' + e.message);
+        }
+      });
+
+      CacheHelper.invalidate(selectedYear);
+      bumpVersion();
+      return { year: selectedYear, spreadsheetsSynced: spreadsheetsSynced, errors: errors };
+    });
   },
 
   buildProgress: function (history, activities) {

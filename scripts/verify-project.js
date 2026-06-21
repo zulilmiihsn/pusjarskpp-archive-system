@@ -104,7 +104,8 @@ assert(read('SpreadsheetService.gs').includes('clearRekapSubActivityInactiveMark
 assert(read('EditSubActivity.html').includes('rename-sub-formal-name'), 'Add/edit sub-activity modal must expose optional formal rekap mapping.');
 assert(read('EditSubActivity.html').includes("api('addSubActivity'") && read('EditSubActivity.html').includes("noFolder: (document.getElementById('rename-sub-no-folder')"), 'Add sub-activity submit must pass Nomor Folder into config.');
 assert(read('ClientHistory.html').includes('Folder Tujuan'), 'History UI must show final target folder context.');
-assert(spreadsheetService.includes("detailSummary.count ? detailSummary.count + ' dokumen'"), 'Rekap Jumlah must be derived from detail-sheet document count.');
+assert(spreadsheetService.includes("detailSummary.sumLembar ? detailSummary.sumLembar + ' lembar'"), 'Rekap Jumlah must be the SUM of detail-sheet "jumlah" (lembar), not a row count.');
+assert(spreadsheetService.includes('isLembarCountableRow_') && spreadsheetService.includes('=SUMIFS('), 'Rekap Jumlah must sum the detail "jumlah" (lembar) with a shared predicate (JS snapshot) and a SUMIFS formula (locked), kept consistent.');
 assert(!spreadsheetService.includes('detailSummary.filingCabinet'), 'Rekap location columns must strictly inherit top-down and NOT prefer values summarized from the detail sheet.');
 assert(spreadsheetService.includes('formatAccessSummary_') && spreadsheetService.includes("values.join(' & ')"), 'Rekap security access must aggregate unique detail-sheet values with ampersand formatting.');
 assert(read('ArchiveController.gs').includes('SpreadsheetService.updateRekapSummary(activity, subActivity, {})'), 'Existing-data adoption must refresh rekap summaries from filled detail sheets.');

@@ -1,13 +1,22 @@
 <script>
-  var DOC_CATEGORIES = [
-    { id: 'doc-url-dfp', name: 'Data Fix Peserta' },
-    { id: 'doc-url-materi', name: 'Kumpulan Materi' },
+  // Fallback bila bootstrap lama belum membawa documentTypes (sebelum refresh).
+  var DOC_CATEGORIES_FALLBACK = [
+    { id: 'doc-url-data_fix_peserta', name: 'Data Fix Peserta' },
+    { id: 'doc-url-kumpulan_materi', name: 'Kumpulan Materi' },
     { id: 'doc-url-laporan', name: 'Laporan Aktualisasi/Inovasi' },
     { id: 'doc-url-sertifikat', name: 'Sertifikat' }
   ];
+  // Sumber tunggal tipe dokumen — digerakkan dari bootstrap (documentTypes).
+  function getDocCategories_() {
+    var types = (state.bootstrap && state.bootstrap.documentTypes) || null;
+    if (types && types.length) {
+      return types.map(function (t) { return { id: 'doc-url-' + t.key, name: t.label }; });
+    }
+    return DOC_CATEGORIES_FALLBACK;
+  }
   function getUnfilledDocCategories_(existingFiles) {
     var existingNames = (existingFiles || []).map(function(f) { return (f.name || '').toLowerCase(); });
-    return DOC_CATEGORIES.filter(function(cat) {
+    return getDocCategories_().filter(function(cat) {
       return existingNames.indexOf(cat.name.toLowerCase()) === -1;
     });
   }
@@ -80,7 +89,7 @@
               <line x1="12" y1="18" x2="12" y2="12"/>
               <polyline points="9 15 12 12 15 15"/>
             </svg>
-            <span class="small">Tambah Surat</span>
+            <span class="small">Tambah Item</span>
           </button>
           <div class="dropdown">
             <button class="btn btn-primary" data-action="toggle-dropdown" aria-label="Tambah Dokumen">
@@ -206,7 +215,7 @@
       if (!item) return;
       var categoryId = item.dataset.docCategory;
       var categoryName = item.dataset.docCategoryName;
-      var category = DOC_CATEGORIES.find(function (c) { return c.id === categoryId; });
+      var category = getDocCategories_().find(function (c) { return c.id === categoryId; });
       if (!category) return;
       e.target.closest('.sub-dropdown-menu')?.classList.remove('open');
       
@@ -434,7 +443,7 @@
     return `
       <div class="archive-empty-block">
         <strong>Belum ada surat.</strong>
-        <span>Klik <strong>Tambah Surat</strong> di atas untuk mengarsipkan surat pertama di folder ini.</span>
+        <span>Klik <strong>Tambah Item</strong> di atas untuk mengarsipkan item pertama di folder ini.</span>
       </div>
     `;
   }
@@ -693,7 +702,7 @@
           openArchiveDocLinkModal({
             title: 'Edit Dokumen',
             categoryName: fileName,
-            allCategories: DOC_CATEGORIES,
+            allCategories: getDocCategories_(),
             contextParts: buildArchiveBreadcrumb(context),
             currentUrl: (info && info.targetUrl) || '',
             onSubmit: async function (url, cat) {

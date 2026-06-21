@@ -353,8 +353,9 @@ const ConfigRepository = {
     ensureSubActivityHeaders_(sheet);
     const headers = getHeaders_(sheet);
 
-    const existingRows = readSheetObjects_(ss, CONFIG_SHEETS.SUB_ACTIVITIES)
-      .filter(row => Number(row.year) === Number(payload.year) && row.activity_id === payload.activityId);
+    const allRowsForYear = readSheetObjects_(ss, CONFIG_SHEETS.SUB_ACTIVITIES)
+      .filter(row => Number(row.year) === Number(payload.year));
+    const existingRows = allRowsForYear.filter(row => row.activity_id === payload.activityId);
     let subActivityId = payload.subActivityId || slug_(payload.subActivityName);
     // Cegah tabrakan sub_activity_id: dua nama berbeda bisa menghasilkan slug sama.
     // findConfigRow_/findSubActivity hanya cocokkan yang pertama, jadi ID dobel
@@ -366,6 +367,55 @@ const ConfigRepository = {
       while (existingIds[subActivityId + '_' + suffix]) suffix++;
       subActivityId = subActivityId + '_' + suffix;
     }
+    // Hitung Nomor Berkas global & Geser yang ada
+    const actMap = {};
+    readSheetObjects_(ss, CONFIG_SHEETS.ACTIVITIES)
+      .filter(row => Number(row.year) === Number(payload.year))
+      .forEach(a => actMap[a.activity_id] = Number(a.sort_order || 0));
+    
+    const currentActSortOrder = actMap[payload.activityId] || 0;
+    
+    let newSortOrder = 1;
+    if (existingRows.length > 0) {
+      newSortOrder = existingRows.reduce(function (max, r) { var n = Number(r.sort_order) || 0; return n > max ? n : max; }, 0) + 1;
+    } else {
+      const prevRows = allRowsForYear.filter(row => (actMap[row.activity_id] || 0) <= currentActSortOrder);
+      newSortOrder = prevRows.reduce(function (max, r) { var n = Number(r.sort_order) || 0; return n > max ? n : max; }, 0) + 1;
+    }
+
+    // Geser sort_order di sheet Config
+    const valuesAll = sheet.getDataRange().getDisplayValues();
+    const yearCol = headers.indexOf('year');
+    const sortCol = headers.indexOf('sort_order');
+    const subActIdCol = headers.indexOf('sub_activity_id');
+    const activityIdCol = headers.indexOf('activity_id');
+    const shiftedSubActivities = [];
+    
+    if (yearCol !== -1 && sortCol !== -1) {
+      let bulkUpdates = [];
+      for (let i = 1; i < valuesAll.length; i++) {
+        if (Number(valuesAll[i][yearCol]) === Number(payload.year)) {
+          let oldSort = Number(valuesAll[i][sortCol]) || 0;
+          if (oldSort >= newSortOrder) {
+            valuesAll[i][sortCol] = oldSort + 1;
+            bulkUpdates.push([oldSort + 1]);
+            shiftedSubActivities.push({
+               activityId: valuesAll[i][activityIdCol],
+               subActivityId: valuesAll[i][subActIdCol],
+               newSortOrder: oldSort + 1
+            });
+          } else {
+            bulkUpdates.push([valuesAll[i][sortCol]]);
+          }
+        } else {
+          bulkUpdates.push([valuesAll[i][sortCol]]);
+        }
+      }
+      if (bulkUpdates.length > 0) {
+        sheet.getRange(2, sortCol + 1, bulkUpdates.length, 1).setValues(bulkUpdates);
+      }
+    }
+
     const values = {
       year: payload.year,
       activity_id: payload.activityId,
@@ -378,7 +428,7 @@ const ConfigRepository = {
       default_kode_klasifikasi: payload.defaultKodeKlasifikasi || '',
       allow_non_letter_document: payload.allowNonLetterDocument ? 'TRUE' : 'FALSE',
       is_active: 'TRUE',
-      sort_order: existingRows.reduce(function (max, r) { var n = Number(r.sort_order) || 0; return n > max ? n : max; }, 0) + 1,
+      sort_order: newSortOrder,
       target_sheet_name: payload.targetSheetName || payload.subActivityName,
       mapping_status: payload.mappingStatus || 'PERLU_REVIEW',
       mapping_note: payload.mappingNote || '',
@@ -395,7 +445,9 @@ const ConfigRepository = {
       return values[header] === undefined ? '' : values[header];
     });
     sheet.appendRow(row);
-    return objectFromHeaders_(headers, row);
+    const resultObj = objectFromHeaders_(headers, row);
+    resultObj._shiftedSubActivities = shiftedSubActivities; // Include shifted metadata for cascading
+    return resultObj;
     });
   },
 
@@ -708,5 +760,64 @@ const ConfigRepository = {
       if (values[i][catCol] === categoryId) sheet.deleteRow(i + 1);
     }
     });
+  },
+
+  // ── Tipe dokumen pendukung (dinamis, dikelola via sheet) ──
+  // Header: key | label | form_label | aliases | sort_order | is_active
+  DOCUMENT_TYPE_HEADERS: ['key', 'label', 'form_label', 'aliases', 'sort_order', 'is_active'],
+
+  getDocumentTypes: function () {
+    return this._readDocumentTypes_().filter(function (t) { return t.is_active; });
+  },
+
+  getRemovedDocumentTypes: function () {
+    return this._readDocumentTypes_().filter(function (t) { return !t.is_active; });
+  },
+
+  _readDocumentTypes_: function () {
+    const ss = this.getConfigSpreadsheet();
+    const sheet = getOrCreateSheet_(ss, CONFIG_SHEETS.DOCUMENT_TYPES);
+    ensureHeaders_(sheet, this.DOCUMENT_TYPE_HEADERS);
+    let rows = readSheetObjects_(ss, CONFIG_SHEETS.DOCUMENT_TYPES);
+    if (!rows.length) {
+      this._seedDocumentTypes_(sheet);
+      rows = readSheetObjects_(ss, CONFIG_SHEETS.DOCUMENT_TYPES);
+    }
+    return rows
+      // Baris harus punya key DAN label (header kolom). Tanpa label = belum
+      // lengkap → diabaikan supaya kolom tak dibuat dengan nama key mentah.
+      .filter(function (r) { return String(r.key || '').trim() && String(r.label || '').trim(); })
+      .map(function (r) {
+        const key = String(r.key).trim();
+        const label = String(r.label).trim();
+        const formLabel = String(r.form_label || '').trim();
+        const aliases = String(r.aliases || '')
+          .split(/[;,]/)
+          .map(function (s) { return s.trim(); })
+          .filter(Boolean);
+        return {
+          key: key,
+          label: label,
+          formLabel: formLabel || undefined,
+          match: [label].concat(aliases),
+          sort_order: Number(r.sort_order || 0),
+          is_active: isTrue_(r.is_active)
+        };
+      })
+      .sort(function (a, b) { return a.sort_order - b.sort_order; });
+  },
+
+  _seedDocumentTypes_: function (sheet) {
+    const rows = REKAP_DOC_COLUMNS.map(function (t, i) {
+      const labelKey = normalizeHeaderKey_(t.label);
+      // Simpan alias tambahan saja (selain yang sama dengan label).
+      const extraAliases = (t.match || []).filter(function (m) {
+        return normalizeHeaderKey_(m) !== labelKey;
+      });
+      return [t.key, t.label, t.formLabel || '', extraAliases.join('; '), i + 1, 'TRUE'];
+    });
+    if (rows.length) {
+      sheet.getRange(2, 1, rows.length, this.DOCUMENT_TYPE_HEADERS.length).setValues(rows);
+    }
   }
 };

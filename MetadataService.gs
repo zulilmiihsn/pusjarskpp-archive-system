@@ -18,9 +18,9 @@ const MetadataService = {
 
     normalized.no_laci = normalized.no_laci || activity.laci_no;
     normalized.no_folder = normalized.no_folder || subActivity.no_folder || activity.folder_no;
-    normalized.no_filing_cabinet = normalized.no_filing_cabinet || ConfigService.getSettings().defaultFilingCabinet || '02';
+    normalized.no_filing_cabinet = normalized.no_filing_cabinet || '02';
     normalized.satuan = normalized.satuan || 'Lembar';
-    normalized.tingkat_perkembangan = normalized.tingkat_perkembangan || 'Srikandi';
+    normalized.tingkat_perkembangan = normalized.tingkat_perkembangan || 'Asli';
     normalized.jumlah = metadata.jumlah !== undefined ? metadata.jumlah : 1;
     normalized.klasifikasi_akses = normalized.klasifikasi_akses || 'Terbatas';
     normalized.lokasi_simpan = normalized.lokasi_simpan || this.buildFinalFileName(normalized, sourceName);
@@ -33,8 +33,8 @@ const MetadataService = {
     const text = [sourceName, rawText].join('\n');
     const nomorSurat = extractNomorSurat_(text);
     const tanggal = extractDate_(text) || payload.fileLastUpdatedStr || '';
-    const tingkat = extractTingkatPerkembangan_(sourceName) || 'Srikandi';
-    const kode = extractKodeKlasifikasi_(text) || subActivity.default_kode_klasifikasi || '';
+    const tingkat = extractTingkatPerkembangan_(sourceName) || 'Asli';
+    const kode = extractKodeKlasifikasi_(text) || '';
     const uraian = extractUraian_(text, sourceName, activity, subActivity);
 
     let itemVal = String(payload.nomorItemArsip || payload.noBerkas || '').replace(/^0+/, '');
@@ -43,12 +43,16 @@ const MetadataService = {
       no_berkas: itemVal,
       nomor_item_arsip: itemVal ? itemVal.padStart(2, '0') : '',
       kode_klasifikasi: kode,
-      uraian_informasi_berkas: uraian,
+      // Komponen uraian: perihal terisi hasil ekstraksi; kepada/dari diisi user.
+      perihal: uraian,
+      kepada: '',
+      dari: '',
+      uraian_informasi_item: uraian,
       tanggal: tanggal,
       tingkat_perkembangan: tingkat,
       jumlah: 1,
       satuan: 'Lembar',
-      no_filing_cabinet: payload.noFilingCabinet || ConfigService.getSettings().defaultFilingCabinet || '02',
+      no_filing_cabinet: payload.noFilingCabinet || '02',
       no_laci: activity.laci_no || '',
       no_folder: subActivity.no_folder || activity.folder_no || '',
       klasifikasi_akses: 'Terbatas',
@@ -63,6 +67,8 @@ const MetadataService = {
     });
 
     base.nomor_surat = nomorSurat;
+    // Uraian = nomor surat/perihal/kepada/dari (bagian kosong dilewati).
+    base.uraian_informasi_item = assembleUraian_(base) || uraian;
     base.lokasi_simpan = buildFinalFileName_(base, sourceName);
 
     return {
@@ -179,10 +185,9 @@ function extractDateFromText_(str) {
 
 function extractTingkatPerkembangan_(name) {
   const text = String(name || '').toLowerCase();
-  if (text.indexOf('asli') >= 0) return 'Asli';
-  if (text.indexOf('copy') >= 0) return 'Copy';
-  if (text.indexOf('cetak') >= 0) return 'Cetak';
-  if (text.indexOf('srikandi') >= 0) return 'Srikandi';
+  // Hanya 2 tingkat: Asli (default/elektronik) dan Salinan (turunan/copy/cetak).
+  if (text.indexOf('salinan') >= 0 || text.indexOf('copy') >= 0 || text.indexOf('cetak') >= 0) return 'Salinan';
+  if (text.indexOf('asli') >= 0 || text.indexOf('srikandi') >= 0) return 'Asli';
   return '';
 }
 
@@ -233,18 +238,40 @@ function cleanUraian_(value) {
     .slice(0, MAX_URAIAN_LENGTH);
 }
 
+// Rakit kolom Uraian dari komponen: nomor surat/perihal/kepada/dari.
+// Bagian kosong dilewati supaya tak ada garis miring dobel.
+function assembleUraian_(metadata) {
+  metadata = metadata || {};
+  return ['nomor_surat', 'perihal', 'kepada', 'dari']
+    .map(function (k) { return String(metadata[k] || '').trim(); })
+    .filter(Boolean)
+    .join('/');
+}
+
 function buildFinalFileName_(metadata, sourceName) {
   const extMatch = String(sourceName || '').match(/\.[a-z0-9]+$/i);
   const ext = extMatch ? extMatch[0].toLowerCase() : '.pdf';
   const item = pad2_(metadata.nomor_item_arsip || '01');
-  const tingkat = metadata.tingkat_perkembangan || 'Srikandi';
+  const tingkat = metadata.tingkat_perkembangan || 'Asli';
   const nomor = metadata.nomor_surat || '';
-  const uraian = sanitizeFilePart_(metadata.uraian_informasi_berkas || 'Dokumen Surat');
+  const uraian = sanitizeFilePart_(metadata.uraian_informasi_item || 'Dokumen Surat');
 
   if (nomor) {
     return item + '. (' + tingkat + ') No: ' + nomor + '_' + uraian + ext;
   }
   return item + '. (' + tingkat + ') ' + uraian + ext;
+}
+
+// Pemetaan tingkat perkembangan dari skema LAMA (nama file arsip legacy) ke
+// skema baru 2-nilai. Dipakai HANYA saat adopsi/scan file lama di init workspace.
+//   Srikandi (digital)        -> Asli
+//   Asli (fisik) / Copy / Cetak -> Salinan
+// Kosong/asing -> '' (pemanggil isi default 'Asli').
+function normalizeLegacyTingkat_(value) {
+  const t = String(value || '').toLowerCase();
+  if (t.indexOf('srikandi') >= 0) return 'Asli';
+  if (t.indexOf('salinan') >= 0 || t.indexOf('copy') >= 0 || t.indexOf('cetak') >= 0 || t.indexOf('asli') >= 0) return 'Salinan';
+  return '';
 }
 
 function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
@@ -253,9 +280,9 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
     no_berkas: '',
     tingkat_perkembangan: '',
     nomor_surat: '',
-    uraian_informasi_berkas: '',
+    uraian_informasi_item: '',
     lokasi_simpan: fileName,
-    kode_klasifikasi: defaultSubActivity ? defaultSubActivity.default_kode_klasifikasi : '',
+    kode_klasifikasi: '',
     klasifikasi_akses: 'Terbatas',
     jumlah: 1,
     satuan: 'Lembar',
@@ -268,18 +295,18 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   if (match) {
     meta.nomor_item_arsip = pad2_(match[1]);
     meta.no_berkas = String(Number(match[1]));
-    meta.tingkat_perkembangan = match[2].trim();
+    meta.tingkat_perkembangan = normalizeLegacyTingkat_(match[2].trim());
     if (match[3]) {
       meta.nomor_surat = match[3].trim();
     }
-    meta.uraian_informasi_berkas = match[4].trim();
+    meta.uraian_informasi_item = match[4].trim();
   } else {
-    meta.uraian_informasi_berkas = nameWithoutExt;
+    meta.uraian_informasi_item = nameWithoutExt;
   }
   
   if (!meta.nomor_item_arsip) meta.nomor_item_arsip = '01';
   if (!meta.no_berkas) meta.no_berkas = '1';
-  if (!meta.tingkat_perkembangan) meta.tingkat_perkembangan = 'Srikandi';
+  if (!meta.tingkat_perkembangan) meta.tingkat_perkembangan = 'Asli';
 
   return meta;
 }

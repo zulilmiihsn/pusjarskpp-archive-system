@@ -60,21 +60,68 @@
     }
   }
 
+  let activePersistentToast = null;
+
   function showToast(message, isPersistent) {
     var container = document.getElementById('toast-container');
     if (!container) return;
 
+    // Detect if this is a process toast
+    var isProcess = isPersistent || (message && message.indexOf('...') !== -1);
+    
+    // Replace the active persistent toast if it exists
+    if (activePersistentToast && activePersistentToast.parentNode) {
+      removeToast(activePersistentToast);
+      activePersistentToast = null;
+    }
+
     var toast = document.createElement('div');
     toast.className = 'toast visible';
-    toast.textContent = message;
-    if (isPersistent) {
+    toast.style.display = 'flex';
+    toast.style.alignItems = 'center';
+    toast.style.justifyContent = 'space-between';
+    toast.style.gap = '12px';
+    
+    var textSpan = document.createElement('span');
+    textSpan.textContent = message;
+    textSpan.style.lineHeight = '1.4';
+    toast.appendChild(textSpan);
+
+    if (isProcess) {
       toast.classList.add('is-persistent');
+      activePersistentToast = toast;
+      
+      // Add close button for persistent toasts so user can dismiss them
+      var closeBtn = document.createElement('button');
+      closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+      closeBtn.style.background = 'transparent';
+      closeBtn.style.border = 'none';
+      closeBtn.style.color = '#9CA3AF';
+      closeBtn.style.cursor = 'pointer';
+      closeBtn.style.padding = '4px';
+      closeBtn.style.margin = '-4px -4px -4px 0';
+      closeBtn.style.display = 'grid';
+      closeBtn.style.placeItems = 'center';
+      closeBtn.style.borderRadius = '6px';
+      closeBtn.style.transition = 'background 150ms ease, color 150ms ease';
+      
+      closeBtn.onmouseover = function() {
+        this.style.background = 'rgba(255,255,255,0.1)';
+        this.style.color = '#FFFFFF';
+      };
+      closeBtn.onmouseout = function() {
+        this.style.background = 'transparent';
+        this.style.color = '#9CA3AF';
+      };
+
+      closeBtn.onclick = function() { removeToast(toast); };
+      toast.appendChild(closeBtn);
     } else {
       window.setTimeout(function () {
-        toast.classList.remove('visible');
-        window.setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
+        removeToast(toast);
       }, 4000);
     }
+    
     container.appendChild(toast);
     return toast;
   }
@@ -82,7 +129,28 @@
   function removeToast(toast) {
     if (!toast) return;
     toast.classList.remove('visible');
+    if (toast === activePersistentToast) {
+      activePersistentToast = null;
+    }
     window.setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
+  }
+
+  function showProcessToast(message) {
+    var toast = showToast(message, true);
+    return {
+      toast: toast,
+      success: function(successMsg) {
+        removeToast(toast);
+        if (successMsg) showToast(successMsg, true); // Feedback is now persistent
+      },
+      error: function(errorMsg) {
+        removeToast(toast);
+        if (errorMsg) showToast(errorMsg, true); // Error feedback is now persistent
+      },
+      hide: function() {
+        removeToast(toast);
+      }
+    };
   }
 
   function esc(value) {

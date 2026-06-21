@@ -70,10 +70,9 @@ function extractDate_(text) {
 
 function extractTingkatPerkembangan_(name) {
   const text = String(name || '').toLowerCase();
-  if (text.indexOf('asli') >= 0) return 'Asli';
-  if (text.indexOf('copy') >= 0) return 'Copy';
-  if (text.indexOf('cetak') >= 0) return 'Cetak';
-  if (text.indexOf('srikandi') >= 0) return 'Srikandi';
+  // Hanya 2 tingkat: Asli (default/elektronik) dan Salinan (turunan/copy/cetak).
+  if (text.indexOf('salinan') >= 0 || text.indexOf('copy') >= 0 || text.indexOf('cetak') >= 0) return 'Salinan';
+  if (text.indexOf('asli') >= 0 || text.indexOf('srikandi') >= 0) return 'Asli';
   return '';
 }
 
@@ -122,7 +121,7 @@ function buildFinalFileName_(metadata, sourceName) {
   const extMatch = String(sourceName || '').match(/\.[a-z0-9]+$/i);
   const ext = extMatch ? extMatch[0].toLowerCase() : '.pdf';
   const item = pad2_(metadata.nomor_item_arsip || '01');
-  const tingkat = metadata.tingkat_perkembangan || 'Srikandi';
+  const tingkat = metadata.tingkat_perkembangan || 'Asli';
   const nomor = metadata.nomor_surat || '';
   const uraian = sanitizeFilePart_(metadata.uraian_informasi_berkas || 'Dokumen Surat');
 
@@ -180,6 +179,13 @@ function normalizeSheetName_(value) {
     .slice(0, 90);
 }
 
+function normalizeLegacyTingkat_(value) {
+  const t = String(value || '').toLowerCase();
+  if (t.indexOf('srikandi') >= 0) return 'Asli';
+  if (t.indexOf('salinan') >= 0 || t.indexOf('copy') >= 0 || t.indexOf('cetak') >= 0 || t.indexOf('asli') >= 0) return 'Salinan';
+  return '';
+}
+
 function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   const meta = {
     nomor_item_arsip: '',
@@ -201,7 +207,7 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   if (match) {
     meta.nomor_item_arsip = pad2_(match[1]);
     meta.no_berkas = String(Number(match[1]));
-    meta.tingkat_perkembangan = match[2].trim();
+    meta.tingkat_perkembangan = normalizeLegacyTingkat_(match[2].trim());
     if (match[3]) {
       meta.nomor_surat = match[3].trim();
     }
@@ -220,7 +226,7 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   
   if (!meta.nomor_item_arsip) meta.nomor_item_arsip = '01';
   if (!meta.no_berkas) meta.no_berkas = '1';
-  if (!meta.tingkat_perkembangan) meta.tingkat_perkembangan = 'Srikandi';
+  if (!meta.tingkat_perkembangan) meta.tingkat_perkembangan = 'Asli';
 
   return meta;
 }

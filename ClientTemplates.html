@@ -262,7 +262,7 @@
                 <div class="dropzone-content" style="pointer-events: none;">
                   <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 12px; color: var(--accent);"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                   <div style="font-size: 14px; font-weight: 600; color: var(--text);">Klik atau seret berkas ke sini</div>
-                  <div style="font-size: 12px; color: var(--muted); margin-top: 6px;" id="tpl-upload-filename-display">Mendukung: PDF, DOC, DOCX. Maks: 50 MB (lebih besar otomatis).</div>
+                  <div style="font-size: 12px; color: var(--muted); margin-top: 6px;" id="tpl-upload-filename-display">Mendukung: PDF, DOC, DOCX. Mendukung semua ukuran berkas.</div>
                 </div>
               </div>
             </div>
@@ -687,7 +687,7 @@
         if (!nameInput.value) nameInput.value = fileInput.files[0].name;
         if (filenameDisplay) filenameDisplay.textContent = fileInput.files[0].name;
       } else {
-        if (filenameDisplay) filenameDisplay.textContent = 'Mendukung: PDF, DOC, DOCX. Di atas 10 MB otomatis diupload bertahap.';
+        if (filenameDisplay) filenameDisplay.textContent = 'Mendukung: PDF, DOC, DOCX. Mendukung semua ukuran berkas.';
       }
       submitBtn.disabled = !(fileInput.files && fileInput.files[0]);
     });

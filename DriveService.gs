@@ -30,8 +30,8 @@ function validateFilePayload_(payload, extraHint) {
   if (payload.dataUrl.length > MAX_BASE64_LENGTH) {
     const fileMB = Math.round(payload.dataUrl.length / 1024 / 1024 / 1.33);
     throw new Error(
-      'File terlalu besar (' + fileMB + ' MB) untuk diupload langsung. ' +
-      'Maksimal upload langsung adalah ' + MAX_UPLOAD_MB + ' MB. ' +
+      'Ukuran file (' + fileMB + ' MB) melebihi batas upload langsung. ' +
+      'Silakan gunakan menu upload di web app untuk upload otomatis bertahap. ' +
       (extraHint || '')
     );
   }
@@ -58,6 +58,19 @@ const DriveService = {
       url: 'https://drive.google.com/drive/folders/' + folderId,
       mimeType: DRIVE_FOLDER_MIME_TYPE
     };
+  },
+
+  resolveFolderPathAndUrl: function(folderId) {
+    if (!folderId || folderId === '02') return null;
+    try {
+      const folder = DriveApp.getFolderById(folderId);
+      const url = folder.getUrl();
+      const pathParts = [folder.getName()];
+      return { path: pathParts[0], url: url };
+    } catch (e) {
+      console.error('resolveFolderPathAndUrl failed: ' + e.message);
+      return null;
+    }
   },
 
   fileDtoFromConfig: function (fileId, fileName, mimeType) {
@@ -552,13 +565,38 @@ const DriveService = {
       const config = preloadedConfig || CacheHelper.getConfig(year);
       const yearConfig = ConfigService.getYearConfig(config, year);
       if (!yearConfig.template_folder_id) return [];
-      const folder = DriveApp.getFolderById(cleanId_(yearConfig.template_folder_id));
-      const files = folder.getFiles();
+      const folderId = cleanId_(yearConfig.template_folder_id);
+      
       const result = [];
-      while (files.hasNext()) {
-        const file = files.next();
-        result.push(this.fileToDto(file));
-      }
+      let pageToken = null;
+      do {
+        let res;
+        try {
+          res = Drive.Files.list({
+            q: "'" + folderId + "' in parents and trashed = false",
+            fields: "nextPageToken, files(id, name, mimeType, webViewLink)",
+            pageSize: 1000,
+            pageToken: pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true
+          });
+        } catch (e) {
+          break;
+        }
+        
+        const items = res.files || [];
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          result.push({
+            id: item.id,
+            name: item.name,
+            mimeType: item.mimeType,
+            url: item.webViewLink,
+            downloadUrl: DriveService.getDownloadUrl(item.id, item.mimeType)
+          });
+        }
+        pageToken = res.nextPageToken;
+      } while (pageToken);
       return result.sort(function (a, b) { return a.name.localeCompare(b.name); });
     } catch (error) {
       console.error('DriveService.listTemplates failed: ' + error.message);
@@ -1059,11 +1097,25 @@ function getUniqueFileName_(folder, requestedName) {
 }
 
 function fileNameExistsInFolder_(folder, name) {
-  const files = folder.getFilesByName(name);
-  while (files.hasNext()) {
-    const file = files.next();
-    if (!file.isTrashed()) return true;
-  }
+  const folderId = folder.getId();
+  let pageToken = null;
+  do {
+    let result;
+    try {
+      result = Drive.Files.list({
+        q: "'" + folderId + "' in parents and name = '" + name.replace(/'/g, "\\'") + "' and trashed = false",
+        fields: "nextPageToken, files(id)",
+        pageSize: 10,
+        pageToken: pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+    } catch (e) {
+      break;
+    }
+    if (result.files && result.files.length > 0) return true;
+    pageToken = result.nextPageToken;
+  } while (pageToken);
   return false;
 }
 

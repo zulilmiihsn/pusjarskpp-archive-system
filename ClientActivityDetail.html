@@ -456,7 +456,7 @@
           <h2 class="section-title">Pilih Sub-kegiatan</h2>
         </div>
         ${isGuest() ? '' : `
-        <button class="btn" id="btn-sync-drive" title="Sinkronkan dengan folder Google Drive">
+        <button class="btn btn-outline flex align-center" style="gap: 6px;" id="btn-sync-drive" title="Sinkronkan dengan folder Google Drive">
           <svg id="sync-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="23 4 23 10 17 10"></polyline>
             <polyline points="1 20 1 14 7 14"></polyline>
@@ -518,7 +518,7 @@
                 </div>
                 <h3 class="tall-card-title">${esc(sub.sub_activity_name)}</h3>
                 <div class="tall-card-desc">
-                  Buka untuk mengarsipkan surat atau melihat folder
+                  Buka untuk mengarsipkan item atau melihat folder
                 </div>
               </div>
             </div>

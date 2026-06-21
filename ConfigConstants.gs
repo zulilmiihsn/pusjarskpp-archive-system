@@ -15,9 +15,12 @@ const PROP_KEYS = {
 const DEFAULT_YEAR = new Date().getFullYear();
 const TRASHED_SUB_ACTIVITY_RETENTION_DAYS = 30;
 const SESSION_TTL_MS = 2 * 24 * 60 * 60 * 1000;
+const DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI = '';
 
 const HASH_ITERATIONS = 800;
+const HASH_ITERATIONS_V2 = 50000;
 const HASH_PREFIX_V1 = 'v1:';
+const HASH_PREFIX_V2 = 'v2:';
 const SESSION_KEY = 'portal_arsip_session';
 
 /* ── Cross-cutting tuneables (magic numbers, once) ── */
@@ -46,7 +49,7 @@ const ARCHIVE_FIELD_KEYS = [
   'no_berkas',
   'nomor_item_arsip',
   'kode_klasifikasi',
-  'uraian_informasi_berkas',
+  'uraian_informasi_item',
   'tanggal',
   'tingkat_perkembangan',
   'jumlah',
@@ -63,7 +66,7 @@ const ARCHIVE_FIELD_LABELS = [
   'No Berkas',
   'Nomor Item Arsip',
   'Kode Klasifikasi',
-  'Uraian informasi Berkas',
+  'Uraian Informasi Item',
   'Tgl',
   'Tingkat Perkembangan',
   'Jumlah',
@@ -124,7 +127,7 @@ const DETAIL_FIELD_ORDER = [
   'no_berkas',
   'nomor_item_arsip',
   'kode_klasifikasi',
-  'uraian_informasi_berkas',
+  'uraian_informasi_item',
   'tanggal',
   'tingkat_perkembangan',
   'jumlah',

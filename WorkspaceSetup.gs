@@ -239,7 +239,7 @@ const WorkspaceSetupService = {
           subFolder.getId(),
           entry.folderPath,
           noFolder,
-          activity.defaultCode || '',
+          activity.defaultCode || DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI,
           activity.allowNonLetter ? 'TRUE' : 'FALSE',
           'TRUE',
           index + 1,
@@ -258,13 +258,16 @@ const WorkspaceSetupService = {
     });
 
     wsWriteConfig_(ss, year, root, null, daftarArsip, arsipDiklat, tahunFolder, inbox, templateFolder, activityRows, subActivityRows);
+
+    // Bersihkan log arsip yang sub-kegiatannya sudah tidak ada (karena pindah struktur folder)
+    wsCleanupOrphanedArchiveLogs_(ss, year, subActivityRows);
     
     try {
       CacheHelper.invalidate(year);
-      wsSyncExistingFilesInFolder_(year, report);
+      // NOTE: wsSyncExistingFilesInFolder_ is removed from here to prevent 6-minute timeout.
+      // It must be called explicitly by the client after initWorkspace succeeds.
     } catch(e) {
-      console.warn('Gagal sinkronisasi otomatis file fisik: ' + e.message);
-      wsPushReport_(report, 'error', 'Gagal mensinkronisasi file fisik yang sudah ada: ' + e.message);
+      console.warn('Gagal invalidate cache otomatis: ' + e.message);
     }
   },
 
@@ -286,18 +289,34 @@ const WorkspaceSetupService = {
     // Helper to scan a folder and collect 4-digit years
     const scanFolder = function(parentFolder) {
       if (!parentFolder) return;
-      const folderIterator = parentFolder.getFolders();
-      while (folderIterator.hasNext()) {
-        const folder = folderIterator.next();
-        const folderName = folder.getName();
-        const match = folderName.match(/\b(202\d|203[0-5])\b/);
-        if (match) {
-          const detectedYear = Number(match[1]);
-          if (detectedYears.indexOf(detectedYear) === -1) {
-            detectedYears.push(detectedYear);
+      let pageToken = null;
+      do {
+        let res;
+        try {
+          res = Drive.Files.list({
+            q: "'" + parentFolder.getId() + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+            fields: "nextPageToken, files(name)",
+            pageSize: 1000,
+            pageToken: pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true
+          });
+        } catch (e) {
+          break;
+        }
+        const items = res.files || [];
+        for (let i = 0; i < items.length; i++) {
+          const folderName = items[i].name;
+          const match = folderName.match(/\b(202\d|203[0-5])\b/);
+          if (match) {
+            const detectedYear = Number(match[1]);
+            if (detectedYears.indexOf(detectedYear) === -1) {
+              detectedYears.push(detectedYear);
+            }
           }
         }
-      }
+        pageToken = res.nextPageToken;
+      } while (pageToken);
     };
 
     // Scan both potential sources for physical years
@@ -339,91 +358,120 @@ const WorkspaceSetupService = {
   }
 };
 
-function wsSyncExistingFilesInFolder_(year, report) {
+function wsSyncExistingFilesInFolder_(year, report, startTime) {
   const config = CacheHelper.getConfig(year);
   const existingKeys = ConfigRepository.getArchiveLogKeyMap(year);
   
   let totalSynced = 0;
   const allLogsToAppend = [];
+  
+  const HARD_BUDGET_MS = 4.5 * 60 * 1000; // 4.5 minutes
+  let timeLimitReached = false;
 
   config.activities.forEach(function (activity) {
+    if (timeLimitReached) return;
+
     const subActivities = config.subActivities.filter(function (sub) {
       return sub.activity_id === activity.activity_id;
     });
 
     subActivities.forEach(function (subActivity) {
-      if (!subActivity.folder_id) return;
-      let folder;
-      try {
-        folder = DriveApp.getFolderById(subActivity.folder_id);
-      } catch (e) {
+      if (timeLimitReached) return;
+      
+      if (startTime && (Date.now() - startTime) > HARD_BUDGET_MS) {
+        timeLimitReached = true;
         return;
       }
-      
-      const files = folder.getFiles();
-      const metadataList = [];
-      const currentFiles = [];
 
-      while (files.hasNext()) {
-        const file = files.next();
-        if (file.isTrashed()) continue;
-        
-        const fileId = file.getId();
-        if (existingKeys['file:' + fileId]) continue; // Already mapped!
-        
-        var fileName = file.getName();
-        
-        // Hanya import file yg namanya sesuai format: "Nomor. (Tingkat) Uraian..." 
-        var isFormatted = /^\d{1,4}\.\s*\([^)]+\)/.test(fileName);
-        if (!isFormatted) continue;
-
-        var metadata = MetadataService.parseExistingFileName(fileName, activity, subActivity);
-        metadata.lokasi_simpan = fileName;
-        metadata._lokasi_simpan_url = file.getUrl();
-
-        // Skip kalo hasil parse gak bermutu (uraian kosong atau cuma raw filename)
-        var rawName = fileName.replace(/\.[a-z0-9]+$/i, '').trim();
-        if (!metadata.uraian_informasi_berkas || metadata.uraian_informasi_berkas.length < 3 || metadata.uraian_informasi_berkas === rawName) continue;
-
-        metadataList.push(metadata);
-        currentFiles.push({ id: fileId, name: fileName });
-        existingKeys['file:' + fileId] = true;
-      }
-
-      if (metadataList.length > 0) {
-        // Bulk write to Spreadsheet
-        const writeResults = SpreadsheetService.appendArchiveRowsBulk(activity, subActivity, metadataList);
-        SpreadsheetService.updateRekapSummary(activity, subActivity, {}); // Update rekap once per sub activity
-        
-        // Log them
-        for (let i = 0; i < metadataList.length; i++) {
-          const fileInfo = currentFiles[i];
-          const writeResult = writeResults[i];
-          const metadata = metadataList[i];
-          const archiveId = 'SYNC-' + Utilities.getUuid().slice(0, 8).toUpperCase();
-          
-          allLogsToAppend.push({
-            archive_id: archiveId,
-            year: year,
-            activity_id: activity.activity_id,
-            sub_activity_id: subActivity.sub_activity_id,
-            source_file_id: '',
-            final_file_id: fileInfo.id,
-            final_file_name: fileInfo.name,
-            target_folder_id: folder.getId(),
-            target_folder_name: folder.getName(),
-            target_folder_path: '',
-            spreadsheet_file_id: writeResult.spreadsheetId,
-            spreadsheet_row_number: writeResult.rowNumber,
-            status: STATUS.COMPLETED,
-            created_at: new Date().toISOString(),
-            created_by: 'system',
-            error_message: '',
-            metadata_json: JSON.stringify({ importedFromExisting: true, metadata: metadata, finalFileName: fileInfo.name })
-          });
+      let pageToken = null;
+      do {
+        if (startTime && (Date.now() - startTime) > HARD_BUDGET_MS) {
+          timeLimitReached = true;
+          break;
         }
-        totalSynced += metadataList.length;
-      }
+
+        let result;
+        try {
+          result = Drive.Files.list({
+            q: "'" + subActivity.folder_id + "' in parents and trashed = false",
+            fields: "nextPageToken, files(id, name, webViewLink)",
+            pageSize: 1000,
+            pageToken: pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true
+          });
+        } catch (e) {
+          break;
+        }
+        
+        const files = result.files || [];
+        const metadataList = [];
+        const currentFiles = [];
+
+        for (let j = 0; j < files.length; j++) {
+          const file = files[j];
+          const fileId = file.id;
+          if (existingKeys['file:' + fileId]) continue; // Already mapped!
+          
+          const fileName = file.name;
+          
+          // Hanya import file yg namanya sesuai format: "Nomor. (Tingkat) Uraian..." 
+          const isFormatted = /^\d{1,4}\.\s*\([^)]+\)/.test(fileName);
+          if (!isFormatted) continue;
+
+          const metadata = MetadataService.parseExistingFileName(fileName, activity, subActivity);
+          metadata.lokasi_simpan = fileName;
+          metadata._lokasi_simpan_url = file.webViewLink;
+
+          // Skip kalo hasil parse gak bermutu (uraian kosong atau cuma raw filename)
+          const rawName = fileName.replace(/\.[a-z0-9]+$/i, '').trim();
+          const uraian = metadata.uraian_informasi_item || metadata.uraian_informasi_item;
+          if (!uraian || uraian.length < 3 || uraian === rawName) continue;
+
+
+          metadataList.push(metadata);
+          currentFiles.push({ id: fileId, name: fileName });
+          existingKeys['file:' + fileId] = true;
+        }
+
+        if (metadataList.length > 0) {
+          totalSynced += metadataList.length;
+          // Bulk write to Spreadsheet
+          const writeResults = SpreadsheetService.appendArchiveRowsBulk(activity, subActivity, metadataList);
+          SpreadsheetService.updateRekapSummary(activity, subActivity, {}); // Update rekap once per sub activity
+          
+          // Log them
+          for (let i = 0; i < metadataList.length; i++) {
+            const fileInfo = currentFiles[i];
+            const writeResult = writeResults[i];
+            const metadata = metadataList[i];
+            const archiveId = 'SYNC-' + Utilities.getUuid().slice(0, 8).toUpperCase();
+            
+            allLogsToAppend.push({
+              archive_id: archiveId,
+              year: year,
+              activity_id: activity.activity_id,
+              sub_activity_id: subActivity.sub_activity_id,
+              source_file_id: '',
+              final_file_id: fileInfo.id,
+              final_file_name: fileInfo.name,
+              target_folder_id: subActivity.folder_id,
+              target_folder_name: subActivity.sub_activity_name || subActivity.folder_path,
+              target_folder_path: '',
+              spreadsheet_file_id: writeResult.spreadsheetId,
+              spreadsheet_row_number: writeResult.rowNumber,
+              status: STATUS.COMPLETED,
+              created_at: new Date().toISOString(),
+              created_by: 'system',
+              error_message: '',
+              metadata_json: JSON.stringify({ importedFromExisting: true, metadata: metadata, finalFileName: fileInfo.name })
+            });
+          }
+          totalSynced += metadataList.length;
+        }
+
+        pageToken = result.nextPageToken;
+      } while (pageToken);
     });
   });
   
@@ -431,9 +479,16 @@ function wsSyncExistingFilesInFolder_(year, report) {
     ConfigRepository.appendArchiveLogsBulk(allLogsToAppend);
   }
   
-  if (totalSynced > 0) {
+  if (timeLimitReached) {
+    wsPushReport_(report, 'warning', 'Waktu eksekusi hampir habis. Sebagian berkas mungkin belum tersinkronisasi. Silakan jalankan Sinkronisasi Ruang Kerja ulang nanti.');
+  } else if (totalSynced > 0) {
     wsPushReport_(report, 'created', 'Berhasil mensinkronisasi ' + totalSynced + ' file fisik yang sudah ada di Drive secara bulk.');
   }
+  
+  return {
+    totalSynced: totalSynced,
+    timeLimitReached: timeLimitReached
+  };
 }
 
 function wsGetOrCreateConfigSpreadsheet_(folder) {
@@ -525,6 +580,10 @@ function wsBuildLeafSubActivityEntries_(rootName, rootParts, targetFolder, activ
       return;
     }
 
+    addLeaf_(folder, ancestors);
+  }
+
+  function addLeaf_(folder, ancestors) {
     const ancestorNames = ancestors.map(function (ancestor) { return ancestor.getName(); });
     const relativeParts = ancestorNames.concat(folder.getName());
     const parentFolder = ancestors.length ? ancestors[ancestors.length - 1] : null;
@@ -695,8 +754,6 @@ function wsPrepareArchiveWorkbook_(ss, activity) {
   first.setName(activity.hasRekapSheet ? 'Daftar Berkas Arsip Aktip' : 'Daftar Isi Berkas Arsip Aktip');
   if (activity.hasRekapSheet) {
     wsFormatRekapSheet_(first);
-    const detail = ss.insertSheet('Template Detail Item');
-    wsFormatDetailSheet_(detail);
   } else {
     wsFormatDetailSheet_(first);
   }
@@ -749,9 +806,9 @@ function wsBuildMetadataRows_(year) {
     ['nomor_item_arsip', 'Nomor Item Arsip', true, '', 'text'],
     ['nomor_surat', 'Nomor Surat', false, '', 'text'],
     ['kode_klasifikasi', 'Kode Klasifikasi', false, '', 'text'],
-    ['uraian_informasi_berkas', 'Uraian informasi Berkas', true, '', 'textarea'],
-    ['tanggal', 'Tgl', true, '', 'date'],
-    ['tingkat_perkembangan', 'Tingkat Perkembangan', true, 'Srikandi', 'select'],
+    ['uraian_informasi_item', 'Uraian Informasi Item', true, '', 'textarea'],
+    ['tanggal', 'Tanggal', false, '', 'date'],
+    ['tingkat_perkembangan', 'Tingkat Perkembangan', true, 'Asli', 'select'],
     ['jumlah', 'Jumlah', true, '1', 'number'],
     ['satuan', 'Satuan', false, 'Lembar', 'text'],
     ['no_filing_cabinet', 'No Filing Cabinet', false, '', 'number'],
@@ -907,7 +964,7 @@ function wsWriteDetailHeader_(sheet) {
   sheet.getRange('B6:B7').merge().setValue('No\nBerkas');
   sheet.getRange('C6:C7').merge().setValue('Nomor Item\nArsip');
   sheet.getRange('D6:D7').merge().setValue('Kode\nKlasifikasi');
-  sheet.getRange('E6:E7').merge().setValue('Uraian informasi Berkas');
+  sheet.getRange('E6:E7').merge().setValue('Uraian Informasi Item');
   sheet.getRange('F6:F7').merge().setValue('Tgl');
   sheet.getRange('G6:G7').merge().setValue('Tingkat\nPengembangan');
   sheet.getRange('H6:I6').merge().setValue('Jumlah');
@@ -1012,73 +1069,156 @@ function wsFindOrCreateChildFolder_(parent, candidates, createName, report) {
 }
 
 function wsFindChildFolder_(parent, candidates) {
-  for (let i = 0; i < candidates.length; i++) {
-    const exact = parent.getFoldersByName(candidates[i]);
-    while (exact.hasNext()) {
-      const folder = exact.next();
-      if (!folder.isTrashed()) return folder;
+  let pageToken = null;
+  do {
+    let result;
+    try {
+      result = Drive.Files.list({
+        q: "'" + parent.getId() + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        fields: "nextPageToken, files(id, name)",
+        pageSize: 1000,
+        pageToken: pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+    } catch (e) {
+      break;
     }
-  }
-
-  const folders = parent.getFolders();
-  while (folders.hasNext()) {
-    const folder = folders.next();
-    if (folder.isTrashed()) continue;
-    const normalized = wsNormalize_(folder.getName());
-    for (let i = 0; i < candidates.length; i++) {
-      if (normalized.indexOf(wsNormalize_(candidates[i])) >= 0) return folder;
+    const items = result.files || [];
+    
+    // exact match first
+    for (let i = 0; i < items.length; i++) {
+      for (let j = 0; j < candidates.length; j++) {
+        if (items[i].name === candidates[j]) return DriveApp.getFolderById(items[i].id);
+      }
     }
-  }
-
+    // fuzzy match second
+    for (let i = 0; i < items.length; i++) {
+      const normalized = wsNormalize_(items[i].name);
+      for (let j = 0; j < candidates.length; j++) {
+        if (normalized.indexOf(wsNormalize_(candidates[j])) >= 0) return DriveApp.getFolderById(items[i].id);
+      }
+    }
+    pageToken = result.nextPageToken;
+  } while (pageToken);
+  
   return null;
 }
 
 function wsListChildFolders_(parent) {
   const folders = [];
-  const iterator = parent.getFolders();
-  while (iterator.hasNext()) {
-    const folder = iterator.next();
-    if (!folder.isTrashed()) folders.push(folder);
-  }
-  return folders.sort((a, b) => a.getName().localeCompare(b.getName(), 'id', { numeric: true }));
+  let pageToken = null;
+  do {
+    let result;
+    try {
+      result = Drive.Files.list({
+        q: "'" + parent.getId() + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        fields: "nextPageToken, files(id, name)",
+        pageSize: 1000,
+        pageToken: pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+    } catch (e) {
+      break;
+    }
+    const items = result.files || [];
+    for (let i = 0; i < items.length; i++) {
+      folders.push({
+        folder: DriveApp.getFolderById(items[i].id),
+        name: items[i].name
+      });
+    }
+    pageToken = result.nextPageToken;
+  } while (pageToken);
+  
+  return folders.sort((a, b) => a.name.localeCompare(b.name, 'id', { numeric: true }))
+                .map(item => item.folder);
 }
 
 function wsGetFileByNameAndMime_(folder, name, mimeType) {
-  const files = folder.getFilesByName(name);
-  while (files.hasNext()) {
-    const file = files.next();
-    if (file.isTrashed()) continue;
-    if (!mimeType || file.getMimeType() === mimeType) return file;
+  let q = "'" + folder.getId() + "' in parents and name = '" + name.replace(/'/g, "\\'") + "' and trashed = false";
+  if (mimeType) {
+    q += " and mimeType = '" + mimeType + "'";
   }
+  
+  let pageToken = null;
+  do {
+    let result;
+    try {
+      result = Drive.Files.list({
+        q: q,
+        fields: "nextPageToken, files(id)",
+        pageSize: 10,
+        pageToken: pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+    } catch (e) {
+      break;
+    }
+    if (result.files && result.files.length > 0) return DriveApp.getFileById(result.files[0].id);
+    pageToken = result.nextPageToken;
+  } while (pageToken);
   return null;
 }
 
 function wsFindFirstArchiveSheet_(folder) {
-  const files = folder.getFiles();
-  while (files.hasNext()) {
-    const file = files.next();
-    if (file.isTrashed()) continue;
-    const name = wsNormalize_(file.getName());
-    if (file.getMimeType() === MimeType.GOOGLE_SHEETS && name.indexOf('daftar') >= 0 && name.indexOf('arsip') >= 0) {
-      return file;
+  let pageToken = null;
+  do {
+    let result;
+    try {
+      result = Drive.Files.list({
+        q: "'" + folder.getId() + "' in parents and mimeType = '" + MimeType.GOOGLE_SHEETS + "' and trashed = false",
+        fields: "nextPageToken, files(id, name)",
+        pageSize: 1000,
+        pageToken: pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+    } catch (e) {
+      break;
     }
-  }
+    const items = result.files || [];
+    for (let i = 0; i < items.length; i++) {
+      const name = wsNormalize_(items[i].name);
+      if (name.indexOf('daftar') >= 0 && name.indexOf('arsip') >= 0) {
+        return DriveApp.getFileById(items[i].id);
+      }
+    }
+    pageToken = result.nextPageToken;
+  } while (pageToken);
   return null;
 }
 
 function wsFindFirstOfficeSpreadsheet_(folder) {
-  const files = folder.getFiles();
-  while (files.hasNext()) {
-    const file = files.next();
-    if (file.isTrashed()) continue;
-    const name = file.getName();
-    const normalizedName = wsNormalize_(name);
-    const mimeType = file.getMimeType();
-    if (normalizedName.indexOf('daftar') >= 0 && normalizedName.indexOf('arsip') >= 0 &&
-      (/\.xlsx?$/i.test(name) || mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
-      return file;
+  let pageToken = null;
+  do {
+    let result;
+    try {
+      result = Drive.Files.list({
+        q: "'" + folder.getId() + "' in parents and (mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType = 'application/vnd.ms-excel' or name contains '.xls' or name contains '.xlsx') and trashed = false",
+        fields: "nextPageToken, files(id, name, mimeType)",
+        pageSize: 1000,
+        pageToken: pageToken,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true
+      });
+    } catch (e) {
+      break;
     }
-  }
+    const items = result.files || [];
+    for (let i = 0; i < items.length; i++) {
+      const name = items[i].name;
+      const normalizedName = wsNormalize_(name);
+      const mimeType = items[i].mimeType;
+      if (normalizedName.indexOf('daftar') >= 0 && normalizedName.indexOf('arsip') >= 0 &&
+        (/\.xlsx?$/i.test(name) || mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'application/vnd.ms-excel')) {
+        return DriveApp.getFileById(items[i].id);
+      }
+    }
+    pageToken = result.nextPageToken;
+  } while (pageToken);
   return null;
 }
 
@@ -1144,3 +1284,35 @@ function wsPadRow_(row, width) {
   while (padded.length < width) padded.push('');
   return padded;
 }
+
+function wsCleanupOrphanedArchiveLogs_(ss, year, subActivityRows) {
+  const logSheet = ss.getSheetByName(CONFIG_SHEETS.ARCHIVE_LOG);
+  if (!logSheet) return;
+  const lastRow = logSheet.getLastRow();
+  if (lastRow <= 1) return;
+
+  const validFolderIds = subActivityRows.map(function(row) {
+    return String(row[5] || '').trim(); // index 5 = folder_id in SUB_ACTIVITY_HEADERS
+  });
+
+  const logs = logSheet.getRange(2, 1, lastRow - 1, logSheet.getLastColumn()).getValues();
+  const rowsToDelete = [];
+  
+  for (let i = 0; i < logs.length; i++) {
+    const logYear = Number(logs[i][1]);
+    if (logYear === year) {
+      const targetFolderId = String(logs[i][7] || '').trim(); // index 7 = target_folder_id in ARCHIVE_LOG
+      if (targetFolderId && validFolderIds.indexOf(targetFolderId) === -1) {
+        rowsToDelete.push(i + 2);
+      }
+    }
+  }
+
+  if (rowsToDelete.length > 0) {
+    // Delete from bottom to top so indices don't shift
+    for (let i = rowsToDelete.length - 1; i >= 0; i--) {
+      logSheet.deleteRow(rowsToDelete[i]);
+    }
+  }
+}
+

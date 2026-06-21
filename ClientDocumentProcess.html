@@ -1,4 +1,33 @@
 <script>
+  // Fallback bila bootstrap lama belum membawa documentTypes (sebelum refresh).
+  const DOC_TYPES_FALLBACK = [
+    { key: 'data_fix_peserta', label: 'Data Fix Peserta' },
+    { key: 'kumpulan_materi', label: 'Kumpulan Materi' },
+    { key: 'laporan', label: 'Laporan Aktualisasi/Inovasi' },
+    { key: 'sertifikat', label: 'Sertifikat' }
+  ];
+
+  function getDocumentTypes_() {
+    const data = state.bootstrap;
+    const types = data && data.documentTypes;
+    return (types && types.length) ? types : DOC_TYPES_FALLBACK;
+  }
+
+  function docLinkFieldHtml(type) {
+    const inputId = 'doc-url-' + type.key;
+    return `
+      <div class="form-field drive-link-field">
+        <label for="${esc(inputId)}">${esc(type.label)}</label>
+        <div class="drive-link-input">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
+            <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
+          </svg>
+          <input id="${esc(inputId)}" data-doc-key="${esc(type.key)}" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Contoh: drive.google.com/...">
+        </div>
+      </div>`;
+  }
+
   function renderDocumentProcess() {
     const data = state.bootstrap;
     if (!data) {
@@ -23,6 +52,7 @@
     }).join('');
 
     const hasBack = !!state.preselectedTargetFolderId || !!sub;
+    const docTypes = getDocumentTypes_();
 
     setContent(`
       ${hasBack ? `
@@ -65,53 +95,14 @@
             <div class="process-card-desc">Tempel tautan Google Drive untuk setiap kategori (isi yang ada)</div>
           </div>
           <div class="form-grid" style="grid-template-columns: 1fr;">
-            <div class="form-field drive-link-field">
-              <label for="doc-url-dfp">Data Fix Peserta</label>
-              <div class="drive-link-input">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
-                  <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
-                </svg>
-                <input id="doc-url-dfp" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Contoh: drive.google.com/...">
-              </div>
-            </div>
-            <div class="form-field drive-link-field">
-              <label for="doc-url-materi">Kumpulan Materi</label>
-              <div class="drive-link-input">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
-                  <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
-                </svg>
-                <input id="doc-url-materi" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Contoh: drive.google.com/...">
-              </div>
-            </div>
-            <div class="form-field drive-link-field">
-              <label for="doc-url-laporan">Laporan Aktualisasi/Inovasi</label>
-              <div class="drive-link-input">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
-                  <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
-                </svg>
-                <input id="doc-url-laporan" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Contoh: drive.google.com/...">
-              </div>
-            </div>
-            <div class="form-field drive-link-field">
-              <label for="doc-url-sertifikat">Sertifikat</label>
-              <div class="drive-link-input">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M10 13a5 5 0 0 0 7.1 0l2.4-2.4a5 5 0 0 0-7.1-7.1L11 4.9"/>
-                  <path d="M14 11a5 5 0 0 0-7.1 0l-2.4 2.4a5 5 0 0 0 7.1 7.1L13 19.1"/>
-                </svg>
-                <input id="doc-url-sertifikat" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Contoh: drive.google.com/...">
-              </div>
-            </div>
+            ${docTypes.map(t => docLinkFieldHtml(t)).join('')}
           </div>
         </div>
 
         <div class="process-sticky-bar" id="doc-finalize-bar">
           <div class="preview-section">
             <div class="preview-label">Tautan terisi</div>
-            <div class="preview-name" id="doc-selected-tab">0 dari 4</div>
+            <div class="preview-name" id="doc-selected-tab">0 dari ${docTypes.length}</div>
           </div>
           <div class="action-group">
             <button class="btn btn-primary" id="doc-submit-btn" disabled>
@@ -151,13 +142,9 @@
     const submitBtn = document.getElementById('doc-submit-btn');
     const preview = document.getElementById('doc-selected-tab');
 
-    const categories = [
-      { id: 'doc-url-dfp', name: 'Data Fix Peserta' },
-      { id: 'doc-url-materi', name: 'Kumpulan Materi' },
-      { id: 'doc-url-laporan', name: 'Laporan Aktualisasi/Inovasi' },
-      { id: 'doc-url-sertifikat', name: 'Sertifikat' }
-    ];
+    const categories = getDocumentTypes_().map(t => ({ id: 'doc-url-' + t.key, key: t.key, name: t.label }));
     const urlInputs = categories.map(c => ({ ...c, el: document.getElementById(c.id) }));
+    const totalDocTypes = urlInputs.length;
 
     const backBtn = document.getElementById('doc-back-to-archive-folder');
     if (backBtn) {
@@ -255,7 +242,7 @@
       if (!submitBtn) return;
       const count = getFilledCount();
       submitBtn.disabled = !(count > 0 && subSel && subSel.value);
-      if (preview) preview.textContent = count > 0 ? count + ' dari 4' : '0 dari 4';
+      if (preview) preview.textContent = count + ' dari ' + totalDocTypes;
     };
 
     let defaultsRequestId = 0;
@@ -275,10 +262,7 @@
 
         urlInputs.forEach(u => {
           if (!u.el) return;
-          if (u.id === 'doc-url-dfp') u.el.value = meta.url_dfp || '';
-          if (u.id === 'doc-url-materi') u.el.value = meta.url_materi || '';
-          if (u.id === 'doc-url-laporan') u.el.value = meta.url_laporan || '';
-          if (u.id === 'doc-url-sertifikat') u.el.value = meta.url_sertifikat || '';
+          u.el.value = meta['url_' + u.key] || '';
         });
         checkDocSubmit();
       } catch (error) {

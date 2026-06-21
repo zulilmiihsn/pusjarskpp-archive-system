@@ -42,16 +42,22 @@ const SubActivityController = {
         subActivityName: subActivityName,
         formalArchiveName: formalArchiveName,
         noFolder: payload.noFolder || WorkspaceSetupService.parseLeadingNumber(subActivityName) || activity.folder_no,
-        defaultKodeKlasifikasi: payload.defaultKodeKlasifikasi || '',
+        defaultKodeKlasifikasi: payload.defaultKodeKlasifikasi || DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI,
         allowNonLetterDocument: payload.allowNonLetterDocument,
         targetSheetName: targetSheetName,
         mappingStatus: payload.mappingStatus || wsInferMappingStatus_(subActivityName, formalArchiveName, targetSheetName),
+        mappingNote: payload.mappingNote,
         folderPath: parentFolderName ? parentFolderName + ' > ' + folder.getName() : folder.getName(),
-        parentFolderId: parentFolder ? parentFolder.getId() : '',
+        parentFolderId: parentFolder ? cleanId_(parentFolder.getId()) : '',
+        laciFolderId: payload.laciFolderId ? cleanId_(payload.laciFolderId) : undefined,
         parentFolderName: parentFolderName,
         parentFolderPath: parentFolderName,
         spreadsheetFileId: spreadsheet ? spreadsheet.getId() : activity.spreadsheet_file_id
       }, folder);
+
+      if (subRow && subRow._shiftedSubActivities && subRow._shiftedSubActivities.length > 0) {
+        SpreadsheetService.cascadeNomorBerkasShift(year, subRow._shiftedSubActivities);
+      }
 
       SpreadsheetService.ensureSubActivitySheet(activity, subRow);
       const rekap = subRow.rekap_row_number
@@ -149,16 +155,44 @@ const SubActivityController = {
       const parentFolderId = existingSub.folder_id;
 
       // 1. Buat folder anak baru di dalam folder lama (di Persuratan)
-      const parentFolder = DriveApp.getFolderById(parentFolderId);
       const newChildFolder = DriveService.createSubFolder(parentFolderId, newSubName);
+      const newChildFolderId = newChildFolder.getId();
 
-      // Pindahkan semua file yang ada di parentFolder ke dalam newChildFolder
+      const moveFilesToNewFolder_ = (oldParentId, newParentId) => {
+        let pageToken = null;
+        do {
+          let result;
+          try {
+            result = Drive.Files.list({
+              q: "'" + oldParentId + "' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false",
+              fields: "nextPageToken, files(id)",
+              pageSize: 1000,
+              pageToken: pageToken,
+              supportsAllDrives: true,
+              includeItemsFromAllDrives: true
+            });
+          } catch (e) {
+            break;
+          }
+          const items = result.files || [];
+          for (let i = 0; i < items.length; i++) {
+            try {
+              Drive.Files.update({}, items[i].id, null, {
+                addParents: newParentId,
+                removeParents: oldParentId,
+                supportsAllDrives: true
+              });
+            } catch (e) {
+              console.warn('Failed to move file ' + items[i].id + ': ' + e.message);
+            }
+          }
+          pageToken = result.nextPageToken;
+        } while (pageToken);
+      };
+
+      // Pindahkan semua file yang ada di parentFolderId ke dalam newChildFolderId
       // (Kita tidak memindahkan folder, hanya file agar struktur aman)
-      const files = parentFolder.getFiles();
-      while (files.hasNext()) {
-        const file = files.next();
-        file.moveTo(newChildFolder);
-      }
+      moveFilesToNewFolder_(parentFolderId, newChildFolderId);
 
       // 2. Buat folder anak baru di Dokumen
       let docParentFolderId = null;
@@ -180,10 +214,7 @@ const SubActivityController = {
         if (docParentFolder) {
           docParentFolderId = docParentFolder.getId();
           const docNewChildFolder = DriveService.createSubFolder(docParentFolderId, newSubName);
-          const docFiles = docParentFolder.getFiles();
-          while (docFiles.hasNext()) {
-            docFiles.next().moveTo(docNewChildFolder);
-          }
+          moveFilesToNewFolder_(docParentFolderId, docNewChildFolder.getId());
         }
       } catch (e) {
         // Abaikan jika struktur dokumen tidak standar
@@ -689,12 +720,17 @@ function _syncAddNewEntry_(entry, folder, folderName, activity, year, spreadshee
     allowNonLetterDocument: activity.allowNonLetter,
     targetSheetName: targetSheetName,
     mappingStatus: wsInferMappingStatus_(folderName, formalArchiveName, targetSheetName),
+    mappingNote: '',
     folderPath: entry.folderPath,
     parentFolderId: entry.parentFolderId,
     parentFolderName: entry.parentFolderName,
     parentFolderPath: entry.parentFolderPath,
     spreadsheetFileId: spreadsheetFileId
   }, folder);
+
+  if (subRow && subRow._shiftedSubActivities && subRow._shiftedSubActivities.length > 0) {
+    SpreadsheetService.cascadeNomorBerkasShift(year, subRow._shiftedSubActivities);
+  }
   SpreadsheetService.ensureSubActivitySheet(activity, subRow);
   const rekap = SpreadsheetService.appendRekapRowIfPresent(activity, subRow);
   persistRekapRowNumber_(year, activity, subRow, rekap);
