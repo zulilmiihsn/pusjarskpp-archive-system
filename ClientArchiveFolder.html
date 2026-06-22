@@ -1101,7 +1101,9 @@
     try {
       const result = await api(apiName, payload);
       invalidateViewCache('archive_folder');
-      await loadArchiveFolderContent(context);
+      if (state.view === 'archive_folder' && state.selectedFolderId === context.folderId) {
+        await loadArchiveFolderContent(context);
+      }
       if (actionToast) removeToast(actionToast);
       showToast(successMessage);
       return result;
