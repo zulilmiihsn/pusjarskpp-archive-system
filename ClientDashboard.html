@@ -114,48 +114,50 @@
         </div>
 
         <!-- Right: Recent History with Category, Sub-Category, and Status -->
-        <div class="dashboard-history-panel panel panel-pad" style="display:flex; flex-direction:column; padding-bottom: 0;">
-          <div class="panel-header-row" style="flex-shrink:0;">
-            <h3 class="panel-subtitle">Riwayat Terakhir</h3>
-            <button class="btn-text" id="open-history">Lihat Semua</button>
-          </div>
-          <div class="history-carousel">
-            <div class="recent-list" id="recent-list">
-              ${recent.length > 0 ? recent.slice(0, 15).map(function(item) {
-                const s = String(item.status || '').toUpperCase();
-                const isDraft = s === STATUS_ENUM.DRAFT;
-                const dateStr = formatDateStr(item.created_at);
-                const timeStr = formatTimeStr(item.created_at);
-                const statusText = isDraft ? 'Draft' : (s === STATUS_ENUM.COMPLETED ? 'Selesai' : 'Gagal');
-                const badgeClass = isDraft ? 'status-warn' : (s === STATUS_ENUM.COMPLETED ? 'status-ok' : 'status-error');
-                
-                // Format date as "30 MEI"
-                const dateParts = dateStr.split(' ');
-                const dateDayMonth = dateParts[0] + ' ' + (dateParts[1] || '').toUpperCase();
-                
-                return '<div class="recent-item">' +
-                  '<div class="recent-item-date-block">' +
-                    '<span class="recent-item-time-large">' + esc(timeStr) + '</span>' +
-                    '<span class="recent-item-date-small">' + esc(dateDayMonth) + '</span>' +
-                  '</div>' +
-                  '<div class="recent-item-body">' +
-                    '<div class="recent-item-body-top">' +
-                      '<span class="recent-item-cat">' + esc(getActivityName(item.activity_id)) + '</span>' +
-                      '<span class="status ' + badgeClass + '">' + statusText + '</span>' +
+        <div style="position: relative; height: 100%;">
+          <div class="dashboard-history-panel panel panel-pad" style="position: absolute; top: 0; bottom: 0; left: 0; right: 0; display:flex; flex-direction:column; padding-bottom: 0;">
+            <div class="panel-header-row" style="flex-shrink:0;">
+              <h3 class="panel-subtitle">Riwayat Terakhir</h3>
+              <button class="btn-text" id="open-history">Lihat Semua</button>
+            </div>
+            <div class="history-carousel">
+              <div class="recent-list" id="recent-list">
+                ${recent.length > 0 ? recent.slice(0, 15).map(function(item) {
+                  const s = String(item.status || '').toUpperCase();
+                  const isDraft = s === STATUS_ENUM.DRAFT;
+                  const dateStr = formatDateStr(item.created_at);
+                  const timeStr = formatTimeStr(item.created_at);
+                  const statusText = isDraft ? 'Draft' : (s === STATUS_ENUM.COMPLETED ? 'Selesai' : 'Gagal');
+                  const badgeClass = isDraft ? 'status-warn' : (s === STATUS_ENUM.COMPLETED ? 'status-ok' : 'status-error');
+                  
+                  // Format date as "30 MEI"
+                  const dateParts = dateStr.split(' ');
+                  const dateDayMonth = dateParts[0] + ' ' + (dateParts[1] || '').toUpperCase();
+                  
+                  return '<div class="recent-item">' +
+                    '<div class="recent-item-date-block">' +
+                      '<span class="recent-item-time-large">' + esc(timeStr) + '</span>' +
+                      '<span class="recent-item-date-small">' + esc(dateDayMonth) + '</span>' +
                     '</div>' +
-                    '<span class="recent-item-sub">' + esc(getSubActivityName(item.activity_id, item.sub_activity_id)) + '</span>' +
-                    '<span class="recent-item-file">' +
-                      '<svg class="recent-file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>' +
-                      '<span>' + esc(item.final_file_name || '-') + '</span>' +
-                    '</span>' +
-                    (isDraft ? '<div class="recent-item-actions"><button class="btn btn-outline btn-sm resume-draft-btn" data-row=\'' + esc(encodeURIComponent(JSON.stringify(item))) + '\'>Lanjutkan</button><button class="btn btn-sm btn-danger delete-draft-btn" data-row=\'' + esc(encodeURIComponent(JSON.stringify(item))) + '\'>Hapus</button></div>' : '') +
-                  '</div>' +
-                '</div>';
-              }).join('') : `
-                <div class="empty empty-sm">
-                  Belum ada riwayat arsip
-                </div>
-              `}
+                    '<div class="recent-item-body">' +
+                      '<div class="recent-item-body-top">' +
+                        '<span class="recent-item-cat">' + esc(getActivityName(item.activity_id)) + '</span>' +
+                        '<span class="status ' + badgeClass + '">' + statusText + '</span>' +
+                      '</div>' +
+                      '<span class="recent-item-sub">' + esc(getSubActivityName(item.activity_id, item.sub_activity_id)) + '</span>' +
+                      '<span class="recent-item-file">' +
+                        '<svg class="recent-file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>' +
+                        '<span>' + esc(item.final_file_name || '-') + '</span>' +
+                      '</span>' +
+                      (isDraft ? '<div class="recent-item-actions"><button class="btn btn-outline btn-sm resume-draft-btn" data-row=\'' + esc(encodeURIComponent(JSON.stringify(item))) + '\'>Lanjutkan</button><button class="btn btn-sm btn-danger delete-draft-btn" data-row=\'' + esc(encodeURIComponent(JSON.stringify(item))) + '\'>Hapus</button></div>' : '') +
+                    '</div>' +
+                  '</div>';
+                }).join('') : `
+                  <div class="empty empty-sm">
+                    Belum ada riwayat arsip
+                  </div>
+                `}
+              </div>
             </div>
           </div>
         </div>
