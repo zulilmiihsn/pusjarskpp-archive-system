@@ -6,7 +6,23 @@ const ConfigRepository = {
     if (!settings.configSpreadsheetId) {
       throw new Error('CONFIG_SPREADSHEET_ID belum diisi. Pilih Folder Ruang Kerja di Pengaturan lalu bangun ruang kerja.');
     }
-    return SpreadsheetApp.openById(settings.configSpreadsheetId);
+    // Memo handle per-eksekusi (lihat openSpreadsheetById_ di SpreadsheetService.gs):
+    // loadAll + tiap mutasi membuka config ss berulang dalam satu request.
+    return openSpreadsheetById_(settings.configSpreadsheetId);
+  },
+
+  // Cari 1 baris di archive_log tanpa membaca SELURUH sheet: baca header + HANYA kolom
+  // kunci. Mengembalikan { headers, lastRow, lastCol, keyCol, keyValues } atau null bila
+  // sheet kosong / kolom kunci tak ada. keyValues[k] = baris sheet (k+2).
+  _scanArchiveLogColumn_: function(sheet, keyHeaderName) {
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastRow < 2) return null;
+    const headers = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0].map(normalizeHeader_);
+    const keyCol = headers.indexOf(keyHeaderName);
+    if (keyCol === -1) return null;
+    const keyValues = sheet.getRange(2, keyCol + 1, lastRow - 1, 1).getDisplayValues();
+    return { headers: headers, lastRow: lastRow, lastCol: lastCol, keyCol: keyCol, keyValues: keyValues };
   },
 
   loadAll: function(year) {
@@ -181,19 +197,21 @@ const ConfigRepository = {
     const ss = this.getConfigSpreadsheet();
     const sheet = ss.getSheetByName(CONFIG_SHEETS.ARCHIVE_LOG);
     if (!sheet) return null;
-    const values = sheet.getDataRange().getDisplayValues();
-    if (values.length < 2) return null;
-    const headers = values[0].map(normalizeHeader_);
-    const idCol = headers.indexOf('archive_id');
-    const statusCol = headers.indexOf('status');
-    const sourceFileCol = headers.indexOf('source_file_id');
-    if (idCol === -1 || statusCol === -1) return null;
+    const ctx = this._scanArchiveLogColumn_(sheet, 'archive_id');
+    if (!ctx) return null;
+    const statusCol = ctx.headers.indexOf('status');
+    const sourceFileCol = ctx.headers.indexOf('source_file_id');
+    if (statusCol === -1) return null;
 
-    for (let i = values.length - 1; i >= 1; i--) {
-      if (values[i][idCol] === archiveId && values[i][statusCol] === STATUS.DRAFT) {
-        const sourceFileId = sourceFileCol !== -1 ? values[i][sourceFileCol] : '';
-        sheet.deleteRow(i + 1);
-        return sourceFileId || null;
+    for (let k = ctx.keyValues.length - 1; k >= 0; k--) {
+      if (ctx.keyValues[k][0] === archiveId) {
+        const rowNum = k + 2;
+        const rowVals = sheet.getRange(rowNum, 1, 1, ctx.lastCol).getDisplayValues()[0];
+        if (rowVals[statusCol] === STATUS.DRAFT) {
+          const sourceFileId = sourceFileCol !== -1 ? rowVals[sourceFileCol] : '';
+          sheet.deleteRow(rowNum);
+          return sourceFileId || null;
+        }
       }
     }
     return null;
@@ -205,15 +223,12 @@ const ConfigRepository = {
     const ss = this.getConfigSpreadsheet();
     const sheet = ss.getSheetByName(CONFIG_SHEETS.ARCHIVE_LOG);
     if (!sheet) return false;
-    const values = sheet.getDataRange().getDisplayValues();
-    if (values.length < 2) return false;
-    const headers = values[0].map(normalizeHeader_);
-    const idCol = headers.indexOf('archive_id');
-    if (idCol === -1) return false;
+    const ctx = this._scanArchiveLogColumn_(sheet, 'archive_id');
+    if (!ctx) return false;
 
-    for (let i = values.length - 1; i >= 1; i--) {
-      if (values[i][idCol] === archiveId) {
-        sheet.deleteRow(i + 1);
+    for (let k = ctx.keyValues.length - 1; k >= 0; k--) {
+      if (ctx.keyValues[k][0] === archiveId) {
+        sheet.deleteRow(k + 2);
         return true;
       }
     }
@@ -225,15 +240,13 @@ const ConfigRepository = {
     const ss = this.getConfigSpreadsheet();
     const sheet = ss.getSheetByName(CONFIG_SHEETS.ARCHIVE_LOG);
     if (!sheet) return null;
-    const values = sheet.getDataRange().getDisplayValues();
-    if (values.length < 2) return null;
-    const headers = values[0].map(normalizeHeader_);
-    const idCol = headers.indexOf('archive_id');
-    if (idCol === -1) return null;
+    const ctx = this._scanArchiveLogColumn_(sheet, 'archive_id');
+    if (!ctx) return null;
 
-    for (let i = values.length - 1; i >= 1; i--) {
-      if (values[i][idCol] === archiveId) {
-        return objectFromHeaders_(headers, values[i]);
+    for (let k = ctx.keyValues.length - 1; k >= 0; k--) {
+      if (ctx.keyValues[k][0] === archiveId) {
+        const rowVals = sheet.getRange(k + 2, 1, 1, ctx.lastCol).getDisplayValues()[0];
+        return objectFromHeaders_(ctx.headers, rowVals);
       }
     }
     return null;
@@ -244,17 +257,16 @@ const ConfigRepository = {
     const ss = this.getConfigSpreadsheet();
     const sheet = ss.getSheetByName(CONFIG_SHEETS.ARCHIVE_LOG);
     if (!sheet) return null;
-    const values = sheet.getDataRange().getDisplayValues();
-    if (values.length < 2) return null;
-    const headers = values[0].map(normalizeHeader_);
-    const fileCol = headers.indexOf('final_file_id');
-    const statusCol = headers.indexOf('status');
-    if (fileCol === -1) return null;
+    const ctx = this._scanArchiveLogColumn_(sheet, 'final_file_id');
+    if (!ctx) return null;
+    const statusCol = ctx.headers.indexOf('status');
+    const target = cleanId_(fileId);
 
-    for (let i = values.length - 1; i >= 1; i--) {
-      if (cleanId_(values[i][fileCol]) === cleanId_(fileId)) {
-        if (statusCol !== -1 && values[i][statusCol] === STATUS.DRAFT) continue;
-        return objectFromHeaders_(headers, values[i]);
+    for (let k = ctx.keyValues.length - 1; k >= 0; k--) {
+      if (cleanId_(ctx.keyValues[k][0]) === target) {
+        const rowVals = sheet.getRange(k + 2, 1, 1, ctx.lastCol).getDisplayValues()[0];
+        if (statusCol !== -1 && rowVals[statusCol] === STATUS.DRAFT) continue;
+        return objectFromHeaders_(ctx.headers, rowVals);
       }
     }
     return null;
@@ -265,15 +277,12 @@ const ConfigRepository = {
     const ss = this.getConfigSpreadsheet();
     const sheet = ss.getSheetByName(CONFIG_SHEETS.ARCHIVE_LOG);
     if (!sheet) return false;
-    const values = sheet.getDataRange().getDisplayValues();
-    if (values.length < 2) return false;
-    const headers = values[0].map(normalizeHeader_);
-    const idCol = headers.indexOf('archive_id');
-    if (idCol === -1) return false;
+    const ctx = this._scanArchiveLogColumn_(sheet, 'archive_id');
+    if (!ctx) return false;
 
-    for (let i = values.length - 1; i >= 1; i--) {
-      if (values[i][idCol] === archiveId) {
-        updateConfigRow_(sheet, i + 1, updates);
+    for (let k = ctx.keyValues.length - 1; k >= 0; k--) {
+      if (ctx.keyValues[k][0] === archiveId) {
+        updateConfigRow_(sheet, k + 2, updates);
         return true;
       }
     }
@@ -287,22 +296,28 @@ const ConfigRepository = {
       const ss = this.getConfigSpreadsheet();
       const sheet = ss.getSheetByName(CONFIG_SHEETS.ARCHIVE_LOG);
       if (!sheet) return 0;
-      const values = sheet.getDataRange().getDisplayValues();
-      if (values.length < 2) return 0;
-      const headers = values[0].map(normalizeHeader_);
+      const lastRow = sheet.getLastRow();
+      const lastCol = sheet.getLastColumn();
+      if (lastRow < 2) return 0;
+      const headers = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0].map(normalizeHeader_);
       const ssCol = headers.indexOf('spreadsheet_file_id');
       const rowCol = headers.indexOf('spreadsheet_row_number');
       if (ssCol === -1 || rowCol === -1) return 0;
+
+      // Baca HANYA dua kolom yang relevan (file_id & row_number), bukan seluruh sheet.
+      const n = lastRow - 1;
+      const ssVals = sheet.getRange(2, ssCol + 1, n, 1).getDisplayValues();
+      const rowVals = sheet.getRange(2, rowCol + 1, n, 1).getDisplayValues();
 
       const targetSs = cleanId_(spreadsheetFileId);
       let updatedCount = 0;
       // Bangun kolom spreadsheet_row_number di memori lalu tulis SEKALI,
       // bukan satu setValue per baris (sebelumnya O(N) write per delete).
       const newColumn = [];
-      for (let i = 1; i < values.length; i++) {
-        let cell = values[i][rowCol];
-        if (cleanId_(values[i][ssCol]) === targetSs) {
-          const rowNum = parseInt(values[i][rowCol], 10);
+      for (let i = 0; i < n; i++) {
+        let cell = rowVals[i][0];
+        if (cleanId_(ssVals[i][0]) === targetSs) {
+          const rowNum = parseInt(rowVals[i][0], 10);
           if (!isNaN(rowNum) && rowNum > thresholdRow) {
             cell = rowNum - 1;
             updatedCount++;

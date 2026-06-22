@@ -481,6 +481,9 @@ function convertSubActivityToParent(payload) {
   return wrapApi(() => SubActivityController.convertSubActivityToParent(payload || {}));
 }
 
+// Catatan USER_DEPLOYING: owner-check di SettingsController.forceResetAdmin memakai
+// Session.getEffectiveUser() = pemilik deploy. Itu MEMANG perilaku yang diinginkan
+// (hanya pemilik deploy yang boleh reset admin darurat) dan tetap benar di model ini.
 function forceResetAdmin() {
   return wrapApi(() => WorkspaceController.forceResetAdmin());
 }

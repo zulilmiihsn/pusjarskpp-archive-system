@@ -33,6 +33,11 @@ global.Utilities = {
 global.Session = {
   getEffectiveUser: () => ({
     getEmail: () => 'admin@example.com'
+  }),
+  // Default: identitas Google aktif tidak diketahui (''), sehingga binding sesi lunak
+  // dilewati di requireAuth_. Test boleh override Session.getActiveUser bila perlu.
+  getActiveUser: () => ({
+    getEmail: () => ''
   })
 };
 

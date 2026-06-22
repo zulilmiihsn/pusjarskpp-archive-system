@@ -3,6 +3,17 @@
 const LOGIN_RATE_LIMIT_WINDOW_MS = 60000;
 const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 10;
 
+/**
+ * Email akun Google yang sedang mengakses (lowercase). Kosong bila tidak tersedia
+ * (mis. lintas-domain / privasi). Tidak pernah melempar. Di USER_DEPLOYING + domain
+ * sama, ini mengembalikan email user pengakses (bukan pemilik deploy).
+ * @return {string}
+ */
+function activeUserEmail_() {
+  try { return String(Session.getActiveUser().getEmail() || '').toLowerCase(); }
+  catch (e) { return ''; }
+}
+
 function checkLoginRateLimit_(username) {
   const props = PropertiesService.getScriptProperties();
   const key = 'login_attempts_' + String(username || '').toLowerCase();
@@ -120,11 +131,12 @@ const AuthService = {
       username: found.username,
       role: found.role,
       displayName: found.displayName,
+      activeEmail: activeUserEmail_(),
       loggedInAt: now.toISOString(),
       expiresAt: now.getTime() + SESSION_TTL_MS
     };
     PropertiesService.getScriptProperties().setProperty('sess_' + sessionId, JSON.stringify(session));
-    
+
     // Garbage collection ringan setiap kali ada login sukses
     cleanupExpiredSessions_();
 
@@ -216,6 +228,7 @@ const AuthService = {
       username: 'admin',
       role: 'admin',
       displayName: 'Administrator',
+      activeEmail: activeUserEmail_(),
       loggedInAt: now.toISOString(),
       expiresAt: now.getTime() + SESSION_TTL_MS
     };
@@ -251,21 +264,29 @@ const AuthService = {
 function requireAuth_(payload) {
   const sessionId = payload && payload._sessionId;
   if (!sessionId) throw new Error('Sesi login tidak ditemukan. Silakan login terlebih dahulu.');
+  let session = null;
   try {
     const data = PropertiesService.getScriptProperties().getProperty('sess_' + sessionId);
-    if (data) {
-      const session = JSON.parse(data);
-      if (session.expiresAt && Date.now() < session.expiresAt) {
-        slideSession_(sessionId, session);
-        return {
-          accountId: session.accountId,
-          username: session.username,
-          role: session.role,
-          displayName: session.displayName
-        };
-      }
+    if (data) session = JSON.parse(data);
+  } catch (_) {
+    session = null;
+  }
+  if (session && session.expiresAt && Date.now() < session.expiresAt) {
+    // Binding lunak ke identitas Google: tolak HANYA bila akun Google aktif jelas-jelas
+    // BEDA dari saat login (cegah replay token lintas-akun). Sesi lama tanpa activeEmail,
+    // atau identitas aktif kosong (lintas-domain/privasi), tetap diizinkan (backward-compat).
+    const current = activeUserEmail_();
+    if (current && session.activeEmail && current !== session.activeEmail) {
+      throw new Error('Sesi tidak cocok dengan akun Google aktif. Silakan login kembali.');
     }
-  } catch (_) {}
+    slideSession_(sessionId, session);
+    return {
+      accountId: session.accountId,
+      username: session.username,
+      role: session.role,
+      displayName: session.displayName
+    };
+  }
   throw new Error('Sesi login telah berakhir. Silakan login kembali.');
 }
 

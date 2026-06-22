@@ -14,6 +14,7 @@ const DriveController = {
     payload = payload || {};
     requireAuth_(payload);
     Validator.requireId(payload.folderId, 'Folder ID');
+    requireWithinWorkspace_(payload.folderId, payload.year);
     const result = DriveService.listFolderContent(payload);
     try {
       const mirrorFolder = resolveMirrorForFolder_(payload.folderId);
@@ -39,6 +40,7 @@ const DriveController = {
     const actor = requireAuth_(payload);
     Validator.requireId(payload.parentFolderId, 'Folder induk');
     Validator.requireString(payload.name, 'Nama folder');
+    requireWithinWorkspace_(payload.parentFolderId, payload.year);
     const r = DriveService.createChildFolder(payload.parentFolderId, payload.name);
     bumpVersion();
     auditAction_(actor, 'FOLDER_CREATED', { folderId: payload.parentFolderId, message: 'Membuat folder turunan: ' + payload.name });
@@ -49,6 +51,7 @@ const DriveController = {
     const actor = requireAuth_(payload);
     Validator.requireId(payload.folderId, 'Folder ID');
     Validator.requireString(payload.name, 'Nama baru');
+    requireWithinWorkspace_(payload.folderId, payload.year);
     const r = DriveService.renameFolder(payload.folderId, payload.name);
     bumpVersion();
     auditAction_(actor, 'FOLDER_RENAMED', { folderId: payload.folderId, message: 'Mengganti nama folder menjadi: ' + payload.name });
@@ -59,6 +62,7 @@ const DriveController = {
     // Trash folder bisa menyeret arsip final di dalamnya → admin-only.
     const actor = requireAdmin_(payload);
     Validator.requireId(payload.folderId, 'Folder ID');
+    requireWithinWorkspace_(payload.folderId, payload.year);
     // B3: cascade — hapus baris detail/rekap + log untuk SEMUA file ber-log di dalam
     // folder SEBELUM folder di-trash, agar tidak meninggalkan baris/log yatim yang
     // menunjuk file yang sudah masuk Tempat Sampah.
@@ -73,6 +77,7 @@ const DriveController = {
     const actor = requireAuth_(payload);
     Validator.requireId(payload.fileId, 'File ID');
     Validator.requireString(payload.name, 'Nama baru');
+    requireWithinWorkspace_(payload.fileId, payload.year);
     const r = DriveService.renameFile(payload.fileId, payload.name);
     // B7: jaga sinkron — bila file ini arsip ber-log, perbarui nama di archive_log
     // agar tampilan & proses re-adopsi tidak memakai nama lama yang basi.
@@ -92,6 +97,7 @@ const DriveController = {
     payload = payload || {};
     const actor = requireAuth_(payload);
     Validator.requireId(payload.fileId, 'File ID');
+    requireWithinWorkspace_(payload.fileId, payload.year);
     const log = ConfigRepository.getArchiveLogByFileId(payload.fileId);
     if (log && log.archive_id) {
        // Menghapus arsip final = admin-only. Escalate di sini, lalu pakai core

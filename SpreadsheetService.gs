@@ -43,10 +43,26 @@ function extractMetadataFromRow_(rowValues) {
   return metadata;
 }
 
+// Memo handle Spreadsheet per-eksekusi. openById adalah RPC penuh, dan satu request
+// kerap membuka spreadsheet yang sama berkali-kali (mis. getNextItemNumber ->
+// appendArchiveRow -> updateRekapSummary -> log). State modul GAS direset antar-eksekusi
+// sehingga memo ini aman & tak pernah basi lintas-request. Di-key per id agar bila id
+// berubah dalam satu request (mis. ganti workspace) handle baru tetap dibuka.
+const _ssHandleCache_ = {};
+function openSpreadsheetById_(id) {
+  const key = String(id);
+  let ss = _ssHandleCache_[key];
+  if (!ss) {
+    ss = SpreadsheetApp.openById(id);
+    _ssHandleCache_[key] = ss;
+  }
+  return ss;
+}
+
 const SpreadsheetService = {
   getNextItemNumber: function (activity, subActivity) {
     try {
-      const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+      const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
       const sheet = findExistingDetailSheet_(ss, subActivity);
       if (!sheet) return '01';
 
@@ -76,7 +92,7 @@ const SpreadsheetService = {
   },
 
   appendArchiveRow: function (activity, subActivity, metadata) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = ensureDetailSheet_(ss, activity, subActivity);
     const rowIndex = findWritableDetailRow_(sheet);
     const rowValues = buildDetailRowValues_(metadata);
@@ -182,7 +198,7 @@ const SpreadsheetService = {
 
   appendArchiveRowsBulk: function (activity, subActivity, metadataList) {
     if (!metadataList || metadataList.length === 0) return [];
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = ensureDetailSheet_(ss, activity, subActivity);
     const startCol = getDetailStartColumn_(sheet);
     const checkCol = startCol + DETAIL_WRITABLE_CHECK_OFFSET;
@@ -299,7 +315,7 @@ const SpreadsheetService = {
 
   getArchiveRow: function (activity, subActivity, rowIndex) {
     if (!rowIndex) return {};
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = ensureDetailSheet_(ss, activity, subActivity);
     const startCol = getDetailStartColumn_(sheet);
     const rowValues = sheet.getRange(rowIndex, startCol, 1, DETAIL_FIELD_ORDER.length).getValues()[0];
@@ -309,7 +325,7 @@ const SpreadsheetService = {
 
   getArchiveRowByFileId: function (activity, subActivity, fileId, fallbackRowIndex) {
     if (!fileId && !fallbackRowIndex) return {};
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = ensureDetailSheet_(ss, activity, subActivity);
     const startCol = getDetailStartColumn_(sheet);
     const lokasiSimpanIdx = DETAIL_FIELD_ORDER.indexOf('lokasi_simpan');
@@ -340,7 +356,7 @@ const SpreadsheetService = {
   },
 
   updateArchiveRow: function (activity, subActivity, rowIndex, metadata) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = ensureDetailSheet_(ss, activity, subActivity);
     const rowValues = buildDetailRowValues_(metadata);
     const startCol = getDetailStartColumn_(sheet);
@@ -421,7 +437,7 @@ const SpreadsheetService = {
   },
 
   ensureSubActivitySheet: function (activity, subActivity) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = ensureDetailSheet_(ss, activity, subActivity);
     return {
       spreadsheetId: ss.getId(),
@@ -431,7 +447,7 @@ const SpreadsheetService = {
   },
 
   getDetailMetadataDefaults: function (activity, subActivity, forceCalculate) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
 
     let locks = {};
     try {
@@ -528,7 +544,7 @@ const SpreadsheetService = {
   },
 
   listExistingItemUraianPairs: function (activity, subActivity) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = findExistingDetailSheet_(ss, subActivity);
     if (!sheet) return [];
 
@@ -559,7 +575,7 @@ const SpreadsheetService = {
   },
 
   listExistingArchiveRows: function (activity, subActivity) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = findExistingDetailSheet_(ss, subActivity);
     if (!sheet) {
       return {
@@ -611,7 +627,7 @@ const SpreadsheetService = {
   },
 
   appendRekapRowIfPresent: function (activity, subActivity) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = findRekapSheet_(ss);
     if (!sheet) return null;
 
@@ -663,7 +679,7 @@ const SpreadsheetService = {
   },
 
   updateRekapSummary: function (activity, subActivity, metadata) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = findRekapSheet_(ss);
     if (!sheet) return null;
 
@@ -715,7 +731,7 @@ const SpreadsheetService = {
   },
 
   deleteArchiveRowAndReorder: function(activity, subActivity, rowNumber, fileId) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = ensureDetailSheet_(ss, activity, subActivity);
     
     let targetRow = rowNumber;
@@ -791,7 +807,7 @@ const SpreadsheetService = {
   },
 
   updateRekapSubActivityIdentity: function (activity, previousSubActivity, nextSubActivity) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, nextSubActivity || previousSubActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, nextSubActivity || previousSubActivity));
     const sheet = findRekapSheet_(ss);
     if (!sheet) return null;
 
@@ -811,7 +827,7 @@ const SpreadsheetService = {
   },
 
   markRekapSubActivityInactive: function (activity, subActivity, reason) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = findRekapSheet_(ss);
     if (!sheet) return null;
 
@@ -832,7 +848,7 @@ const SpreadsheetService = {
   },
 
   clearRekapSubActivityInactiveMark: function (activity, subActivity) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = findRekapSheet_(ss);
     if (!sheet) return null;
 
@@ -855,7 +871,7 @@ const SpreadsheetService = {
   },
 
   updateArchiveDocumentLink: function (activity, subActivity, categoryName, file) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = findRekapSheet_(ss);
     if (!sheet) throw new Error('Sheet rekap "' + REKAP_SHEET_NAME + '" tidak ditemukan.');
 
@@ -890,7 +906,7 @@ const SpreadsheetService = {
   },
 
   clearArchiveDocumentLink: function (activity, subActivity, categoryName) {
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = findRekapSheet_(ss);
     if (!sheet) return null;
 
@@ -918,7 +934,7 @@ const SpreadsheetService = {
     metadata = metadata || {};
     locks = locks || {};
     const summaryResult = SpreadsheetService.updateRekapSummary(activity, subActivity, {});
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = findRekapSheet_(ss);
     if (!sheet) throw new Error('Sheet rekap "' + REKAP_SHEET_NAME + '" tidak ditemukan.');
 
@@ -966,7 +982,7 @@ const SpreadsheetService = {
 
   renameSubActivitySheet: function (activity, oldName, newName, subActivity) {
     if (!oldName || !newName || oldName === newName) return false;
-    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const safeOldName = normalizeSheetName_(oldName);
     const safeNewName = normalizeSheetName_(newName);
 
@@ -1004,7 +1020,7 @@ const SpreadsheetService = {
 
       let ss;
       try {
-        ss = SpreadsheetApp.openById(act.spreadsheet_file_id);
+        ss = openSpreadsheetById_(act.spreadsheet_file_id);
       } catch (e) {
         return; // Spreadsheet deleted or inaccessible
       }

@@ -694,6 +694,10 @@ const ArchiveController = {
     payload = payload || {};
     requireAuth_(payload);
     Validator.requireString(payload.fileId, 'File ID');
+    // IDOR: jangan biarkan client memparse (membaca isi) file sembarang. Batasi ke
+    // file di dalam ruang kerja. Penting di USER_DEPLOYING (script baca sbg pemilik).
+    const psYear = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+    requireWithinWorkspace_(payload.fileId, psYear);
     const startTime = Date.now();
     const file = DriveApp.getFileById(cleanId_(payload.fileId));
     const mimeType = file.getMimeType();
@@ -837,6 +841,7 @@ const ArchiveController = {
       let createdFile = null;
       try {
         requireSafeUrl_(item.url, 'URL dokumen' + (item.name ? ' ' + item.name : ''));
+        if (item.parentFolderId) requireWithinWorkspace_(item.parentFolderId, payload.year);
         createdFile = DriveService.addArchiveDocumentLink(item);
         if (activity && subActivity) {
           const linkFile = { name: createdFile.name, url: item.url || createdFile.url };
@@ -869,6 +874,7 @@ const ArchiveController = {
     Validator.requireId(payload.parentFolderId, 'Folder induk');
     Validator.requireString(payload.name, 'Kategori dokumen');
     requireSafeUrl_(payload.url, 'Link Google Drive');
+    requireWithinWorkspace_(payload.parentFolderId, payload.year);
     const file = DriveService.addArchiveDocumentLink(payload);
     let spreadsheet = null;
     if (payload.activityId && payload.subActivityId) {
@@ -909,6 +915,7 @@ const ArchiveController = {
     const actor = requireAuth_(payload);
     Validator.requireId(payload.fileId, 'File ID');
     requireSafeUrl_(payload.url, 'URL Drive');
+    requireWithinWorkspace_(payload.fileId, payload.year);
     const result = DriveService.updateArchiveDocumentLink(payload);
     if (payload.activityId && payload.subActivityId && payload.categoryName) {
       const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
