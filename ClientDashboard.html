@@ -118,7 +118,7 @@
           </div>
           <div class="history-carousel">
             <div class="recent-list" id="recent-list">
-              ${recent.length > 0 ? recent.map(function(item) {
+              ${recent.length > 0 ? recent.slice(0, 4).map(function(item) {
                 const s = String(item.status || '').toUpperCase();
                 const isDraft = s === STATUS_ENUM.DRAFT;
                 const dateStr = formatDateStr(item.created_at);
@@ -168,57 +168,12 @@
       });
     });
 
-    startHistoryCarousel();
     if (typeof bindResumeButtons === 'function') {
       bindResumeButtons();
     }
   }
 
-  function startHistoryCarousel() {
-    const list = document.getElementById('recent-list');
-    if (!list) return;
-    const items = list.querySelectorAll('.recent-item');
-    const V = 4; const N = items.length;
-    if (N <= V) return;
 
-    const itemH = items[0].offsetHeight + 1;
-    const pageH = V * itemH;
-    const pages = Math.ceil(N / V);
-
-    const carousel = list.parentElement;
-    carousel.style.height = pageH + 'px';
-    carousel.style.overflow = 'hidden';
-
-    let pos = 0;
-
-    function slideTo(next, opts) {
-      opts = opts || {};
-      next = ((next % pages) + pages) % pages;
-      if (next === pos) return;
-
-      const isDown = next > pos || (next === 0 && pos === pages - 1);
-      const downDur = Math.max(0.5, Math.min(2.5, 3.2 / pages));
-      const dur = isDown ? (opts.fast ? 0.3 : downDur) : 0.3;
-
-      list.style.transition = 'transform ' + dur + 's cubic-bezier(.25,.1,.25,1)';
-      list.style.transform = 'translateY(' + (-next * pageH) + 'px)';
-      pos = next;
-    }
-
-    let intervalId = setInterval(function() { slideTo(pos + 1); }, 4200);
-
-    function restartInterval() {
-      clearInterval(intervalId);
-      intervalId = setInterval(function() { slideTo(pos + 1); }, 4200);
-    }
-
-    carousel.addEventListener('wheel', function(e) {
-      e.preventDefault();
-      if (e.deltaY > 0) slideTo(pos + 1);
-      else if (e.deltaY < 0) slideTo(pos - 1, { fast: true });
-      restartInterval();
-    }, { passive: false });
-  }
 
   function activityCard(activity) {
     const subs = activity.subActivities || [];
