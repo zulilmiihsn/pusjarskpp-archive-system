@@ -220,7 +220,7 @@ const SettingsController = {
     }
     if (!isOwner) throw new Error('Akses ditolak. Hanya pemilik workspace yang dapat melakukan reset admin.');
 
-    const ss = SpreadsheetApp.openById(ssId);
+    const ss = openSpreadsheetById_(ssId);
     let sheet = ss.getSheetByName(CONFIG_SHEETS.ACCOUNTS);
     if (!sheet) sheet = ss.insertSheet(CONFIG_SHEETS.ACCOUNTS);
 
@@ -304,7 +304,7 @@ const SettingsController = {
       let errors = 0;
       Object.keys(ids).forEach(function (id) {
         try {
-          const ss = SpreadsheetApp.openById(id);
+          const ss = openSpreadsheetById_(id);
           const rekap = findRekapSheet_(ss);
           if (rekap) {
             ensureRekapDocumentColumns_(rekap);

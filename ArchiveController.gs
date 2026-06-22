@@ -747,10 +747,22 @@ const ArchiveController = {
 
     // Cache hasil parse per fileId: buka file yang sama lagi = instan, tak konversi ulang.
     const parseCacheKey = 'parsecache_' + cleanId_(payload.fileId);
+    const parseLockKey = 'parselock_' + cleanId_(payload.fileId);
     try {
       const cachedParse = CacheService.getScriptCache().get(parseCacheKey);
       if (cachedParse) { const r = JSON.parse(cachedParse); r.cached = true; return r; }
     } catch (e) { /* cache opsional */ }
+
+    // Mutex lunak: bila konversi/OCR file ini sedang berjalan di eksekusi lain, tunggu
+    // sebentar lalu pakai hasil cache-nya — cegah konversi+OCR ganda (boros kuota Drive).
+    try {
+      const _c = CacheService.getScriptCache();
+      for (let w = 0; w < 4 && _c.get(parseLockKey); w++) {
+        Utilities.sleep(1500);
+        const again = _c.get(parseCacheKey);
+        if (again) { const r = JSON.parse(again); r.cached = true; return r; }
+      }
+    } catch (e) { /* mutex opsional */ }
 
     const startTime = Date.now();
     const file = DriveApp.getFileById(cleanId_(payload.fileId));
@@ -769,6 +781,9 @@ const ArchiveController = {
         skipReason: 'Tipe file tidak didukung untuk parsing otomatis (' + (mimeType || 'unknown') + ').'
       };
     }
+
+    // Pasang sentinel mutex (TTL pendek; auto-kedaluwarsa bila eksekusi crash).
+    try { CacheService.getScriptCache().put(parseLockKey, '1', 90); } catch (e) { /* sentinel opsional */ }
 
     let text = '';
     let pageCount = 0;
@@ -885,6 +900,7 @@ const ArchiveController = {
       CacheService.getScriptCache().put(parseCacheKey, JSON.stringify(result), 21600);
     } catch (e) { /* >100KB atau cache penuh: abaikan */ }
 
+    try { CacheService.getScriptCache().remove(parseLockKey); } catch (e) { /* lepas mutex */ }
     return result;
   },
 
@@ -1263,6 +1279,9 @@ function _resolveArchiveContext_(payload) {
 
 function extractPdfPageCount_(file) {
   try {
+    // Lewati file besar: getDataAsString memuat SELURUH blob ke memori. Hitungan halaman
+    // hanya pelengkap; caller menangani 0. (>10MB boros memori & waktu.)
+    if (file.getSize && file.getSize() > 10 * 1024 * 1024) return 0;
     const blob = file.getBlob();
     const pdfText = blob.getDataAsString('ISO-8859-1');
     

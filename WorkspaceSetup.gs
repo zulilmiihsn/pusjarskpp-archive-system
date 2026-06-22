@@ -502,7 +502,7 @@ function wsSyncExistingFilesInFolder_(year, report, startTime) {
 
 function wsGetOrCreateConfigSpreadsheet_(folder) {
   const existing = wsGetFileByNameAndMime_(folder, WORKSPACE_CONFIG.configSpreadsheetName, MimeType.GOOGLE_SHEETS);
-  if (existing) return SpreadsheetApp.openById(existing.getId());
+  if (existing) return openSpreadsheetById_(existing.getId());
   const ss = SpreadsheetApp.create(WORKSPACE_CONFIG.configSpreadsheetName);
   wsMoveFileToFolder_(ss.getId(), folder);
   return ss;
@@ -514,13 +514,13 @@ function wsEnsureArchiveSpreadsheet_(laciFolder, activity, year, report) {
   const companion = wsGetFileByNameAndMime_(laciFolder, spreadsheetName, MimeType.GOOGLE_SHEETS);
   if (companion) {
     wsInstallRekapTriggerIfMissing_(companion.getId());
-    return SpreadsheetApp.openById(companion.getId());
+    return openSpreadsheetById_(companion.getId());
   }
 
   const native = wsFindFirstArchiveSheet_(laciFolder);
   if (native) {
     wsInstallRekapTriggerIfMissing_(native.getId());
-    return SpreadsheetApp.openById(native.getId());
+    return openSpreadsheetById_(native.getId());
   }
 
   const office = wsFindFirstOfficeSpreadsheet_(laciFolder);
@@ -794,7 +794,7 @@ function wsTryConvertOfficeSpreadsheet_(file, targetName, folder) {
       parents: [folder.getId()]
     };
     const copied = Drive.Files.copy(resource, file.getId(), { supportsAllDrives: true });
-    return SpreadsheetApp.openById(copied.id);
+    return openSpreadsheetById_(copied.id);
   } catch (error) {
     console.error('Office spreadsheet conversion failed; blank companion will be created. ' + error.message);
     return null;

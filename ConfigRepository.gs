@@ -107,15 +107,52 @@ const ConfigRepository = {
   getArchiveLogKeyMap: function(year) {
     const selectedYear = Number(year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     const ss = this.getConfigSpreadsheet();
-    const rows = readSheetObjects_(ss, CONFIG_SHEETS.ARCHIVE_LOG);
+    const sheet = ss.getSheetByName(CONFIG_SHEETS.ARCHIVE_LOG);
+    if (!sheet) return {};
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastRow < 2) return {};
+    const headers = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0].map(normalizeHeader_);
+    const ssCol = headers.indexOf('spreadsheet_file_id');
+    const rowCol = headers.indexOf('spreadsheet_row_number');
+    const fileCol = headers.indexOf('final_file_id');
+    const yearCol = headers.indexOf('year');
+    const data = sheet.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
     const map = {};
-    rows.forEach(function (row) {
-      if (row.year && Number(row.year) !== selectedYear) return;
-      const spreadsheetId = cleanId_(row.spreadsheet_file_id || '');
-      const rowNumber = String(row.spreadsheet_row_number || '').trim();
+    data.forEach(function (r) {
+      if (yearCol !== -1 && r[yearCol] && Number(r[yearCol]) !== selectedYear) return;
+      const spreadsheetId = ssCol !== -1 ? cleanId_(r[ssCol] || '') : '';
+      const rowNumber = rowCol !== -1 ? String(r[rowCol] || '').trim() : '';
       if (spreadsheetId && rowNumber) map[spreadsheetId + ':' + rowNumber] = true;
-      const finalFileId = cleanId_(row.final_file_id || '');
+      const finalFileId = fileCol !== -1 ? cleanId_(r[fileCol] || '') : '';
       if (finalFileId) map['file:' + finalFileId] = true;
+    });
+    return map;
+  },
+
+  // Map cleanId(final_file_id) -> { archive_id, year } untuk seluruh log (skip DRAFT),
+  // dibangun dalam SATU baca sheet. Hilangkan N+1 getArchiveLogByFileId saat cascade trash.
+  // Last-wins (top-down) menyamai getArchiveLogByFileId yang bottom-up-first.
+  getArchiveLogFileIdMap: function() {
+    const ss = this.getConfigSpreadsheet();
+    const sheet = ss.getSheetByName(CONFIG_SHEETS.ARCHIVE_LOG);
+    if (!sheet) return {};
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastRow < 2) return {};
+    const headers = sheet.getRange(1, 1, 1, lastCol).getDisplayValues()[0].map(normalizeHeader_);
+    const fileCol = headers.indexOf('final_file_id');
+    const archiveCol = headers.indexOf('archive_id');
+    const yearCol = headers.indexOf('year');
+    const statusCol = headers.indexOf('status');
+    if (fileCol === -1 || archiveCol === -1) return {};
+    const data = sheet.getRange(2, 1, lastRow - 1, lastCol).getDisplayValues();
+    const map = {};
+    data.forEach(function (r) {
+      if (statusCol !== -1 && r[statusCol] === STATUS.DRAFT) return;
+      const fid = cleanId_(r[fileCol] || '');
+      if (!fid) return;
+      map[fid] = { archive_id: r[archiveCol], year: yearCol !== -1 ? r[yearCol] : '' };
     });
     return map;
   },

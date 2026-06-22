@@ -154,6 +154,9 @@ function cascadeTrashLoggedArchivesInFolder_(folderId, year) {
   let cleaned = 0;
   const rootId = cleanId_(folderId);
   if (!rootId) return cleaned;
+  // Bangun map fileId->log SEKALI (hindari getArchiveLogByFileId per file = N+1 full-scan).
+  let logMap = {};
+  try { logMap = ConfigRepository.getArchiveLogFileIdMap(); } catch (e) { logMap = {}; }
   const stack = [{ id: rootId, depth: 0 }];
   while (stack.length) {
     const cur = stack.pop();
@@ -181,7 +184,7 @@ function cascadeTrashLoggedArchivesInFolder_(folderId, year) {
           continue;
         }
         try {
-          const log = ConfigRepository.getArchiveLogByFileId(item.id);
+          const log = logMap[cleanId_(item.id)];
           if (log && log.archive_id) {
             ArchiveController._deleteArchiveCore_({ archiveId: log.archive_id, year: year || log.year });
             cleaned++;

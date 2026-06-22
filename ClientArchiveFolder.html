@@ -279,11 +279,11 @@
     document.getElementById('btn-cancel-convert')?.addEventListener('click', () => closeModal_('convert-parent-modal'));
     document.getElementById('btn-cancel-convert-icon')?.addEventListener('click', () => closeModal_('convert-parent-modal'));
 
-    document.getElementById('btn-submit-convert')?.addEventListener('click', () => {
+    document.getElementById('btn-submit-convert')?.addEventListener('click', async () => {
       const input = document.getElementById('new-convert-sub-name');
       const newSubName = input ? input.value.trim() : '';
       if (!newSubName) {
-        alert('Nama anak baru (penerus) wajib diisi.');
+        showToast('Nama anak baru (penerus) wajib diisi.');
         return;
       }
       const btn = document.getElementById('btn-submit-convert');
@@ -291,28 +291,27 @@
       btn.innerHTML = '<span class="spinner"></span> Memproses...';
       btn.disabled = true;
 
-      google.script.run
-        .withSuccessHandler(res => {
-          btn.innerHTML = origText;
-          btn.disabled = false;
-          closeModal_('convert-parent-modal');
-          if (res && res.bootstrap) {
-            state.bootstrap = res.bootstrap;
-          }
-          // Kembali ke halaman sebelumnya
-          setView('activity_detail', { activityId: context.activity.activity_id });
-        })
-        .withFailureHandler(err => {
-          btn.innerHTML = origText;
-          btn.disabled = false;
-          alert('Error: ' + err.message);
-        })
-        .convertSubActivityToParent({
+      try {
+        const res = await api('convertSubActivityToParent', {
           year: state.bootstrap.settings.currentYear,
           activityId: context.activity.activity_id,
           subActivityId: context.subActivity.sub_activity_id,
           newSubActivityName: newSubName
         });
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        closeModal_('convert-parent-modal');
+        if (res && res.bootstrap) {
+          state.bootstrap = res.bootstrap;
+        }
+        invalidateViewCache();
+        // Kembali ke halaman sebelumnya
+        setView('activity_detail', { activityId: context.activity.activity_id });
+      } catch (err) {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+        showToast('Error: ' + (err && err.message ? err.message : err));
+      }
     });
   }
 

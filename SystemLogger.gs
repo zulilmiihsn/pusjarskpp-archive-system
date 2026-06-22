@@ -1,13 +1,15 @@
 'use strict';
 
+const SYSTEM_LOG_SHEET_NAME = 'system_logs';
+
 const SystemLogger = {
   log: function(level, action, message, metadata) {
     try {
       const ssId = PropertiesService.getScriptProperties().getProperty(PROP_KEYS.CONFIG_SPREADSHEET_ID);
       if (!ssId) return; // Silent fallback if config SS is not set
       
-      const ss = SpreadsheetApp.openById(ssId);
-      const sheet = getOrCreateSheet_(ss, 'system_logs');
+      const ss = openSpreadsheetById_(ssId);
+      const sheet = getOrCreateSheet_(ss, SYSTEM_LOG_SHEET_NAME);
       ensureHeaders_(sheet, ['timestamp', 'level', 'user', 'action', 'message', 'metadata']);
       
       const user = Session.getActiveUser().getEmail() || 'system';

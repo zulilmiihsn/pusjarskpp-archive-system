@@ -76,7 +76,7 @@ const AuthService = {
     const ssId = PropertiesService.getScriptProperties().getProperty(PROP_KEYS.CONFIG_SPREADSHEET_ID);
     if (!ssId) throw new Error('Ruang Kerja belum dikonfigurasi.');
 
-    const ss = SpreadsheetApp.openById(ssId);
+    const ss = openSpreadsheetById_(ssId);
     const sheet = ss.getSheetByName(CONFIG_SHEETS.ACCOUNTS);
     if (!sheet) throw new Error('Username atau password salah.');
 
@@ -199,7 +199,7 @@ const AuthService = {
     const ssId = PropertiesService.getScriptProperties().getProperty(PROP_KEYS.CONFIG_SPREADSHEET_ID);
     if (!ssId) return { created: false, reason: 'no_workspace' };
 
-    const ss = SpreadsheetApp.openById(ssId);
+    const ss = openSpreadsheetById_(ssId);
     let sheet = ss.getSheetByName(CONFIG_SHEETS.ACCOUNTS);
     if (!sheet) sheet = ss.insertSheet(CONFIG_SHEETS.ACCOUNTS);
 

@@ -3,7 +3,7 @@
 function AccountService_exec_(method) {
   const ssId = PropertiesService.getScriptProperties().getProperty(PROP_KEYS.CONFIG_SPREADSHEET_ID);
   if (!ssId) throw new Error('Spreadsheet konfigurasi belum dikonfigurasi.');
-  return method(SpreadsheetApp.openById(ssId));
+  return method(openSpreadsheetById_(ssId));
 }
 
 const ConfigService = {

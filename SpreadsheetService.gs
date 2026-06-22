@@ -1028,8 +1028,12 @@ const SpreadsheetService = {
       const rekapSheet = findRekapSheet_(ss);
       const shifts = grouped[actId];
 
+      // Muat sub-activities SEKALI jadi map (hindari getSubActivityById full-read per shift).
+      const subMap = {};
+      ConfigRepository.getSubActivities(year, actId).forEach(function (s) { subMap[s.sub_activity_id] = s; });
+
       shifts.forEach(function (shift) {
-        const subAct = ConfigRepository.getSubActivityById(year, actId, shift.subActivityId);
+        const subAct = subMap[shift.subActivityId];
         if (!subAct) return;
 
         const newSortOrder = shift.newSortOrder;

@@ -361,7 +361,7 @@ function onRekapSheetEdit(e) {
   try {
     if (!e || !e.range) return;
     const sheet = e.range.getSheet();
-    if (sheet.getName() !== 'Daftar Berkas Arsip Aktip') return;
+    if (sheet.getName() !== REKAP_SHEET_NAME) return;
 
     // Kolom Kode Klasifikasi di Rekap adalah kolom ke-3 (C)
     const col = e.range.getColumn();
