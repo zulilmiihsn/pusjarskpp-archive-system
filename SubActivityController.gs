@@ -76,7 +76,7 @@ const SubActivityController = {
         newSubId: subRow.sub_activity_id,
         folder: DriveService.folderToDto(folder),
         rekap: rekap,
-        bootstrap: AppController.getBootstrap()
+        bootstrap: WorkspaceController.getBootstrap()
       };
     }, 30000);
   },
@@ -261,7 +261,7 @@ const SubActivityController = {
       SpreadsheetService.updateRekapSubActivityIdentity(activity, existingSub, updatedSub);
 
       CacheHelper.invalidate(year);
-      return { success: true, bootstrap: AppController.getBootstrap() };
+      return { success: true, bootstrap: WorkspaceController.getBootstrap() };
     }, 30000);
   },
 
@@ -299,7 +299,7 @@ const SubActivityController = {
       if (_syncDeactivateMissing_(year, activity, existingSubs, liveFolderIds, migratedHeirIds)) updated = true;
 
       if (updated) CacheHelper.invalidate(year);
-      return { updated: updated, bootstrap: AppController.getBootstrap() };
+      return { updated: updated, bootstrap: WorkspaceController.getBootstrap() };
     }, 30000);
   },
 
@@ -323,7 +323,7 @@ const SubActivityController = {
         SpreadsheetService.markRekapSubActivityInactive(activity, existingSub, SUB_ACTIVITY_INACTIVE_REASON.MANUAL);
       }
       CacheHelper.invalidate(year);
-      return { success: removed > 0, bootstrap: AppController.getBootstrap() };
+      return { success: removed > 0, bootstrap: WorkspaceController.getBootstrap() };
     }, 30000);
   },
 
@@ -355,7 +355,7 @@ const SubActivityController = {
         SpreadsheetService.markRekapSubActivityInactive(activity, existingSub, SUB_ACTIVITY_INACTIVE_REASON.DRIVE_TRASHED);
       }
       CacheHelper.invalidate(year);
-      return { success: removed > 0, folderId: existingSub.folder_id, bootstrap: AppController.getBootstrap() };
+      return { success: removed > 0, folderId: existingSub.folder_id, bootstrap: WorkspaceController.getBootstrap() };
     }, 30000);
   },
 
@@ -452,7 +452,7 @@ const SubActivityController = {
     SpreadsheetService.updateRekapSubActivityIdentity(activity, previousSub, updatedSub);
 
     CacheHelper.invalidate(year);
-    return { success: true, bootstrap: AppController.getBootstrap() };
+    return { success: true, bootstrap: WorkspaceController.getBootstrap() };
     }, 30000);
   },
 
@@ -484,7 +484,7 @@ const SubActivityController = {
     } else if (result > 0) {
       CacheHelper.invalidate(year);
     }
-    return { success: result > 0, bootstrap: AppController.getBootstrap() };
+    return { success: result > 0, bootstrap: WorkspaceController.getBootstrap() };
   },
 
   purgeSubActivity: function (payload) {
@@ -496,7 +496,7 @@ const SubActivityController = {
 
     const result = ConfigRepository.purgeSubActivity(year, payload.activityId, payload.subActivityId);
     if (result > 0) CacheHelper.invalidate(year);
-    return { success: result > 0, bootstrap: AppController.getBootstrap() };
+    return { success: result > 0, bootstrap: WorkspaceController.getBootstrap() };
   },
 
   updateSubActivityMetadata: function (payload) {
@@ -539,7 +539,7 @@ const SubActivityController = {
       }, payload.metadataLocks ? JSON.parse(payload.metadataLocks) : {});
 
       CacheHelper.invalidate(year);
-      return { success: true, rekap: rekapResult, bootstrap: AppController.getBootstrap() };
+      return { success: true, rekap: rekapResult, bootstrap: WorkspaceController.getBootstrap() };
     }, 30000);
   }
 };

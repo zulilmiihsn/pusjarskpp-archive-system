@@ -400,7 +400,7 @@ const ParseEngine = (function () {
       // Multi-line Perihal in header
       { re: new RegExp('(?:Perihal|Hal)\\s*[:.]?\\s*(.+?)(?=\\n' + URAIAN_STOP + '|\\n\\n|$)', 'is'), score: 0.95, zone: upperHalfText },
       // Simple Perihal/Hal on same line in header
-      { re: /(?:Perihal|Hal)\s*[:.]?\\s*(.+)/i, score: 0.85, zone: upperHalfText },
+      { re: /(?:Perihal|Hal)\s*[:.]?\s*(.+)/i, score: 0.85, zone: upperHalfText },
       // "Tentang" keyword anywhere
       { re: /\bTentang\s+(.+?)(?=\n|$)/i, score: 0.8, zone: text }
     ];

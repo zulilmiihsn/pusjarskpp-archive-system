@@ -210,7 +210,12 @@ function requireWithinWorkspace_(itemId, year, allowedRootIds) {
     roots = _collectWorkspaceRootIds_(year);
   }
   if (!Object.keys(roots).length) {
-    console.warn('requireWithinWorkspace_: root workspace tak dapat ditentukan; scope-check dilewati untuk ' + id);
+    // Fail-CLOSED bila workspace SUDAH terkonfigurasi tapi root tak terkumpul (mis. config
+    // sengaja dirusak agar scope-check dilewati). Skip hanya saat benar-benar pra-init.
+    let configured = false;
+    try { configured = !!ConfigService.getSettings().configSpreadsheetId; } catch (e) { configured = false; }
+    if (configured) throw new Error('Akses ditolak. Ruang kerja tidak dapat diverifikasi.');
+    console.warn('requireWithinWorkspace_: pra-init, scope-check dilewati untuk ' + id);
     return;
   }
   if (!_isWithinRoots_(id, roots, 12)) {

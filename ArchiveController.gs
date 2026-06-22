@@ -982,6 +982,7 @@ const ArchiveController = {
   getShortcutTargetInfo: function (payload) {
     payload = payload || {};
     requireAuth_(payload);
+    if (payload.fileId) requireWithinWorkspace_(payload.fileId, payload.year);
     return DriveService.getShortcutTargetInfo(payload);
   },
   updateArchiveDocumentLink: function (payload) {

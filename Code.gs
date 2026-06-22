@@ -155,11 +155,17 @@ function initInboxResumableUpload(payload) {
 }
 
 function initTemplateResumableUpload(payload) {
-  return wrapApi(() => AppController.initTemplateResumableUpload(payload || {}));
+  return wrapApi(() => {
+    requireAuth_(payload || {});
+    return DriveService.initTemplateResumableUpload(payload || {});
+  });
 }
 
 function uploadResumableChunk(payload) {
-  return wrapApi(() => AppController.uploadResumableChunk(payload || {}));
+  return wrapApi(() => {
+    requireAuth_(payload || {});
+    return DriveService.uploadResumableChunk(payload || {});
+  });
 }
 
 function uploadSourceFile(payload) {

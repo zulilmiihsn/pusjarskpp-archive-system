@@ -42,7 +42,8 @@ const CONFIG_SHEETS = {
   ADMIN_AUDIT_LOG: 'admin_audit_log',
   ACCOUNTS: 'config_accounts',
   TEMPLATE_CATEGORIES: 'config_template_categories',
-  TEMPLATE_CATEGORY_MAP: 'config_template_category_map'
+  TEMPLATE_CATEGORY_MAP: 'config_template_category_map',
+  DOCUMENT_TYPES: 'config_document_types'
 };
 
 const ARCHIVE_FIELD_KEYS = [

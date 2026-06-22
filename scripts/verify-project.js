@@ -155,6 +155,19 @@ assert(read('ClientProcess.html').includes('autoFillParseFields_'), 'Auto-parse 
 assert(read('StylesTables.html').includes('auto-parse-filled'), 'Auto-parse green highlight CSS must exist in Styles.');
 assert(read('MetadataService.gs').includes('extractKlasifikasiAkses_'), 'Klasifikasi akses extractor must exist in MetadataService.');
 
+// Regresi audit holistik: AppController.gs dihapus saat refactor split — tak boleh ada
+// referensi tersisa (akan ReferenceError di runtime). Gunakan WorkspaceController/DriveService.
+assert(!read('Code.gs').includes('AppController.') && !read('SubActivityController.gs').includes('AppController.'),
+  'AppController (dihapus) tidak boleh direferensikan; gunakan WorkspaceController.getBootstrap / DriveService.*');
+// ConfigRepository wajib mendefinisikan metode yang dipakai cascadeNomorBerkasShift & maintenance.
+assert(read('ConfigRepository.gs').includes('getActivities: function') &&
+  read('ConfigRepository.gs').includes('getSubActivities: function') &&
+  read('ConfigRepository.gs').includes('getSubActivityById: function'),
+  'ConfigRepository harus mendefinisikan getActivities/getSubActivities/getSubActivityById.');
+// CONFIG_SHEETS.DOCUMENT_TYPES harus ada (kalau tidak, getOrCreateSheet membuat sheet "undefined").
+assert(read('ConfigConstants.gs').includes("DOCUMENT_TYPES: 'config_document_types'"),
+  'CONFIG_SHEETS.DOCUMENT_TYPES harus terdefinisi.');
+
 assert(!readme.includes('apps-script/portal-arsip/README.md'), 'README must not point to missing apps-script path.');
 assert(!readme.includes('scripts/google-apps-script'), 'README must not point to missing setup script paths.');
 

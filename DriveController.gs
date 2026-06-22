@@ -4,12 +4,13 @@ const DriveController = {
   renameDriveItem: function (payload) {
     payload = payload || {};
     const actor = requireAdmin_(payload);
+    requireWithinWorkspace_(payload.itemId, payload.year);
     const r = SettingsController.renameDriveItem(payload);
     bumpVersion();
     auditAction_(actor, 'DRIVE_ITEM_RENAMED', { folderId: payload.itemId, message: 'Mengganti nama item Drive: ' + (payload.name || '-') });
     return r;
   },
-  listDriveFolders: function (payload) { return SettingsController.listDriveFolders(payload); },
+  listDriveFolders: function (payload) { requireAuth_(payload || {}); return SettingsController.listDriveFolders(payload); },
   listArchiveFolder: function (payload) {
     payload = payload || {};
     requireAuth_(payload);

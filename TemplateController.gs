@@ -19,26 +19,30 @@ const TemplateController = {
     return DriveService.trashTemplateFile(payload.fileId);
   },
   getTemplateCategories: function () { return SettingsController.getTemplateCategories(); },
-  saveTemplateCategory: function (payload) { 
-    const r = SettingsController.saveTemplateCategory(payload); 
+  saveTemplateCategory: function (payload) {
+    requireAuth_(payload || {});
+    const r = SettingsController.saveTemplateCategory(payload);
     invalidateTemplatesCache_(payload && payload.year); 
     bumpVersion(); 
     return r; 
   },
-  deleteTemplateCategory: function (payload) { 
-    const r = SettingsController.deleteTemplateCategory(payload); 
+  deleteTemplateCategory: function (payload) {
+    requireAdmin_(payload || {});
+    const r = SettingsController.deleteTemplateCategory(payload);
     invalidateTemplatesCache_(payload && payload.year); 
     bumpVersion(); 
     return r; 
   },
-  renameTemplateCategory: function (payload) { 
-    const r = SettingsController.renameTemplateCategory(payload); 
+  renameTemplateCategory: function (payload) {
+    requireAuth_(payload || {});
+    const r = SettingsController.renameTemplateCategory(payload);
     invalidateTemplatesCache_(payload && payload.year); 
     bumpVersion(); 
     return r; 
   },
-  setTemplateCategory: function (payload) { 
-    const r = SettingsController.setTemplateCategory(payload); 
+  setTemplateCategory: function (payload) {
+    requireAuth_(payload || {});
+    const r = SettingsController.setTemplateCategory(payload);
     invalidateTemplatesCache_(payload && payload.year); 
     bumpVersion(); 
     return r; 

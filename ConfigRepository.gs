@@ -72,6 +72,25 @@ const ConfigRepository = {
       .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
   },
 
+  // Kegiatan aktif untuk tahun tertentu (dipakai cascadeNomorBerkasShift, maintenance).
+  getActivities: function (year) {
+    const ss = this.getConfigSpreadsheet();
+    return readSheetObjects_(ss, CONFIG_SHEETS.ACTIVITIES)
+      .filter(row => Number(row.year) === Number(year) && isTrue_(row.is_active))
+      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+  },
+
+  // Sub-kegiatan untuk activity tertentu (termasuk yang nonaktif — caller boleh memfilter).
+  getSubActivities: function (year, activityId) {
+    return this.getSubActivitiesForSync(year, activityId);
+  },
+
+  getSubActivityById: function (year, activityId, subActivityId) {
+    return this.getSubActivitiesForSync(year, activityId).find(function (sub) {
+      return sub.sub_activity_id === subActivityId;
+    }) || null;
+  },
+
   getInactiveSubActivities: function(year) {
     const selectedYear = Number(year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     const ss = this.getConfigSpreadsheet();

@@ -528,7 +528,10 @@
   function applyDirectionRules_(direction) {
     if (direction !== 'masuk') return;
     var target = findFormInput_('kode_klasifikasi');
-    if (target && target.input.value) setFieldValue_(target.input, target.key, '', false);
+    // Hanya kosongkan bila nilainya hasil autofill — JANGAN hapus yang user ketik manual.
+    if (target && target.input.value && target.input.classList.contains('auto-parse-filled')) {
+      setFieldValue_(target.input, target.key, '', false);
+    }
   }
 
   function refreshFilePreview_() {
