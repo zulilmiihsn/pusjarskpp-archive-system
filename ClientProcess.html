@@ -1304,35 +1304,45 @@
     const safeHint = esc(hint || label);
 
     const requiredMark = isRequired ? '<span class="required-dot" aria-hidden="true">*</span>' : '';
-    const labelHtml = '<label for="meta-' + safeKey + '">' + esc(label) + requiredMark
-      + (METADATA_TOOLTIPS[key] ? '<span class="tooltip-trigger" title="">?<span class="tooltip-text">' + esc(METADATA_TOOLTIPS[key]) + '</span></span>' : '')
-      + '</label>';
+    let labelHtml = '<label for="meta-' + safeKey + '"><span>' + esc(label) + requiredMark + '</span>'
+      + (METADATA_TOOLTIPS[key] ? '<span class="tooltip-trigger" title="">?<span class="tooltip-text">' + esc(METADATA_TOOLTIPS[key]) + '</span></span>' : '');
+
+    if (key === 'no_filing_cabinet' || key === 'no_laci' || key === 'no_folder') {
+      labelHtml += `
+        <button type="button" class="metadata-lock-btn" style="margin-left:auto;" onclick="
+          var input = document.getElementById('meta-${safeKey}');
+          if (input.hasAttribute('readonly')) {
+            input.removeAttribute('readonly');
+            input.focus();
+            this.innerHTML = '<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2.2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><rect x=\\'3\\' y=\\'11\\' width=\\'18\\' height=\\'11\\' rx=\\'2\\' ry=\\'2\\'></rect><path d=\\'M7 11V7a5 5 0 0 1 9.9-1\\'></path></svg>';
+            this.title = 'Mode Manual. Klik untuk mengunci kembali.';
+          } else {
+            input.setAttribute('readonly', 'true');
+            this.innerHTML = '<svg viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2.2\\' stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\'><rect x=\\'3\\' y=\\'11\\' width=\\'18\\' height=\\'11\\' rx=\\'2\\' ry=\\'2\\'></rect><path d=\\'M7 11V7a5 5 0 0 1 10 0v4\\'></path></svg>';
+            this.title = 'Mode Otomatis. Klik untuk ubah manual.';
+          }
+        " title="Mode Otomatis. Klik untuk ubah manual.">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+        </button>
+      `;
+    }
+    labelHtml += '</label>';
 
     let inputHtml;
     let extraAttrs = '';
 
     if (key === 'no_filing_cabinet' || key === 'no_laci' || key === 'no_folder') {
       inputHtml = `
-        <div style="display:flex; align-items:center; gap:8px;">
-          <input type="text" id="meta-${safeKey}" data-field="${safeKey}" class="form-input" style="flex:1;" value="${safeCur}" placeholder="${safeHint}" readonly oninput="
+          <input type="text" id="meta-${safeKey}" data-field="${safeKey}" value="${safeCur}" placeholder="${safeHint}" readonly oninput="
             if(window.state && window.state.draft) {
               window.state.draft.metadata['${safeKey}'] = this.value;
               delete window.state.draft.metadata['_${safeKey}_url'];
               delete window.state.draft.metadata['_${safeKey}_path'];
             }
           " />
-          <button type="button" class="btn btn-sm btn-outline" style="padding: 0 8px; height: 36px;" onclick="
-            var input = document.getElementById('meta-${safeKey}');
-            input.removeAttribute('readonly');
-            input.focus();
-            this.style.display = 'none';
-          " title="Ubah manual">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-            </svg>
-          </button>
-        </div>
       `;
     } else if (key === 'uraian_informasi_item') {
       inputHtml = '<textarea id="meta-' + safeKey + '" data-field="' + safeKey + '" placeholder="' + safeHint + '"' + required + '>' + safeCur + '</textarea>';
