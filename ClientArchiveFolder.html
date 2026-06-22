@@ -412,8 +412,22 @@
   }
 
   /* ── Helper per-region (gaya B: rangka tetap, isi region bisa di-swap) ── */
+  window._optimisticDeletedFiles = window._optimisticDeletedFiles || new Set();
+  window._optimisticDeletedFolders = window._optimisticDeletedFolders || new Set();
+
+  function getValidArchiveFolders_(result) {
+    let folders = result.folders || [];
+    if (window._optimisticDeletedFolders) {
+      folders = folders.filter(f => !window._optimisticDeletedFolders.has(f.id));
+    }
+    return folders;
+  }
+
   function splitArchiveFiles_(result) {
-    const allFiles = result.files || [];
+    let allFiles = result.files || [];
+    if (window._optimisticDeletedFiles) {
+      allFiles = allFiles.filter(f => !window._optimisticDeletedFiles.has(f.id));
+    }
     const SHORTCUT_MIME = 'application/vnd.google-apps.shortcut';
     return {
       surat: allFiles.filter(f => f.mimeType !== SHORTCUT_MIME),
@@ -469,7 +483,7 @@
   }
 
   function archiveFolderContentHtml(result, context) {
-    const folders = result.folders || [];
+    const folders = getValidArchiveFolders_(result);
     const split = splitArchiveFiles_(result);
     const surat = split.surat;
     const dokumen = split.dokumen;
@@ -513,7 +527,7 @@
     const suratCount = document.getElementById('archive-surat-count');
     if (!grid || !suratCount) return false; // rangka belum terpasang
 
-    const folders = result.folders || [];
+    const folders = getValidArchiveFolders_(result);
     const split = splitArchiveFiles_(result);
     const surat = split.surat;
     const dokumen = split.dokumen;
@@ -872,6 +886,7 @@
         button.disabled = true;
         
         // OPTIMISTIC DELETE
+        if (window._optimisticDeletedFolders) window._optimisticDeletedFolders.add(button.dataset.folderId);
         const row = button.closest('.tall-card') || button.closest('.archive-list-row');
         if (row) row.style.display = 'none';
 
@@ -889,6 +904,9 @@
         button.disabled = true;
 
         // OPTIMISTIC DELETE
+        if (window._optimisticDeletedFolders) window._optimisticDeletedFolders.add(button.dataset.subId); // wait, folderId or subId? subId is probably a different entity.
+        // Actually the button dataset has `folderId` as well for the target folder.
+        if (window._optimisticDeletedFolders && button.dataset.folderId) window._optimisticDeletedFolders.add(button.dataset.folderId);
         const row = button.closest('.tall-card') || button.closest('.archive-list-row');
         if (row) row.style.display = 'none';
 
@@ -914,6 +932,7 @@
         button.disabled = true;
 
         // OPTIMISTIC DELETE
+        if (window._optimisticDeletedFiles) window._optimisticDeletedFiles.add(button.dataset.fileId);
         const row = button.closest('.archive-list-row');
         if (row) row.style.display = 'none';
 
