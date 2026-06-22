@@ -1,3 +1,6 @@
+<style>
+  .history-carousel.hide-scroll::-webkit-scrollbar { display: none; }
+</style>
 <script>
   function renderDashboard() {
     const data = state.bootstrap;
@@ -118,7 +121,7 @@
           </div>
           <div class="history-carousel">
             <div class="recent-list" id="recent-list">
-              ${recent.length > 0 ? recent.slice(0, 4).map(function(item) {
+              ${recent.length > 0 ? recent.slice(0, 15).map(function(item) {
                 const s = String(item.status || '').toUpperCase();
                 const isDraft = s === STATUS_ENUM.DRAFT;
                 const dateStr = formatDateStr(item.created_at);
@@ -167,13 +170,71 @@
         setView('activity_detail', { activityId: card.dataset.id });
       });
     });
-
+    startHistoryCarousel();
     if (typeof bindResumeButtons === 'function') {
       bindResumeButtons();
     }
   }
 
 
+
+  function startHistoryCarousel() {
+    const list = document.getElementById('recent-list');
+    const carousel = list ? list.parentElement : null;
+    if (!carousel || !list) return;
+
+    carousel.style.maxHeight = '420px';
+    carousel.style.overflowY = 'auto';
+    carousel.style.scrollbarWidth = 'none';
+    carousel.style.msOverflowStyle = 'none';
+    carousel.classList.add('hide-scroll');
+    
+    // Allow DOM to render to calculate heights
+    setTimeout(() => {
+      if (carousel.scrollHeight <= carousel.clientHeight + 2) return;
+
+      let isPaused = false;
+      let scrollPos = 0;
+      let reqId;
+      let isRewinding = false;
+
+      function step() {
+        if (!isPaused && !isRewinding) {
+          scrollPos += 0.4;
+          
+          if (scrollPos >= carousel.scrollHeight - carousel.clientHeight - 1) {
+            isRewinding = true;
+            carousel.style.scrollBehavior = 'smooth';
+            carousel.scrollTop = 0;
+            scrollPos = 0;
+            setTimeout(() => {
+              carousel.style.scrollBehavior = 'auto';
+              isRewinding = false;
+            }, 800);
+          } else {
+            carousel.scrollTop = scrollPos;
+          }
+        }
+        reqId = requestAnimationFrame(step);
+      }
+
+      reqId = requestAnimationFrame(step);
+
+      carousel.addEventListener('mouseenter', () => isPaused = true);
+      carousel.addEventListener('mouseleave', () => {
+        isPaused = false;
+        scrollPos = carousel.scrollTop;
+      });
+
+      carousel.addEventListener('scroll', () => {
+        if (isPaused) scrollPos = carousel.scrollTop;
+      });
+      
+      // Cleanup to prevent duplicate loops if re-rendered
+      if (window._historyCarouselReqId) cancelAnimationFrame(window._historyCarouselReqId);
+      window._historyCarouselReqId = reqId;
+    }, 100);
+  }
 
   function activityCard(activity) {
     const subs = activity.subActivities || [];
