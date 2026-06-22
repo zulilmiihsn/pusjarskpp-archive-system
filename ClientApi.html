@@ -27,6 +27,7 @@
               done(resolve, response.data);
             } else {
               var srvErr = new Error(response.error || 'Terjadi kesalahan dari peladen');
+              srvErr.code = response.errorCode || 'UNKNOWN_ERROR';
               handleSessionError_(srvErr);
               done(reject, srvErr);
             }
@@ -44,8 +45,12 @@
   // Saat peladen menolak karena sesi habis/tidak ditemukan, bersihkan sesi lokal
   // dan munculkan modal login otomatis supaya user tidak terjebak error generik.
   function handleSessionError_(error) {
-    var msg = error && (error.message || error) ? String(error.message || error) : '';
-    if (msg.indexOf('Sesi login') === -1) return;
+    var isAuthErr = error && error.code === 'AUTH_ERROR';
+    if (!isAuthErr) {
+      // Fallback for native google script failures
+      var msg = error && (error.message || error) ? String(error.message || error) : '';
+      if (msg.indexOf('Sesi login') === -1 && msg.indexOf('akses ditolak') === -1) return;
+    }
     try { localStorage.removeItem('portal_session_id'); } catch (e) {}
     if (typeof showLoginModal === 'function' && !document.getElementById('login-modal-backdrop')) {
       try { showLoginModal(); } catch (e) {}
@@ -67,7 +72,7 @@
     if (!container) return;
 
     // Detect if this is a process toast
-    var isProcess = isPersistent || (message && message.indexOf('...') !== -1);
+    var isProcess = !!isPersistent;
     
     // Replace the active persistent toast if it exists
     if (activePersistentToast && activePersistentToast.parentNode) {
@@ -84,38 +89,14 @@
     
     var textSpan = document.createElement('span');
     textSpan.textContent = message;
-    textSpan.style.lineHeight = '1.4';
+    textSpan.style.lineHeight = '1.5';
+    textSpan.style.flex = '1';
+    textSpan.style.wordBreak = 'break-word';
     toast.appendChild(textSpan);
 
     if (isProcess) {
       toast.classList.add('is-persistent');
       activePersistentToast = toast;
-      
-      // Add close button for persistent toasts so user can dismiss them
-      var closeBtn = document.createElement('button');
-      closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
-      closeBtn.style.background = 'transparent';
-      closeBtn.style.border = 'none';
-      closeBtn.style.color = '#9CA3AF';
-      closeBtn.style.cursor = 'pointer';
-      closeBtn.style.padding = '4px';
-      closeBtn.style.margin = '-4px -4px -4px 0';
-      closeBtn.style.display = 'grid';
-      closeBtn.style.placeItems = 'center';
-      closeBtn.style.borderRadius = '6px';
-      closeBtn.style.transition = 'background 150ms ease, color 150ms ease';
-      
-      closeBtn.onmouseover = function() {
-        this.style.background = 'rgba(255,255,255,0.1)';
-        this.style.color = '#FFFFFF';
-      };
-      closeBtn.onmouseout = function() {
-        this.style.background = 'transparent';
-        this.style.color = '#9CA3AF';
-      };
-
-      closeBtn.onclick = function() { removeToast(toast); };
-      toast.appendChild(closeBtn);
     } else {
       window.setTimeout(function () {
         removeToast(toast);
@@ -128,6 +109,11 @@
 
   function removeToast(toast) {
     if (!toast) return;
+    // Terima controller showProcessToast ({toast, success, error, hide}) maupun
+    // elemen toast langsung. Banyak pemanggil meneruskan controller; tanpa unwrap
+    // ini, toast.classList undefined dan melempar TypeError setelah operasi sukses.
+    if (!toast.classList && toast.toast) toast = toast.toast;
+    if (!toast || !toast.classList) return;
     toast.classList.remove('visible');
     if (toast === activePersistentToast) {
       activePersistentToast = null;
@@ -141,11 +127,11 @@
       toast: toast,
       success: function(successMsg) {
         removeToast(toast);
-        if (successMsg) showToast(successMsg, true); // Feedback is now persistent
+        if (successMsg) showToast(successMsg, false);
       },
       error: function(errorMsg) {
         removeToast(toast);
-        if (errorMsg) showToast(errorMsg, true); // Error feedback is now persistent
+        if (errorMsg) showToast(errorMsg, false);
       },
       hide: function() {
         removeToast(toast);

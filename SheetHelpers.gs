@@ -8,9 +8,9 @@
  */
 
 // ── Akses tipe dokumen (dinamis dari sheet, memo per-eksekusi) ──
-// GAS membuat scope global baru tiap request, jadi `var` modul = cache 1 request.
-var _docTypesActiveMemo_ = null;
-var _docTypesRemovedMemo_ = null;
+// GAS membuat scope global baru tiap request, jadi `let` modul = cache 1 request.
+let _docTypesActiveMemo_ = null;
+let _docTypesRemovedMemo_ = null;
 
 function getRekapDocColumns_() {
   if (_docTypesActiveMemo_) return _docTypesActiveMemo_;
@@ -160,7 +160,7 @@ function normalizeRekapSheetName_(value) {
  * Mengembalikan null jika workbook memang tak punya sheet Rekap (mis. laci single-detail).
  */
 function findRekapSheet_(ss) {
-  let sheet = ss.getSheetByName(REKAP_SHEET_NAME);
+  const sheet = ss.getSheetByName(REKAP_SHEET_NAME);
   if (sheet) return sheet;
   const target = normalizeRekapSheetName_(REKAP_SHEET_NAME);
   const sheets = ss.getSheets();
@@ -707,17 +707,6 @@ function findFirstBlankInRange_(sheet, startRow, endRow, col) {
   return null;
 }
 
-function nextNumberInColumn_(sheet, startRow, endRow, col) {
-  if (endRow < startRow) return 1;
-  const values = sheet.getRange(startRow, col, endRow - startRow + 1, 1).getDisplayValues();
-  let max = 0;
-  values.forEach(row => {
-    const parsed = Number(row[0]);
-    if (!isNaN(parsed) && parsed > max) max = parsed;
-  });
-  return max + 1;
-}
-
 function getDetailStartColumn_(sheet) {
   const width = Math.max(sheet.getLastColumn(), DETAIL_FALLBACK_START_COL + DETAIL_FIELD_ORDER.length);
   const headers = sheet.getRange(DETAIL_HEADER_ROW, 1, 1, width).getDisplayValues()[0];
@@ -827,7 +816,7 @@ function sortRekapSheetByNomorBerkas_(sheet) {
 }
 
 function colNumToLetter_(col) {
-  var letter = '';
+  let letter = '';
   while (col > 0) {
     col--;
     letter = String.fromCharCode(65 + (col % 26)) + letter;
@@ -837,8 +826,8 @@ function colNumToLetter_(col) {
 }
 
 function detailSheetFormulaRef_(detailSheet) {
-  var name = detailSheet.getName();
-  var escaped = name.replace(/'/g, "''");
+  const name = detailSheet.getName();
+  const escaped = name.replace(/'/g, "''");
   return "'" + escaped + "'";
 }
 
@@ -865,25 +854,25 @@ function getDetailColumnLetter_(sheet, field, fallbackLetter) {
 //
 // Hasil di-cache di Document Properties, di-key pakai locale; auto re-probe
 // kalau user ganti locale spreadsheet. Plus memo per-eksekusi.
-var FORMULA_SEP_MEMO_ = null;
+let FORMULA_SEP_MEMO_ = null;
 function formulaSep_(ss) {
   if (FORMULA_SEP_MEMO_) return FORMULA_SEP_MEMO_;
   try {
     ss = ss || SpreadsheetApp.getActiveSpreadsheet();
-    var locale = '';
+    let locale = '';
     try { locale = ss.getSpreadsheetLocale() || ''; } catch (e) {}
-    var propKey = 'FORMULA_SEP::' + locale;
-    var props = PropertiesService.getDocumentProperties();
-    var cached = props.getProperty(propKey);
+    const propKey = 'FORMULA_SEP::' + locale;
+    const props = PropertiesService.getDocumentProperties();
+    const cached = props.getProperty(propKey);
     if (cached === ',' || cached === ';') return (FORMULA_SEP_MEMO_ = cached);
 
-    var sheet = ss.getSheets()[0];
-    var cell = sheet.getRange(sheet.getMaxRows(), sheet.getMaxColumns());
-    var prevFormula = cell.getFormula();
-    var prevValue = prevFormula ? null : cell.getValue();
+    const sheet = ss.getSheets()[0];
+    const cell = sheet.getRange(sheet.getMaxRows(), sheet.getMaxColumns());
+    const prevFormula = cell.getFormula();
+    const prevValue = prevFormula ? null : cell.getValue();
     cell.setFormula('=1/2');
     SpreadsheetApp.flush();
-    var disp = String(cell.getDisplayValue());
+    const disp = String(cell.getDisplayValue());
     if (prevFormula) cell.setFormula(prevFormula);
     else cell.setValue(prevValue);
 

@@ -1,9 +1,9 @@
 'use strict';
 
 /** Approximate bytes per page for scanned PDF size-based estimation. */
-var PDF_SIZE_PER_PAGE_BYTES = 81920;
+const PDF_SIZE_PER_PAGE_BYTES = 81920;
 /** MIME types eligible for OCR text extraction. */
-var PARSEABLE_MIME_TYPES = {
+const PARSEABLE_MIME_TYPES = {
   'application/pdf': true,
   'application/msword': true,
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': true,
@@ -15,6 +15,7 @@ var PARSEABLE_MIME_TYPES = {
 const ArchiveController = {
   initInboxResumableUpload: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const safeName = validateFilePayloadForResumable_(payload);
     const year = Number(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     const config = CacheHelper.getConfig(year);
@@ -36,6 +37,7 @@ const ArchiveController = {
 
   uploadSourceFile: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     Validator.requireString(payload.name, 'Nama file');
     Validator.requireLongString(payload.dataUrl, 'Data URL berkas');
 
@@ -43,7 +45,9 @@ const ArchiveController = {
   },
 
   createDraft: function (payload) {
-    var ctx = _resolveArchiveContext_(payload);
+    payload = payload || {};
+    requireAuth_(payload);
+    const ctx = _resolveArchiveContext_(payload);
     const config = ctx.config, activity = ctx.activity, subActivity = ctx.subActivity;
 
     const file = DriveService.getFileFromInput(payload);
@@ -79,9 +83,12 @@ const ArchiveController = {
 
   getArchiveMetadata: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     Validator.requireString(payload.archiveId, 'Archive ID');
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
-    const log = payload.logData || ConfigRepository.getArchiveLog(payload.archiveId);
+    // Selalu muat log dari sumber tepercaya berdasarkan archiveId; JANGAN percaya
+    // payload.logData dari client (bisa dipalsukan untuk menunjuk file/baris lain).
+    const log = ConfigRepository.getArchiveLog(payload.archiveId);
     if (!log) throw new Error('Log arsip tidak ditemukan.');
 
     const config = CacheHelper.getConfig(year);
@@ -96,7 +103,7 @@ const ArchiveController = {
        // nomor_surat, satuan, ket gak ada di detail sheet — ambil dari log
        if (log.metadata_json) {
          try {
-           var savedMeta = JSON.parse(log.metadata_json);
+           const savedMeta = JSON.parse(log.metadata_json);
            if (savedMeta.metadata) {
              if (!metadata.nomor_surat && savedMeta.metadata.nomor_surat) metadata.nomor_surat = savedMeta.metadata.nomor_surat;
              if (!metadata.satuan && savedMeta.metadata.satuan) metadata.satuan = savedMeta.metadata.satuan;
@@ -119,7 +126,7 @@ const ArchiveController = {
        fields: fields,
        metadata: metadata,
         sourceFile: (function() {
-          var sf = { id: log.final_file_id || log.source_file_id || '', name: log.final_file_name || '', url: '', fileSize: 0 };
+          const sf = { id: log.final_file_id || log.source_file_id || '', name: log.final_file_name || '', url: '', fileSize: 0 };
           if (log.final_file_id) {
             sf.url = 'https://drive.google.com/file/d/' + log.final_file_id + '/view';
           }
@@ -133,8 +140,10 @@ const ArchiveController = {
     };
   },
 
-  getMetadataDefaults: function (payload) {
-    var ctx = _resolveArchiveContext_(payload);
+  getArchiveMetadataDefaults: function (payload) {
+    payload = payload || {};
+    requireAuth_(payload);
+    const ctx = _resolveArchiveContext_(payload);
 
     return {
       year: ctx.year,
@@ -146,6 +155,7 @@ const ArchiveController = {
 
   saveDraftToLog: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
     Validator.requireString(payload.subActivityId, 'Sub Activity ID');
@@ -183,6 +193,9 @@ const ArchiveController = {
 
   deleteDraft: function (payload) {
     payload = payload || {};
+    // Draft = work-in-progress milik user; cukup wajib login (bukan admin-only),
+    // agar alur normal pengarsip tidak terganggu.
+    requireAuth_(payload);
     Validator.requireString(payload.archiveId, 'Archive ID');
 
     return withLock_(() => {
@@ -202,6 +215,16 @@ const ArchiveController = {
 
   deleteArchive: function (payload) {
     payload = payload || {};
+    // Menghapus arsip final = aksi sensitif → admin-only.
+    requireAdmin_(payload);
+    return ArchiveController._deleteArchiveCore_(payload);
+  },
+
+  // Logika hapus tanpa cek otorisasi. Dipanggil oleh endpoint deleteArchive (admin)
+  // dan oleh DriveController.trashArchiveFile (yang sudah meng-escalate ke admin).
+  // JANGAN ekspos langsung ke client.
+  _deleteArchiveCore_: function (payload) {
+    payload = payload || {};
     Validator.requireString(payload.archiveId, 'Archive ID');
 
     return withLock_(() => {
@@ -217,7 +240,7 @@ const ArchiveController = {
          throw new Error('Konfigurasi kegiatan/sub-kegiatan arsip tidak ditemukan.');
       }
 
-      let detailDeleteSuccess = true;
+      const detailDeleteSuccess = true;
       if (log.spreadsheet_row_number || log.final_file_id) {
          const actualDeletedRow = SpreadsheetService.deleteArchiveRowAndReorder(activity, subActivity, Number(log.spreadsheet_row_number) || 0, log.final_file_id);
          if (actualDeletedRow) {
@@ -258,9 +281,9 @@ const ArchiveController = {
     existingPairs.forEach(function(pair) {
       if (currentRowNumber && pair.rowNumber === currentRowNumber) return;
 
-      var existingItem = String(pair.nomor_item_arsip || '').trim();
-      var existingItemNumber = existingItem ? existingItem.replace(/^0+/, '').padStart(2, '0') : '';
-      var existingUraian = String(pair.uraian_informasi_item || '').trim().toLowerCase();
+      const existingItem = String(pair.nomor_item_arsip || '').trim();
+      const existingItemNumber = existingItem ? existingItem.replace(/^0+/, '').padStart(2, '0') : '';
+      const existingUraian = String(pair.uraian_informasi_item || '').trim().toLowerCase();
 
       if (incomingUraian && existingUraian === incomingUraian) {
         throw new Error('Uraian informasi item "' + payload.metadata.uraian_informasi_item + '" sudah ada. Harap gunakan uraian yang berbeda.');
@@ -291,9 +314,19 @@ const ArchiveController = {
       metadata.lokasi_simpan = finalFile.getName();
       metadata._lokasi_simpan_url = finalFile.getUrl();
 
-      const writeResult = SpreadsheetService.appendArchiveRow(activity, subActivity, metadata);
-      SpreadsheetApp.flush();
-      const rekapResult = SpreadsheetService.updateRekapSummary(activity, subActivity, metadata);
+      // Kompensasi partial-failure: file salinan sudah dibuat di Drive. Bila penulisan
+      // baris/rekap gagal, buang salinan itu agar tidak jadi file yatim tanpa baris.
+      let writeResult, rekapResult;
+      try {
+        writeResult = SpreadsheetService.appendArchiveRow(activity, subActivity, metadata);
+        SpreadsheetApp.flush();
+        rekapResult = SpreadsheetService.updateRekapSummary(activity, subActivity, metadata);
+      } catch (sheetError) {
+        try { finalFile.setTrashed(true); } catch (cleanupError) {
+          console.warn('finalizeArchive: gagal membersihkan file salinan yatim: ' + cleanupError.message);
+        }
+        throw sheetError;
+      }
 
       // Catat log penyelesaian DI DALAM lock yang sama dengan penulisan baris.
       // Kalau ditulis setelah lock dilepas, ada celah crash: file + baris sheet
@@ -343,7 +376,9 @@ const ArchiveController = {
   },
 
   finalizeArchive: function (payload) {
-    var ctx = _resolveArchiveContext_(payload);
+    payload = payload || {};
+    requireAuth_(payload);
+    const ctx = _resolveArchiveContext_(payload);
     const year = ctx.year, config = ctx.config, activity = ctx.activity, subActivity = ctx.subActivity;
 
     const fields = config.fields.filter(function (field) { return field.activity_id === payload.activityId && isTrue_(field.is_visible_in_form); });
@@ -358,6 +393,7 @@ const ArchiveController = {
     const archiveCreatedBy = archiveUser.displayName || archiveUser.username || '';
 
     let result;
+    let logWarning = '';
     try {
       const initialMetadata = ArchiveController._prepareMetadata(payload, activity, subActivity, sourceFile.getName());
       result = ArchiveController._processArchiveInLock(payload, activity, subActivity, initialMetadata, sourceFile, {
@@ -366,7 +402,7 @@ const ArchiveController = {
         sourceFileId: sourceFile.getId(),
         createdBy: archiveCreatedBy
       });
-      var logWarning = result.logWarning || '';
+      logWarning = result.logWarning || '';
     } catch (error) {
       ConfigRepository.appendArchiveLog({
         archive_id: archiveId,
@@ -401,6 +437,7 @@ const ArchiveController = {
 
   adoptExistingArchives: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const dryRun = !!payload.dryRun;
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     const config = CacheHelper.getConfig(year);
@@ -450,28 +487,30 @@ const ArchiveController = {
   },
 
   validateArchiveFields: function (payload) {
-    var ctx = _resolveArchiveContext_(payload);
-    var activity = ctx.activity, subActivity = ctx.subActivity;
+    payload = payload || {};
+    requireAuth_(payload);
+    const ctx = _resolveArchiveContext_(payload);
+    const activity = ctx.activity, subActivity = ctx.subActivity;
 
-    var existingData = SpreadsheetService.listExistingArchiveRows(activity, subActivity);
-    var errors = [];
+    const existingData = SpreadsheetService.listExistingArchiveRows(activity, subActivity);
+    const errors = [];
 
-    var incomingItem = String(payload.nomor_item_arsip || '').trim();
+    const incomingItem = String(payload.nomor_item_arsip || '').trim();
     if (incomingItem) {
-      var normalizedItem = incomingItem.replace(/^0+/, '').padStart(2, '0');
+      const normalizedItem = incomingItem.replace(/^0+/, '').padStart(2, '0');
       existingData.rows.forEach(function (row) {
-        var existingItem = String(row.metadata.nomor_item_arsip || '').trim();
-        var normalizedExisting = existingItem ? existingItem.replace(/^0+/, '').padStart(2, '0') : '';
+        const existingItem = String(row.metadata.nomor_item_arsip || '').trim();
+        const normalizedExisting = existingItem ? existingItem.replace(/^0+/, '').padStart(2, '0') : '';
         if (normalizedExisting === normalizedItem) {
           errors.push({ field: 'nomor_item_arsip', message: 'Nomor Item Arsip "' + incomingItem + '" sudah digunakan.' });
         }
       });
     }
 
-    var incomingUraian = String(payload.uraian_informasi_item || '').trim().toLowerCase();
+    const incomingUraian = String(payload.uraian_informasi_item || '').trim().toLowerCase();
     if (incomingUraian) {
       existingData.rows.forEach(function (row) {
-        var existingUraian = String(row.metadata.uraian_informasi_item || '').trim().toLowerCase();
+        const existingUraian = String(row.metadata.uraian_informasi_item || '').trim().toLowerCase();
         if (existingUraian === incomingUraian) {
           errors.push({ field: 'uraian_informasi_item', message: 'Uraian informasi item "' + payload.uraian_informasi_item + '" sudah ada.' });
         }
@@ -482,7 +521,9 @@ const ArchiveController = {
   },
 
   editMetadata: function (payload) {
-    var ctx = _resolveArchiveContext_(payload);
+    payload = payload || {};
+    requireAuth_(payload);
+    const ctx = _resolveArchiveContext_(payload);
     const year = ctx.year, config = ctx.config, activity = ctx.activity, subActivity = ctx.subActivity;
     Validator.requireString(payload.archiveId, 'Archive ID');
 
@@ -492,40 +533,59 @@ const ArchiveController = {
     const log = ConfigRepository.getArchiveLog(payload.archiveId);
     if (!log) throw new Error('Log arsip tidak ditemukan.');
 
-    ArchiveController._validateUniqueMetadata(payload, activity, subActivity, Number(log.spreadsheet_row_number));
-
-    const metadata = ArchiveController._prepareMetadata(payload, activity, subActivity, log.final_file_name);
-    let finalFileDto = null;
-    let finalFileName = log.final_file_name;
-
     return withLock_(() => {
+      // B4: jangan percaya nomor baris yang dibaca DI LUAR lock. Hapus/reorder arsip
+      // lain oleh user lain bisa menggeser baris (decrementArchiveLogRows menyelaraskan
+      // nomor baris di log), jadi muat ulang log DI DALAM lock dan pakai nilai segar
+      // agar tidak menimpa baris milik arsip lain.
+      const freshLog = ConfigRepository.getArchiveLog(payload.archiveId) || log;
+      ArchiveController._validateUniqueMetadata(payload, activity, subActivity, Number(freshLog.spreadsheet_row_number));
+
+      const metadata = ArchiveController._prepareMetadata(payload, activity, subActivity, freshLog.final_file_name);
+      let finalFileDto = null;
+      let finalFileName = freshLog.final_file_name;
+
       let fileUrl = '';
-      if (log.final_file_id) {
+      // B5: simpan nama lama; jika penulisan baris/rekap gagal SETELAH file di-rename,
+      // kembalikan nama file ke semula agar Drive tidak desync dengan sheet/log.
+      let renamedFile = null;
+      const previousFileName = freshLog.final_file_name;
+      if (freshLog.final_file_id) {
         try {
-          const file = DriveApp.getFileById(log.final_file_id);
+          const file = DriveApp.getFileById(freshLog.final_file_id);
           fileUrl = file.getUrl();
-          if (metadata.lokasi_simpan !== log.final_file_name) {
+          if (metadata.lokasi_simpan !== freshLog.final_file_name) {
             file.setName(metadata.lokasi_simpan);
+            renamedFile = file;
             finalFileDto = DriveService.fileToDto(file);
             finalFileName = file.getName();
           }
         } catch (e) {
           console.warn('Failed to handle drive file: ' + e.message);
-          metadata.lokasi_simpan = log.final_file_name;
+          metadata.lokasi_simpan = freshLog.final_file_name;
         }
       }
       metadata._lokasi_simpan_url = fileUrl;
 
-      if (metadata._resolved_row_number) {
-        SpreadsheetService.updateArchiveRow(activity, subActivity, parseInt(metadata._resolved_row_number, 10), metadata);
-      } else if (log.spreadsheet_row_number) {
-        SpreadsheetService.updateArchiveRow(activity, subActivity, parseInt(log.spreadsheet_row_number, 10), metadata);
-      }
-      SpreadsheetService.updateRekapSummary(activity, subActivity, metadata);
-
-      let newMetadataJson = log.metadata_json;
       try {
-        let draftStateObj = JSON.parse(log.metadata_json);
+        if (metadata._resolved_row_number) {
+          SpreadsheetService.updateArchiveRow(activity, subActivity, parseInt(metadata._resolved_row_number, 10), metadata);
+        } else if (freshLog.spreadsheet_row_number) {
+          SpreadsheetService.updateArchiveRow(activity, subActivity, parseInt(freshLog.spreadsheet_row_number, 10), metadata);
+        }
+        SpreadsheetService.updateRekapSummary(activity, subActivity, metadata);
+      } catch (sheetError) {
+        if (renamedFile) {
+          try { renamedFile.setName(previousFileName); } catch (restoreError) {
+            console.warn('editMetadata: gagal mengembalikan nama file setelah error sheet: ' + restoreError.message);
+          }
+        }
+        throw sheetError;
+      }
+
+      let newMetadataJson = freshLog.metadata_json;
+      try {
+        const draftStateObj = JSON.parse(freshLog.metadata_json);
         draftStateObj.metadata = metadata;
         draftStateObj.finalFileName = finalFileName;
         newMetadataJson = JSON.stringify(draftStateObj);
@@ -540,7 +600,7 @@ const ArchiveController = {
 
       CacheHelper.invalidate(year);
 
-      var editWarning = '';
+      let editWarning = '';
       try {
         const editUser = AuthService.getCurrentUser(payload);
         const editCreatedBy = editUser.displayName || editUser.username || 'unknown';
@@ -572,6 +632,7 @@ const ArchiveController = {
 
   listInboxFiles: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
 
     const settings = ConfigService.getSettings();
@@ -630,12 +691,14 @@ const ArchiveController = {
   },
 
   parseDocumentContent: function (payload) {
+    payload = payload || {};
+    requireAuth_(payload);
     Validator.requireString(payload.fileId, 'File ID');
-    var startTime = Date.now();
-    var file = DriveApp.getFileById(cleanId_(payload.fileId));
-    var mimeType = file.getMimeType();
-    var fileName = file.getName();
-    var fileSize = file.getSize();
+    const startTime = Date.now();
+    const file = DriveApp.getFileById(cleanId_(payload.fileId));
+    const mimeType = file.getMimeType();
+    const fileName = file.getName();
+    const fileSize = file.getSize();
 
     if (!PARSEABLE_MIME_TYPES[mimeType]) {
       return {
@@ -649,16 +712,16 @@ const ArchiveController = {
       };
     }
 
-    var text = '';
-    var pageCount = 0;
+    let text = '';
+    let pageCount = 0;
     if (mimeType === 'application/pdf') {
       pageCount = extractPdfPageCount_(file);
     }
-    var tempDocId = '';
+    const tempDocId = '';
 
     // Try multiple extraction methods
-    var extractionMethods = [];
-    var extractionErrors = [];
+    const extractionMethods = [];
+    const extractionErrors = [];
 
     try {
       // Method 1: Direct text extraction (works for text/plain files)
@@ -670,13 +733,6 @@ const ArchiveController = {
       console.warn('Method 1 failed: ' + e.message);
     }
 
-    if (!text || text.length < 100) {
-      // Method 2: OCR via Drive.Files.create has been moved to OcrBackgroundJob
-      // to prevent UI freezing. The background job will fill missing data later.
-      extractionMethods.push('ocr_deferred');
-    }
-
-    // Method 3 removed because it unsafely calls getDataAsString on binary files like PDFs
 
     // Fallback to filename if nothing extracted
     if (!text) {
@@ -691,17 +747,16 @@ const ArchiveController = {
       try { DriveApp.getFileById(tempDocId).setTrashed(true); } catch (e) {}
     }
 
-    console.log('Extraction methods tried: ' + extractionMethods.join(', ') + ', final text length: ' + text.length);
 
     // Run ParseEngine for scored multi-pass extraction
-    var engineResult = ParseEngine.analyze(text, fileName, { activity: {}, subActivity: {} });
-    var fields = engineResult.fields;
+    const engineResult = ParseEngine.analyze(text, fileName, { activity: {}, subActivity: {} });
+    const fields = engineResult.fields;
 
     // Use file modified date as fallback for date field
     if (!fields.tanggal) {
       try {
-        var lastUpdated = file.getLastUpdated();
-        var lastUpdatedStr = Utilities.formatDate(lastUpdated, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+        const lastUpdated = file.getLastUpdated();
+        const lastUpdatedStr = Utilities.formatDate(lastUpdated, Session.getScriptTimeZone(), 'yyyy-MM-dd');
         fields.tanggal = {
           value: lastUpdatedStr,
           score: 0.5,
@@ -713,12 +768,11 @@ const ArchiveController = {
       }
     }
 
-    // Debug: log OCR text sample and extraction results
-    var debugInfo = {
-      rawText: text,
+    // Ringkasan diagnostik — TIDAK menyertakan teks dokumen mentah (rawText/ocrTextSample)
+    // agar isi dokumen tidak bocor ke payload client maupun ke Stackdriver.
+    const debugInfo = {
       errors: extractionErrors,
       ocrTextLength: text ? text.length : 0,
-      ocrTextSample: text.substring(0, 500),
       extractionMethods: extractionMethods,
       structure: engineResult.structure,
       documentType: engineResult.documentType,
@@ -726,12 +780,11 @@ const ArchiveController = {
       fieldsMissing: ['nomor_surat','kode_klasifikasi','tanggal','uraian_informasi_item','klasifikasi_akses','pengirim','penerima','tanda_tangan','lampiran']
         .filter(function(k) { return !fields[k]; })
     };
-    console.log('ParseEngine debug:', JSON.stringify(debugInfo, null, 2));
 
     // Flatten complex fields for client compatibility
     if (fields.tanda_tangan && fields.tanda_tangan.value) {
-      var tt = fields.tanda_tangan.value;
-      var ttParts = [];
+      const tt = fields.tanda_tangan.value;
+      const ttParts = [];
       if (tt.jabatan) ttParts.push(tt.jabatan);
       if (tt.nama) ttParts.push(tt.nama);
       fields.tanda_tangan.value = ttParts.join(', ') || ttParts.join('');
@@ -755,6 +808,159 @@ const ArchiveController = {
       structure: engineResult.structure || {},
       debug: debugInfo
     };
+  },
+
+  bulkAddArchiveDocumentLinks: function (payload) {
+    payload = payload || {};
+    const actor = requireAuth_(payload);
+    const items = payload.items || [];
+    if (!items.length) return { successCount: 0, failCount: 0, errors: [] };
+    
+    let spreadsheet = null;
+    let activity = null;
+    let subActivity = null;
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
+    
+    if (payload.activityId && payload.subActivityId) {
+      const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+      const config = CacheHelper.getConfig(year);
+      activity = ConfigService.findActivity(config, payload.activityId);
+      if (!activity) throw new Error('Kegiatan tidak ditemukan.');
+      subActivity = ConfigService.findSubActivity(config, payload.activityId, payload.subActivityId);
+      if (!subActivity) throw new Error('Sub-kegiatan tidak ditemukan.');
+    }
+
+    const files = [];
+    items.forEach(function(item) {
+      let createdFile = null;
+      try {
+        requireSafeUrl_(item.url, 'URL dokumen' + (item.name ? ' ' + item.name : ''));
+        createdFile = DriveService.addArchiveDocumentLink(item);
+        if (activity && subActivity) {
+          const linkFile = { name: createdFile.name, url: item.url || createdFile.url };
+          spreadsheet = SpreadsheetService.updateArchiveDocumentLink(activity, subActivity, item.name, linkFile);
+        }
+        files.push(createdFile);
+        successCount++;
+      } catch (e) {
+        // Kompensasi: bila shortcut sudah dibuat tetapi rekap gagal, buang shortcut yatim.
+        if (createdFile && createdFile.id) {
+          try { DriveApp.getFileById(createdFile.id).setTrashed(true); } catch (cleanupError) {
+            console.warn('bulkAddArchiveDocumentLinks: gagal membersihkan shortcut yatim: ' + cleanupError.message);
+          }
+        }
+        failCount++;
+        errors.push(item.name + ': ' + e.message);
+      }
+    });
+
+    bumpVersion();
+    auditAction_(actor, 'DOCLINK_BULK_ADDED', {
+      year: payload.year, activityId: payload.activityId, subActivityId: payload.subActivityId,
+      message: 'Tambah tautan dokumen massal: ' + successCount + ' sukses, ' + failCount + ' gagal'
+    });
+    return { successCount: successCount, failCount: failCount, errors: errors, files: files };
+  },
+  addArchiveDocumentLink: function (payload) {
+    payload = payload || {};
+    const actor = requireAuth_(payload);
+    Validator.requireId(payload.parentFolderId, 'Folder induk');
+    Validator.requireString(payload.name, 'Kategori dokumen');
+    requireSafeUrl_(payload.url, 'Link Google Drive');
+    const file = DriveService.addArchiveDocumentLink(payload);
+    let spreadsheet = null;
+    if (payload.activityId && payload.subActivityId) {
+      // Kompensasi: shortcut sudah dibuat di Drive. Bila penulisan rekap gagal,
+      // buang shortcut agar tidak jadi tautan yatim tanpa entri rekap.
+      try {
+        const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+        const config = CacheHelper.getConfig(year);
+        const activity = ConfigService.findActivity(config, payload.activityId);
+        if (!activity) throw new Error('Kegiatan tidak ditemukan.');
+        const subActivity = ConfigService.findSubActivity(config, payload.activityId, payload.subActivityId);
+        if (!subActivity) throw new Error('Sub-kegiatan tidak ditemukan.');
+        const linkFile = { name: file.name, url: payload.url || file.url };
+        spreadsheet = SpreadsheetService.updateArchiveDocumentLink(activity, subActivity, payload.name, linkFile);
+      } catch (linkError) {
+        if (file && file.id) {
+          try { DriveApp.getFileById(file.id).setTrashed(true); } catch (cleanupError) {
+            console.warn('addArchiveDocumentLink: gagal membersihkan shortcut yatim: ' + cleanupError.message);
+          }
+        }
+        throw linkError;
+      }
+    }
+    bumpVersion();
+    auditAction_(actor, 'DOCLINK_ADDED', {
+      year: payload.year, activityId: payload.activityId, subActivityId: payload.subActivityId,
+      folderId: payload.parentFolderId, message: 'Menambah tautan dokumen: ' + payload.name
+    });
+    return Object.assign({}, file, { spreadsheet: spreadsheet });
+  },
+  getShortcutTargetInfo: function (payload) {
+    payload = payload || {};
+    requireAuth_(payload);
+    return DriveService.getShortcutTargetInfo(payload);
+  },
+  updateArchiveDocumentLink: function (payload) {
+    payload = payload || {};
+    const actor = requireAuth_(payload);
+    Validator.requireId(payload.fileId, 'File ID');
+    requireSafeUrl_(payload.url, 'URL Drive');
+    const result = DriveService.updateArchiveDocumentLink(payload);
+    if (payload.activityId && payload.subActivityId && payload.categoryName) {
+      const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+      const config = CacheHelper.getConfig(year);
+      const activity = ConfigService.findActivity(config, payload.activityId);
+      if (!activity) throw new Error('Kegiatan tidak ditemukan.');
+      const subActivity = ConfigService.findSubActivity(config, payload.activityId, payload.subActivityId);
+      if (!subActivity) throw new Error('Sub-kegiatan tidak ditemukan.');
+      const linkFile = { name: result.name, url: payload.url || result.url };
+      SpreadsheetService.updateArchiveDocumentLink(activity, subActivity, payload.categoryName, linkFile);
+    }
+    bumpVersion();
+    auditAction_(actor, 'DOCLINK_UPDATED', {
+      year: payload.year, activityId: payload.activityId, subActivityId: payload.subActivityId,
+      folderId: payload.fileId, message: 'Memperbarui tautan dokumen: ' + (payload.categoryName || '-')
+    });
+    return result;
+  },
+  getFinalFileName: function (payload) {
+    payload = payload || {};
+    Validator.requireString(payload.metadata, 'Metadata JSON');
+    Validator.requireString(payload.sourceName, 'Nama file sumber');
+    return MetadataService.buildFinalFileName(JSON.parse(payload.metadata), payload.sourceName);
+  },
+  syncExistingPhysicalFiles: function (payload) {
+    payload = payload || {};
+    requireAuth_(payload);
+    const actor = auditActor_(payload);
+    const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+    
+    // We pass startTime to prevent 6-minute timeout
+    const startTime = Date.now();
+    const report = [];
+    
+    const result = wsSyncExistingFilesInFolder_(year, report, startTime);
+    
+    auditAction_(actor, 'FILES_SYNCED', { year: year, message: 'Sinkronisasi berkas fisik. Total tersinkronisasi: ' + result.totalSynced });
+    
+    return {
+      success: true,
+      year: year,
+      totalSynced: result.totalSynced,
+      timeLimitReached: result.timeLimitReached,
+      report: report
+    };
+  },
+  getArchiveLogByFileId: function (payload) {
+    payload = payload || {};
+    requireAuth_(payload);
+    Validator.requireId(payload.fileId, 'File ID');
+    const log = ConfigRepository.getArchiveLogByFileId(payload.fileId);
+    return log || null;
   }
 };
 
@@ -962,31 +1168,31 @@ function normalizeFileLookupName_(value) {
 
 function _resolveArchiveContext_(payload) {
   payload = payload || {};
-  var year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+  const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
   Validator.requireString(payload.activityId, 'Activity ID');
   Validator.requireString(payload.subActivityId, 'Sub Activity ID');
-  var config = CacheHelper.getConfig(year);
-  var activity = ConfigService.findActivity(config, payload.activityId);
+  const config = CacheHelper.getConfig(year);
+  const activity = ConfigService.findActivity(config, payload.activityId);
   if (!activity) throw new Error('Kegiatan tidak ditemukan.');
-  var subActivity = ConfigService.findSubActivity(config, payload.activityId, payload.subActivityId);
+  const subActivity = ConfigService.findSubActivity(config, payload.activityId, payload.subActivityId);
   if (!subActivity) throw new Error('Sub-kegiatan tidak ditemukan.');
   return { year: year, config: config, activity: activity, subActivity: subActivity };
 }
 
 function extractPdfPageCount_(file) {
   try {
-    var blob = file.getBlob();
-    var pdfText = blob.getDataAsString('ISO-8859-1');
+    const blob = file.getBlob();
+    const pdfText = blob.getDataAsString('ISO-8859-1');
     
     // Try to find /Count [number]
-    var countMatch = pdfText.match(/\/Count\s+(\d+)/);
+    const countMatch = pdfText.match(/\/Count\s+(\d+)/);
     if (countMatch && countMatch[1]) {
-      var count = parseInt(countMatch[1], 10);
+      const count = parseInt(countMatch[1], 10);
       if (count > 0 && count < 1000) return count;
     }
     
     // Fallback: count /Type /Page
-    var pageMatch = pdfText.match(/\/Type\s*\/Page\b/g);
+    const pageMatch = pdfText.match(/\/Type\s*\/Page\b/g);
     if (pageMatch && pageMatch.length > 0) {
       return pageMatch.length;
     }

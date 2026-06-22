@@ -120,12 +120,6 @@ function pbkdf2Like_(password, username, salt, iterations) {
   return key;
 }
 
-function hashPasswordV1_(password, username) {
-  const salt = generateSalt_(16);
-  const key = pbkdf2Like_(password, username, salt, HASH_ITERATIONS);
-  return HASH_PREFIX_V1 + salt + '$' + key;
-}
-
 /**
  * Hash password with v2 scheme (50,000 iterations). All new hashes use this.
  * @param {string} password
@@ -172,15 +166,6 @@ function verifyPassword_(password, username, storedHash) {
   }
   const legacy = pbkdf2Like_(password, username, null, 500);
   return timingSafeEqual_(legacy, storedHash);
-}
-
-/**
- * Check if a stored hash uses an outdated scheme and should be rehashed.
- * @param {string} storedHash
- * @return {boolean}
- */
-function needsRehash_(storedHash) {
-  return storedHash.indexOf(HASH_PREFIX_V2) !== 0;
 }
 
 function generatePassword_(length) {

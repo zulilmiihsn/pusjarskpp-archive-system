@@ -99,7 +99,12 @@ const SettingsController = {
       documentTypes: getRekapDocColumns_().map(function (c) {
         return { key: c.key, label: c.formLabel || c.label };
       }),
-      history: config.history,
+      history: config.history.slice(0, 50),
+      historyMeta: {
+        total: config.history.length,
+        page: 1,
+        totalPages: Math.ceil(config.history.length / 50)
+      },
       progress: this.buildProgress(config.history, activities),
       maintenance: {
         triggerInstalled: triggerInstalled,
@@ -121,18 +126,18 @@ const SettingsController = {
   },
 
   resetWorkspace: function () {
-    var settings = ConfigService.getSettings();
-    var removed = 0;
+    const settings = ConfigService.getSettings();
+    let removed = 0;
 
     // Trash config spreadsheet
-    var configId = settings.configSpreadsheetId;
+    const configId = settings.configSpreadsheetId;
     if (configId) {
       try { DriveApp.getFileById(cleanId_(configId)).setTrashed(true); removed++; } catch (e) {}
     }
 
     // Trash activity spreadsheets
     try {
-      var config = CacheHelper.getConfig(settings.currentYear || DEFAULT_YEAR);
+      const config = CacheHelper.getConfig(settings.currentYear || DEFAULT_YEAR);
       if (config && config.activities) {
         config.activities.forEach(function (a) {
           if (a.spreadsheet_file_id) {
@@ -182,15 +187,6 @@ const SettingsController = {
       result.docTypesTrigger = this.ensureDocumentTypesSyncTrigger();
     } catch (error) {
       result.docTypesTrigger = {
-        installed: false,
-        error: error.message || String(error)
-      };
-    }
-
-    try {
-      result.ocrTrigger = this.ensureOcrTrigger();
-    } catch (error) {
-      result.ocrTrigger = {
         installed: false,
         error: error.message || String(error)
       };
@@ -283,20 +279,6 @@ const SettingsController = {
     ScriptApp.newTrigger(handlerName)
       .forSpreadsheet(cleanId_(settings.configSpreadsheetId))
       .onEdit()
-      .create();
-
-    return { installed: true, exists: false, handler: handlerName };
-  },
-
-  ensureOcrTrigger: function () {
-    const handlerName = 'processOcrQueue';
-    const triggers = ScriptApp.getProjectTriggers();
-    const exists = triggers.some(t => t.getHandlerFunction && t.getHandlerFunction() === handlerName);
-    if (exists) return { installed: false, exists: true, handler: handlerName };
-
-    ScriptApp.newTrigger(handlerName)
-      .timeBased()
-      .everyMinutes(15)
       .create();
 
     return { installed: true, exists: false, handler: handlerName };

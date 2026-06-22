@@ -43,7 +43,7 @@
       syncBtn.disabled = true;
       if (syncIcon) syncIcon.style.animation = 'spin 1s linear infinite';
       if (syncText) syncText.textContent = 'Menyinkronkan...';
-      showToast('Memindai folder Google Drive...');
+      showProcessToast('Memindai folder Google Drive...');
     }
 
     try {
@@ -91,7 +91,7 @@
   async function submitDeleteSub_(deleteModal, deleteSubmitBtn, currentDeleteSubId) {
     deleteSubmitBtn.disabled = true;
     deleteSubmitBtn.textContent = 'Menonaktifkan...';
-    var deleteSubToast = showToast('Menonaktifkan sub-kegiatan...', true);
+    var deleteSubToast = showProcessToast('Menonaktifkan sub-kegiatan...', true);
     try {
       const result = await api('deleteSubActivity', {
         activityId: getActivity(state.selectedActivityId).activity_id,
@@ -115,7 +115,7 @@
   async function submitTrashSub_(trashModal, trashSubmitBtn, currentTrashSubId) {
     trashSubmitBtn.disabled = true;
     trashSubmitBtn.textContent = 'Memindahkan...';
-    var trashSubToast = showToast('Memindahkan folder ke Tempat Sampah...', true);
+    var trashSubToast = showProcessToast('Memindahkan folder ke Tempat Sampah...', true);
     try {
       const result = await api('trashSubActivityFolder', {
         activityId: getActivity(state.selectedActivityId).activity_id,
@@ -337,7 +337,7 @@
         }
         
         btn.innerHTML = '<span class="spinner" style="margin-right: 8px;"></span> Memverifikasi Sinkronisasi...';
-        showToast('Folder berhasil dibuat di Drive. Menyelaraskan data...', true);
+        showProcessToast('Folder berhasil dibuat di Drive. Menyelaraskan data...', true);
         
         // Wait for the drive sync to complete before closing
         try {
@@ -430,7 +430,7 @@
                 </button>
                 <div class="sub-dropdown-menu">
                   ${activity.laciFolder.url ? `<a href="${esc(activity.laciFolder.url)}" target="_blank" class="sub-dropdown-item" style="text-decoration:none;">Buka Folder Laci</a>` : ''}
-                  ${firstSubFolderUrl ? `<a href="${esc(firstSubFolderUrl)}" target="_blank" class="sub-dropdown-item" style="text-decoration:none;">Buka Folder Persuratan</a>` : ''}
+                  ${firstSubFolderUrl ? `<a href="${esc(firstSubFolderUrl)}" target="_blank" class="sub-dropdown-item" style="text-decoration:none;">Buka Folder Item</a>` : ''}
                 </div>
               </div>
             ` : ''}

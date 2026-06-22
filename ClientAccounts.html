@@ -9,10 +9,10 @@
     if (cached) {
       const wrap = document.getElementById('accounts-table-wrap');
       if (isSilentUpdate && wrap) {
-        wrap.innerHTML = accountsTable(cached.data || []);
+        wrap.innerHTML = accountsTable(cached.data.items || [], cached.data);
         bindAccountTableActions();
       } else {
-        setContent(accountsPageHtml(cached.data || []));
+        setContent(accountsPageHtml(cached.data.items || [], cached.data));
         bindAccountEvents();
         bindAccountTableActions();
       }
@@ -21,24 +21,24 @@
     }
 
     try {
-      const result = await getCachedOrFetch('accounts', null, function () {
-        return api('listAccounts');
+      const result = await getCachedOrFetch('accounts_' + currentAccountPage, null, function () {
+        return api('listAccounts', { page: currentAccountPage, pageSize: 50 });
       });
       if (rid !== currentRenderId()) return;
 
       if (isSilentUpdate && isModalOpen) return;
 
       if (result.source === 'fresh') {
-        setContent(accountsPageHtml(result.data || []));
+        setContent(accountsPageHtml(result.data.items || [], result.data));
         bindAccountEvents();
         bindAccountTableActions();
       } else if (result.source === 'stale-revalidated') {
         const wrap = document.getElementById('accounts-table-wrap');
         if (wrap) {
-          wrap.innerHTML = accountsTable(result.data || []);
+          wrap.innerHTML = accountsTable(result.data.items || [], result.data);
           bindAccountTableActions();
         } else {
-          setContent(accountsPageHtml(result.data || []));
+          setContent(accountsPageHtml(result.data.items || [], result.data));
           bindAccountEvents();
           bindAccountTableActions();
         }
@@ -51,7 +51,9 @@
     }
   }
 
-  function accountsPageHtml(rows) {
+  let currentAccountPage = 1;
+
+  function accountsPageHtml(rows, meta) {
     return `
       <div class="accounts-page">
         ${pageCardHtml({
@@ -59,7 +61,7 @@
           subtitle: 'Kelola akun pengguna yang memiliki akses ke sistem.',
           icon: iconSvg('account'),
           actions: '<button class="btn btn-primary" id="add-account-btn">' + iconSvg('plus') + 'Tambah Akun</button>',
-          body: '<div id="accounts-table-wrap">' + accountsTable(rows || []) + '</div>',
+          body: '<div id="accounts-table-wrap">' + accountsTable(rows || [], meta) + '</div>',
           extraClass: 'accounts-page-card'
         })}
       </div>
@@ -162,7 +164,7 @@
     `;
   }
 
-  function accountsTable(rows) {
+  function accountsTable(rows, meta) {
     if (!rows.length) {
       return `
         <div class="accounts-empty">
@@ -189,6 +191,19 @@
     }
     if (users.length) {
       sections.push({ label: 'Pengguna', icon: 'users', count: users.length, rows: users, cls: 'user' });
+    }
+
+    let paginationHtml = '';
+    if (meta && meta.totalPages > 1) {
+      paginationHtml = `
+        <div class="pagination-controls mt-6 flex justify-between" style="align-items: center; border-top: 1px solid var(--border); padding-top: 12px;">
+          <span class="muted small">Halaman ${meta.page} dari ${meta.totalPages} (Total: ${meta.total})</span>
+          <div class="flex gap-2">
+            <button class="btn btn-sm btn-outline acc-page-btn" data-page="${meta.page - 1}" ${meta.page <= 1 ? 'disabled' : ''}>Prev</button>
+            <button class="btn btn-sm btn-outline acc-page-btn" data-page="${meta.page + 1}" ${meta.page >= meta.totalPages ? 'disabled' : ''}>Next</button>
+          </div>
+        </div>
+      `;
     }
 
     return sections.map(section => `
@@ -243,7 +258,7 @@
           `}).join('')}
         </div>
       </div>
-    `).join('');
+    `).join('') + paginationHtml;
   }
 
   function bindAccountEvents() {
@@ -442,9 +457,25 @@
         }
       }
 
-      submit.disabled = true;
-      submit.classList.add('loading');
-      if (spinner) spinner.classList.add('active');
+      // OPTIMISTIC UI: Instantly close modal and show toast
+      modal.style.display = 'none';
+      const isEdit = !!_currentEditAccountId;
+      const pt = showProcessToast(isEdit ? 'Menyimpan perubahan...' : 'Menambahkan akun...');
+      
+      // OPTIMISTIC EDIT: update text in DOM immediately
+      if (isEdit) {
+        const editBtn = document.querySelector(`.edit-account-btn[data-account-id="${_currentEditAccountId}"]`);
+        if (editBtn) {
+          const row = editBtn.closest('.acc-row');
+          if (row) {
+            const nameEl = row.querySelector('.accounts-user-name');
+            const dispEl = row.querySelector('.accounts-user-display');
+            if (nameEl) nameEl.textContent = u;
+            if (dispEl) dispEl.textContent = d || u;
+          }
+        }
+      }
+
       try {
         await api('saveAccount', {
           accountId: _currentEditAccountId || undefined,
@@ -453,11 +484,13 @@
           role: r,
           displayName: d || u
         });
-        showToast(_currentEditAccountId ? 'Akun diperbarui.' : 'Akun baru ditambahkan.');
-        modal.style.display = 'none';
-        await loadAccountsTable();
+        pt.success(isEdit ? 'Akun diperbarui.' : 'Akun baru ditambahkan.');
+        // Silently reload in background
+        loadAccountsTable();
       } catch (error) {
-        showToast('Gagal: ' + (errorMessage(error)));
+        pt.error('Gagal: ' + (errorMessage(error)));
+        // Revert UI on failure: reopen modal
+        modal.style.display = 'grid';
         submit.disabled = false;
         submit.classList.remove('loading');
         if (spinner) spinner.classList.remove('active');
@@ -474,25 +507,48 @@
       button.addEventListener('click', async () => {
         const username = button.dataset.username;
         if (!await showConfirmModal('Nonaktifkan akun "' + username + '"? Data tidak dihapus permanen.')) return;
-        showToast('Menonaktifkan akun "' + username + '"...');
+        const pt = showProcessToast('Menonaktifkan akun "' + username + '"...');
         button.disabled = true;
+        
+        // OPTIMISTIC DELETE: Immediately hide the row
+        const row = button.closest('.acc-row');
+        let originalDisplay = '';
+        if (row) {
+          originalDisplay = row.style.display;
+          row.style.display = 'none';
+        }
+
         try {
           await api('deleteAccount', { accountId: button.dataset.accountId });
-          showToast('Akun "' + username + '" dinonaktifkan.');
-          await loadAccountsTable();
+          pt.success('Akun "' + username + '" dinonaktifkan.');
+          loadAccountsTable(currentAccountPage);
         } catch (error) {
-          showToast('Gagal: ' + (errorMessage(error)));
+          // Revert UI on failure
+          if (row) row.style.display = originalDisplay;
+          button.disabled = false;
+          pt.error('Gagal: ' + (errorMessage(error)));
+        }
+      });
+    });
+
+    document.querySelectorAll('.acc-page-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const p = parseInt(btn.dataset.page);
+        if (p) {
+          currentAccountPage = p;
+          loadAccountsTable(p);
         }
       });
     });
   }
 
-  async function loadAccountsTable() {
+  async function loadAccountsTable(pageToLoad) {
+    const p = pageToLoad || currentAccountPage;
     try {
-      const rows = await api('listAccounts');
-      setCachedView('accounts', null, rows, getCurrentDataVersion());
+      const resp = await api('listAccounts', { page: p, pageSize: 50 });
+      setCachedView('accounts_' + p, null, resp, getCurrentDataVersion());
       const wrap = document.getElementById('accounts-table-wrap');
-      if (wrap) wrap.innerHTML = accountsTable(rows || []);
+      if (wrap) wrap.innerHTML = accountsTable(resp.items || [], resp);
       bindAccountTableActions();
     } catch (error) {
       showToast(errorMessage(error));

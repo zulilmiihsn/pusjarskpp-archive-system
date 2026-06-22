@@ -194,6 +194,15 @@ const WorkspaceSetupService = {
     const activityRows = [];
     const subActivityRows = [];
     const existingSubMap = wsExistingSubActivityMap_(ss, year);
+    
+    let globalSortOrder = 1;
+    Object.keys(existingSubMap).forEach(function(key) {
+      const sub = existingSubMap[key];
+      if (sub && sub.sort_order) {
+        const so = Number(sub.sort_order);
+        if (so >= globalSortOrder) globalSortOrder = so + 1;
+      }
+    });
 
     WORKSPACE_ACTIVITIES.forEach(function (activity) {
       const laciFolder = wsFindOrCreateChildFolder_(arsipDiklat, activity.laciCandidates, activity.laciFolderName, report);
@@ -242,7 +251,7 @@ const WorkspaceSetupService = {
           activity.defaultCode || DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI,
           activity.allowNonLetter ? 'TRUE' : 'FALSE',
           'TRUE',
-          index + 1,
+          existingSub.sort_order ? Number(existingSub.sort_order) : (globalSortOrder++),
           targetSheetName,
           mappingStatus,
           existingSub.mapping_note || '',
@@ -503,22 +512,65 @@ function wsEnsureArchiveSpreadsheet_(laciFolder, activity, year, report) {
   const laciNo = activity.laciNo || activity.laci_no || '';
   const spreadsheetName = 'Daftar Isi Berkas Arsip Laci No.' + laciNo + ' Th. ' + year + ' - Production';
   const companion = wsGetFileByNameAndMime_(laciFolder, spreadsheetName, MimeType.GOOGLE_SHEETS);
-  if (companion) return SpreadsheetApp.openById(companion.getId());
+  if (companion) {
+    wsInstallRekapTriggerIfMissing_(companion.getId());
+    return SpreadsheetApp.openById(companion.getId());
+  }
 
   const native = wsFindFirstArchiveSheet_(laciFolder);
-  if (native) return SpreadsheetApp.openById(native.getId());
+  if (native) {
+    wsInstallRekapTriggerIfMissing_(native.getId());
+    return SpreadsheetApp.openById(native.getId());
+  }
 
   const office = wsFindFirstOfficeSpreadsheet_(laciFolder);
   if (office) {
     const converted = wsTryConvertOfficeSpreadsheet_(office, spreadsheetName, laciFolder);
-    if (converted) return converted;
+    if (converted) {
+      wsInstallRekapTriggerIfMissing_(converted.getId());
+      return converted;
+    }
   }
 
   const ss = SpreadsheetApp.create(spreadsheetName);
   wsMoveFileToFolder_(ss.getId(), laciFolder);
   wsPrepareArchiveWorkbook_(ss, activity);
+  wsInstallRekapTriggerIfMissing_(ss.getId());
   wsPushReport_(report, 'created', 'Spreadsheet arsip dibuat: ' + spreadsheetName);
   return ss;
+}
+
+function wsInstallRekapTriggerIfMissing_(spreadsheetId) {
+  try {
+    const triggers = ScriptApp.getProjectTriggers();
+    for (let i = 0; i < triggers.length; i++) {
+      if (triggers[i].getHandlerFunction() === 'onRekapSheetEdit' && triggers[i].getTriggerSourceId() === spreadsheetId) {
+        return;
+      }
+    }
+    ScriptApp.newTrigger('onRekapSheetEdit')
+      .forSpreadsheet(spreadsheetId)
+      .onEdit()
+      .create();
+  } catch (e) {
+    console.warn('Gagal memasang trigger onEdit untuk spreadsheet ' + spreadsheetId + ': ' + e.message);
+  }
+}
+
+function installTriggersForExistingSpreadsheets() {
+  const year = ConfigService.getSettings().currentYear || new Date().getFullYear();
+  const activities = ConfigRepository.getActivities(year);
+  activities.forEach(function(act) {
+    if (act.spreadsheet_file_id) {
+      wsInstallRekapTriggerIfMissing_(act.spreadsheet_file_id);
+    }
+    const subActivities = ConfigRepository.getSubActivities(year, act.activity_id);
+    subActivities.forEach(function(sub) {
+      if (sub.spreadsheet_file_id && sub.spreadsheet_file_id !== act.spreadsheet_file_id) {
+         wsInstallRekapTriggerIfMissing_(sub.spreadsheet_file_id);
+      }
+    });
+  });
 }
 
 function wsResolveActivitySpreadsheetContext_(laciFolder, activity, year, report) {
@@ -804,8 +856,8 @@ function wsBuildMetadataRows_(year) {
   const fields = [
     ['no_berkas', 'No Berkas', true, '', 'number'],
     ['nomor_item_arsip', 'Nomor Item Arsip', true, '', 'text'],
-    ['nomor_surat', 'Nomor Surat', false, '', 'text'],
-    ['kode_klasifikasi', 'Kode Klasifikasi', false, '', 'text'],
+    ['nomor_surat', 'Nomor Item', false, '', 'text'],
+    ['kode_klasifikasi', 'Kode Klasifikasi', false, DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI, 'text'],
     ['uraian_informasi_item', 'Uraian Informasi Item', true, '', 'textarea'],
     ['tanggal', 'Tanggal', false, '', 'date'],
     ['tingkat_perkembangan', 'Tingkat Perkembangan', true, 'Asli', 'select'],

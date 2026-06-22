@@ -24,3 +24,33 @@ jobs:
         cache: 'npm'
     - run: npm ci
     - run: npm test
+
+  deploy_staging:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/development'
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+    - run: npm ci
+    # Requires CLASP_TOKEN to be set in GitHub Actions Secrets
+    # - run: echo "$CLASP_TOKEN" > ~/.clasprc.json
+    # - run: npm run deploy:staging
+
+  deploy_prod:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 20.x
+        cache: 'npm'
+    - run: npm ci
+    # Requires CLASP_TOKEN to be set in GitHub Actions Secrets
+    # - run: echo "$CLASP_TOKEN" > ~/.clasprc.json
+    # - run: npm run deploy:prod

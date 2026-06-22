@@ -65,7 +65,7 @@
       const item = String(metadata.nomor_item_arsip || '01').padStart(2, '0');
       const tingkat = metadata.tingkat_perkembangan || 'Asli';
       const nomor = metadata.nomor_surat || '';
-      const uraian = sanitizeFilePart(metadata.uraian_informasi_item || 'Dokumen Surat');
+      const uraian = sanitizeFilePart(metadata.uraian_informasi_item || 'Dokumen Item');
 
       if (nomor) {
         return item + '. (' + tingkat + ') No: ' + nomor + '_' + uraian + ext;

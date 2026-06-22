@@ -77,9 +77,9 @@ const ConfigService = {
       const existing = readSheetObjects_(ss, CONFIG_SHEETS.ACCOUNTS);
       const match = existing.find(function (row) { return row.account_id === payload.accountId; });
       if (match) {
-        var rowIndex = findConfigRow_(sheet, { account_id: payload.accountId });
+        const rowIndex = findConfigRow_(sheet, { account_id: payload.accountId });
         if (rowIndex) {
-          var updates = {
+          const updates = {
             username: payload.username,
             role: payload.role,
             display_name: payload.displayName,

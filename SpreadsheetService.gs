@@ -29,9 +29,9 @@ function buildDetailRowValues_(metadata) {
 }
 
 function extractMetadataFromRow_(rowValues) {
-  var metadata = {};
+  const metadata = {};
   DETAIL_FIELD_ORDER.forEach(function (key, i) {
-    var val = rowValues[i];
+    let val = rowValues[i];
     if (val instanceof Date) {
       val = Utilities.formatDate(val, Session.getScriptTimeZone(), 'yyyy-MM-dd');
     }
@@ -60,11 +60,11 @@ const SpreadsheetService = {
       const itemCol = headerColumns.nomor_item_arsip || (DETAIL_FALLBACK_START_COL + DETAIL_ITEM_NUMBER_OFFSET);
 
       const values = sheet.getRange(dataStart, itemCol, rowCount, 1).getDisplayValues();
-      var maxNum = 0;
+      let maxNum = 0;
       values.forEach(function (row) {
-        var raw = String(row[0] || '').trim();
+        const raw = String(row[0] || '').trim();
         if (raw) {
-          var num = Number(raw);
+          const num = Number(raw);
           if (!isNaN(num) && num > maxNum) maxNum = num;
         }
       });
@@ -114,6 +114,12 @@ const SpreadsheetService = {
       if (fieldName === 'no_filing_cabinet' && metadata._no_filing_cabinet_url) {
          cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_filing_cabinet_url } };
       }
+      if (fieldName === 'no_laci' && metadata._no_laci_url) {
+         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_laci_url } };
+      }
+      if (fieldName === 'no_folder' && metadata._no_folder_url) {
+         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_folder_url } };
+      }
 
       rowData.values.push(cellData);
     }
@@ -137,13 +143,19 @@ const SpreadsheetService = {
     const fcIdx = DETAIL_FIELD_ORDER.indexOf('no_filing_cabinet');
     if (fcIdx >= 0 && metadata._no_filing_cabinet_url && metadata._no_filing_cabinet_path && SpreadsheetApp.newRichTextValue) {
       const cell = sheet.getRange(rowIndex, startCol + fcIdx);
-      const url = metadata._no_filing_cabinet_url;
-      const pathText = metadata._no_filing_cabinet_path;
-      const richText = SpreadsheetApp.newRichTextValue()
-        .setText(pathText)
-        .setLinkUrl(url)
-        .build();
-      cell.setRichTextValue(richText);
+      cell.setRichTextValue(SpreadsheetApp.newRichTextValue().setText(metadata._no_filing_cabinet_path).setLinkUrl(metadata._no_filing_cabinet_url).build());
+    }
+
+    const laciIdx = DETAIL_FIELD_ORDER.indexOf('no_laci');
+    if (laciIdx >= 0 && metadata._no_laci_url && metadata._no_laci_path && SpreadsheetApp.newRichTextValue) {
+      const cell = sheet.getRange(rowIndex, startCol + laciIdx);
+      cell.setRichTextValue(SpreadsheetApp.newRichTextValue().setText(metadata._no_laci_path).setLinkUrl(metadata._no_laci_url).build());
+    }
+
+    const folderIdx = DETAIL_FIELD_ORDER.indexOf('no_folder');
+    if (folderIdx >= 0 && metadata._no_folder_url && metadata._no_folder_path && SpreadsheetApp.newRichTextValue) {
+      const cell = sheet.getRange(rowIndex, startCol + folderIdx);
+      cell.setRichTextValue(SpreadsheetApp.newRichTextValue().setText(metadata._no_folder_path).setLinkUrl(metadata._no_folder_url).build());
     }
 
     sheet.getRange(rowIndex, startCol, 1, rowValues.length)
@@ -175,7 +187,7 @@ const SpreadsheetService = {
     const startCol = getDetailStartColumn_(sheet);
     const checkCol = startCol + DETAIL_WRITABLE_CHECK_OFFSET;
     
-    let noteRow = findNoteRow_(sheet) || sheet.getLastRow() + 1;
+    const noteRow = findNoteRow_(sheet) || sheet.getLastRow() + 1;
     let lastFilledRow = DETAIL_DATA_START_ROW - 1;
     
     const numCheckRows = noteRow - DETAIL_DATA_START_ROW;
@@ -241,6 +253,12 @@ const SpreadsheetService = {
         if (fieldName === 'no_filing_cabinet' && meta._no_filing_cabinet_url) {
            cellData.userEnteredFormat.textFormat = { link: { uri: meta._no_filing_cabinet_url } };
         }
+        if (fieldName === 'no_laci' && meta._no_laci_url) {
+           cellData.userEnteredFormat.textFormat = { link: { uri: meta._no_laci_url } };
+        }
+        if (fieldName === 'no_folder' && meta._no_folder_url) {
+           cellData.userEnteredFormat.textFormat = { link: { uri: meta._no_folder_url } };
+        }
 
         rowData.values.push(cellData);
       }
@@ -265,9 +283,9 @@ const SpreadsheetService = {
     sortDetailSheetByNoBerkas_(sheet);
 
     return metadataList.map(function(meta, i) {
-      var finalRow = rowIndex + i;
+      let finalRow = rowIndex + i;
       if (meta._lokasi_simpan_url) {
-        var located = locateDetailRowByUrl_(sheet, meta._lokasi_simpan_url);
+        const located = locateDetailRowByUrl_(sheet, meta._lokasi_simpan_url);
         if (located) finalRow = located;
       }
       return {
@@ -359,6 +377,12 @@ const SpreadsheetService = {
       if (fieldName === 'no_filing_cabinet' && metadata._no_filing_cabinet_url) {
          cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_filing_cabinet_url } };
       }
+      if (fieldName === 'no_laci' && metadata._no_laci_url) {
+         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_laci_url } };
+      }
+      if (fieldName === 'no_folder' && metadata._no_folder_url) {
+         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_folder_url } };
+      }
 
       rowData.values.push(cellData);
     }
@@ -407,49 +431,49 @@ const SpreadsheetService = {
   },
 
   getDetailMetadataDefaults: function (activity, subActivity, forceCalculate) {
-    var ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
 
     let locks = {};
     try {
       locks = subActivity && subActivity.metadata_locks ? JSON.parse(subActivity.metadata_locks) : {};
     } catch(e) { console.warn('getDetailMetadataDefaults: failed to parse metadata_locks: ' + e.message); }
 
-    var needSummary = forceCalculate || (locks.kurunWaktu === false) || (locks.jumlah === false) || (locks.akses === false);
+    const needSummary = forceCalculate || (locks.kurunWaktu === false) || (locks.jumlah === false) || (locks.akses === false);
 
-    var sheet = findExistingDetailSheet_(ss, subActivity);
-    var summary = (sheet && needSummary)
+    const sheet = findExistingDetailSheet_(ss, subActivity);
+    const summary = (sheet && needSummary)
       ? summarizeDetailSheet_(sheet, subActivity)
       : { count: 0, startDate: null, endDate: null, akses: '' };
 
-    var rekapKode = '', rekapFC = '', rekapLaci = '', rekapFolder = '', rekapAkses = '';
-    var rekapNomorBerkas = '', rekapKurunWaktu = '', rekapJumlah = '', rekapKet = '';
-    var rekapSheet, rowIndex, docCols = [];
+    let rekapKode = '', rekapFC = '', rekapLaci = '', rekapFolder = '', rekapAkses = '';
+    let rekapNomorBerkas = '', rekapKurunWaktu = '', rekapJumlah = '', rekapKet = '';
+    let rekapSheet, rowIndex, docCols = [];
     try {
       rekapSheet = findRekapSheet_(ss);
       if (rekapSheet) {
         rowIndex = findRekapRowForSubActivity_(rekapSheet, subActivity);
         if (rowIndex) {
-          var headerMap = getRekapHeaderMap_(rekapSheet);
+          const headerMap = getRekapHeaderMap_(rekapSheet);
           // Resolusi kolom URL untuk SEMUA tipe dokumen aktif (data-driven).
           docCols = getRekapDocColumns_().map(function (c) {
             return { key: c.key, col: findRekapHeaderColumnFromMap_(headerMap, c.match) };
           });
-          var kodeCol       = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.kodeKlasifikasi);
-          var fcCol         = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.filingCabinet);
-          var laciCol       = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noLaci);
-          var folderCol     = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noFolder);
-          var aksesCol      = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.akses);
-          var nomorBerkasCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas);
-          var kurunWaktuCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.kurunWaktu);
-          var jumlahCol     = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.jumlah);
-          var ketCol        = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.ket);
+          const kodeCol       = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.kodeKlasifikasi);
+          const fcCol         = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.filingCabinet);
+          const laciCol       = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noLaci);
+          const folderCol     = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noFolder);
+          const aksesCol      = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.akses);
+          const nomorBerkasCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas);
+          const kurunWaktuCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.kurunWaktu);
+          const jumlahCol     = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.jumlah);
+          const ketCol        = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.ket);
 
           // Batch-read entire rekap row in one call
-          var docColNums = docCols.map(function (d) { return d.col; });
-          var allCols = docColNums.concat([kodeCol, fcCol, laciCol, folderCol, aksesCol, nomorBerkasCol, kurunWaktuCol, jumlahCol, ketCol]).filter(Boolean);
-          var maxCol = Math.max.apply(null, allCols);
-          var rowValues = rekapSheet.getRange(rowIndex, 1, 1, maxCol).getDisplayValues()[0];
-          var cell = function (col) { return col ? String(rowValues[col - 1] || '').trim() : ''; };
+          const docColNums = docCols.map(function (d) { return d.col; });
+          const allCols = docColNums.concat([kodeCol, fcCol, laciCol, folderCol, aksesCol, nomorBerkasCol, kurunWaktuCol, jumlahCol, ketCol]).filter(Boolean);
+          const maxCol = Math.max.apply(null, allCols);
+          const rowValues = rekapSheet.getRange(rowIndex, 1, 1, maxCol).getDisplayValues()[0];
+          const cell = function (col) { return col ? String(rowValues[col - 1] || '').trim() : ''; };
 
           rekapKode        = cell(kodeCol);
           rekapFC          = cell(fcCol);
@@ -466,9 +490,9 @@ const SpreadsheetService = {
       console.warn('Failed to get rekap metadata: ' + e.message);
     }
 
-    var showJsComputed = forceCalculate;
-    var nextItemNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
-    var meta = {
+    const showJsComputed = forceCalculate;
+    const nextItemNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
+    const meta = {
       no_berkas: rekapNomorBerkas || (subActivity && subActivity.sort_order ? subActivity.sort_order : ''),
       kode_klasifikasi: '',
       kurun_waktu: (showJsComputed ? '' : rekapKurunWaktu) || formatDateRange_(summary.startDate, summary.endDate),
@@ -483,14 +507,14 @@ const SpreadsheetService = {
 
     if (rekapSheet && rowIndex) {
       // Batch-read formulas for URL columns in one call
-      var urlCols = docCols.map(function (d) { return d.col; }).filter(Boolean);
+      const urlCols = docCols.map(function (d) { return d.col; }).filter(Boolean);
       if (urlCols.length) {
-        var urlMaxCol = Math.max.apply(null, urlCols);
-        var formulas = rekapSheet.getRange(rowIndex, 1, 1, urlMaxCol).getFormulas()[0];
-        var extractUrl = function (col) {
+        const urlMaxCol = Math.max.apply(null, urlCols);
+        const formulas = rekapSheet.getRange(rowIndex, 1, 1, urlMaxCol).getFormulas()[0];
+        const extractUrl = function (col) {
           if (!col) return '';
-          var formula = formulas[col - 1] || '';
-          var match = formula.match(/=HYPERLINK\(\s*["']([^"']+)["']/i);
+          const formula = formulas[col - 1] || '';
+          const match = formula.match(/=HYPERLINK\(\s*["']([^"']+)["']/i);
           return match && match[1] ? match[1] : '';
         };
         // Emit per tipe dokumen: meta['url_' + key]
@@ -504,26 +528,26 @@ const SpreadsheetService = {
   },
 
   listExistingItemUraianPairs: function (activity, subActivity) {
-    var ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
-    var sheet = findExistingDetailSheet_(ss, subActivity);
+    const ss = SpreadsheetApp.openById(getArchiveSpreadsheetId_(activity, subActivity));
+    const sheet = findExistingDetailSheet_(ss, subActivity);
     if (!sheet) return [];
 
-    var noteRow = findNoteRow_(sheet) || sheet.getLastRow() + 1;
+    const noteRow = findNoteRow_(sheet) || sheet.getLastRow() + 1;
     if (noteRow <= DETAIL_DATA_START_ROW) return [];
 
-    var width = Math.max(sheet.getLastColumn(), DETAIL_FALLBACK_START_COL + DETAIL_FIELD_ORDER.length);
-    var headerColumns = getDetailColumnMap_(sheet, width);
-    var itemCol = headerColumns.nomor_item_arsip || (DETAIL_FALLBACK_START_COL + 1);
-    var uraianCol = headerColumns.uraian_informasi_item || (DETAIL_FALLBACK_START_COL + 3);
+    const width = Math.max(sheet.getLastColumn(), DETAIL_FALLBACK_START_COL + DETAIL_FIELD_ORDER.length);
+    const headerColumns = getDetailColumnMap_(sheet, width);
+    const itemCol = headerColumns.nomor_item_arsip || (DETAIL_FALLBACK_START_COL + 1);
+    const uraianCol = headerColumns.uraian_informasi_item || (DETAIL_FALLBACK_START_COL + 3);
 
-    var rowCount = noteRow - DETAIL_DATA_START_ROW;
-    var itemValues = sheet.getRange(DETAIL_DATA_START_ROW, itemCol, rowCount, 1).getDisplayValues();
-    var uraianValues = sheet.getRange(DETAIL_DATA_START_ROW, uraianCol, rowCount, 1).getDisplayValues();
+    const rowCount = noteRow - DETAIL_DATA_START_ROW;
+    const itemValues = sheet.getRange(DETAIL_DATA_START_ROW, itemCol, rowCount, 1).getDisplayValues();
+    const uraianValues = sheet.getRange(DETAIL_DATA_START_ROW, uraianCol, rowCount, 1).getDisplayValues();
 
-    var pairs = [];
-    for (var i = 0; i < rowCount; i++) {
-      var item = String(itemValues[i][0] || '').trim();
-      var uraian = String(uraianValues[i][0] || '').trim();
+    const pairs = [];
+    for (let i = 0; i < rowCount; i++) {
+      const item = String(itemValues[i][0] || '').trim();
+      const uraian = String(uraianValues[i][0] || '').trim();
       if (!item && !uraian) continue;
       pairs.push({
         rowNumber: DETAIL_DATA_START_ROW + i,
@@ -600,15 +624,28 @@ const SpreadsheetService = {
     }
 
     const nomorBerkas = subActivity.sort_order || '';
+    
+    const rawFcText = activity.laci_no + '. Laci ' + activity.activity_name;
+    const fcText = rawFcText.replace(/"/g, '""');
+    const fcFormula = activity.laci_folder_id 
+        ? '=HYPERLINK("https://drive.google.com/drive/folders/' + activity.laci_folder_id + '", "' + fcText + '")' 
+        : sanitizeCellValue_(rawFcText);
+        
+    const rawLaciText = subActivity.sub_activity_name || '';
+    const laciText = rawLaciText.replace(/"/g, '""');
+    const laciFormula = subActivity.folder_id
+        ? '=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '", "' + laciText + '")'
+        : sanitizeCellValue_(rawLaciText);
+
     const row = [
       sanitizeCellValue_(nomorBerkas),
       sanitizeCellValue_(subActivity.default_kode_klasifikasi || ''),
       sanitizeCellValue_(getSubActivityFormalName_(subActivity) || ''),
       '',
       '',
-      activity.laci_folder_id || '',
-      sanitizeCellValue_(activity.laci_no || ''),
-      sanitizeCellValue_(subActivity.no_folder || activity.folder_no || ''),
+      fcFormula,
+      laciFormula,
+      sanitizeCellValue_(nomorBerkas),
       'Terbatas',
       '',
       '',
@@ -982,6 +1019,18 @@ const SpreadsheetService = {
         const newSortOrder = shift.newSortOrder;
 
         // 1. Update Rekap Sheet
+        if (rekapSheet && subAct.rekap_row_number) {
+          const rekapRow = Number(subAct.rekap_row_number);
+          if (rekapRow > 0) {
+             rekapSheet.getRange(rekapRow, 2).setValue(sanitizeCellValue_(newSortOrder));
+             const oldSortOrder = String(Number(newSortOrder) - 1);
+             const currentFolderVal = String(rekapSheet.getRange(rekapRow, 9).getValue());
+             if (currentFolderVal === oldSortOrder) {
+                rekapSheet.getRange(rekapRow, 9).setValue(sanitizeCellValue_(newSortOrder));
+             }
+          }
+        }
+        
         // 2. Update Detail Sheet
         if (subAct.target_sheet_name) {
           const detailSheet = ss.getSheetByName(subAct.target_sheet_name);

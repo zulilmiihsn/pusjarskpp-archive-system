@@ -4,6 +4,14 @@ const MetadataService = {
   normalize: function (metadata, activity, subActivity, sourceName) {
     const normalized = Object.assign({}, metadata);
     
+    const uraian = String(normalized.uraian_informasi_item || '').trim();
+    const parts = [uraian];
+    if (normalized.kepada && uraian.indexOf(normalized.kepada) === -1) parts.push(normalized.kepada);
+    if (normalized.dari && uraian.indexOf(normalized.dari) === -1) parts.push(normalized.dari);
+    
+    // overwrite uraian_informasi_item so SpreadsheetService and buildFinalFileName uses it directly
+    normalized.uraian_informasi_item = parts.filter(Boolean).join(' / ');
+    
     if (normalized.nomor_item_arsip) {
       const parsedNum = Number(normalized.nomor_item_arsip);
       if (!isNaN(parsedNum)) {
@@ -16,9 +24,9 @@ const MetadataService = {
       normalized.no_berkas = normalized.no_berkas || (subActivity && subActivity.sort_order ? String(subActivity.sort_order) : '');
     }
 
-    normalized.no_laci = normalized.no_laci || activity.laci_no;
-    normalized.no_folder = normalized.no_folder || subActivity.no_folder || activity.folder_no;
-    normalized.no_filing_cabinet = normalized.no_filing_cabinet || '02';
+    normalized.no_laci = normalized.no_laci || '';
+    normalized.no_folder = normalized.no_folder || '';
+    normalized.no_filing_cabinet = normalized.no_filing_cabinet || '';
     normalized.satuan = normalized.satuan || 'Lembar';
     normalized.tingkat_perkembangan = normalized.tingkat_perkembangan || 'Asli';
     normalized.jumlah = metadata.jumlah !== undefined ? metadata.jumlah : 1;
@@ -37,7 +45,7 @@ const MetadataService = {
     const kode = extractKodeKlasifikasi_(text) || '';
     const uraian = extractUraian_(text, sourceName, activity, subActivity);
 
-    let itemVal = String(payload.nomorItemArsip || payload.noBerkas || '').replace(/^0+/, '');
+    const itemVal = String(payload.nomorItemArsip || payload.noBerkas || '').replace(/^0+/, '');
     
     const base = {
       no_berkas: itemVal,
@@ -52,9 +60,9 @@ const MetadataService = {
       tingkat_perkembangan: tingkat,
       jumlah: 1,
       satuan: 'Lembar',
-      no_filing_cabinet: payload.noFilingCabinet || '02',
-      no_laci: activity.laci_no || '',
-      no_folder: subActivity.no_folder || activity.folder_no || '',
+      no_filing_cabinet: payload.noFilingCabinet || '',
+      no_laci: payload.noLaci || '',
+      no_folder: payload.noFolder || '',
       klasifikasi_akses: 'Terbatas',
       ket: '',
       lokasi_simpan: ''
@@ -90,8 +98,8 @@ const MetadataService = {
 };
 
 function extractNomorSurat_(text) {
-  var str = String(text || '');
-  var patterns = [
+  const str = String(text || '');
+  const patterns = [
     // "Nomor : B-123/DL.01/2026" or "No. 123/ABC/2026" (most explicit, highest priority)
     /(?:No(?:mor)?\.?)\s*[:.]?\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i,
     // Letter prefix: "B-123/DL.01/2026", "SP-456/KP.02/2025"
@@ -103,8 +111,8 @@ function extractNomorSurat_(text) {
     // Space/dash separated filename format
     /(?:No(?:mor)?)\s*[:.\-\s_]+\s*([A-Z0-9][A-Z0-9.\-\s_]+?[\-\s_][12]\d{3})\b/i
   ];
-  for (var i = 0; i < patterns.length; i++) {
-    var match = str.match(patterns[i]);
+  for (let i = 0; i < patterns.length; i++) {
+    const match = str.match(patterns[i]);
     if (match) {
       if (i === 3) return match[1] + '/Tahun/' + match[2];
       if (i === 4) return match[1].replace(/[\s_]+/g, '/').trim();
@@ -115,48 +123,48 @@ function extractNomorSurat_(text) {
 }
 
 function extractKodeKlasifikasi_(text) {
-  var str = String(text || '');
+  const str = String(text || '');
   // Contextual: "Kode: KP.01.02" or "Klasifikasi: DL.01"
-  var ctx = str.match(/(?:Kode|Klasifikasi)\s*[:.]?\s*([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?)/i);
+  const ctx = str.match(/(?:Kode|Klasifikasi)\s*[:.]?\s*([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?)/i);
   if (ctx) return ctx[1].toUpperCase().trim();
   // Standard: "KP.01.02", "DL.01"
-  var raw = str.match(/\b([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?|\d{3}\.\d{1,3}(?:\.\d{1,3})*)\b/);
+  const raw = str.match(/\b([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?|\d{3}\.\d{1,3}(?:\.\d{1,3})*)\b/);
   return raw ? raw[1].trim() : '';
 }
 
-var _MONTH_NAMES = {
+const _MONTH_NAMES = {
   januari: '01', februari: '02', maret: '03', april: '04',
   mei: '05', juni: '06', juli: '07', agustus: '08',
   september: '09', oktober: '10', november: '11', desember: '12'
 };
-var _MONTH_RE = 'Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember';
+const _MONTH_RE = 'Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember';
 
 function extractDate_(text) {
-  var str = String(text || '');
-  var lines = str.split('\n');
-  var headerLines = [];
-  for (var i = 0; i < Math.min(lines.length, 30); i++) {
-    var line = lines[i].trim();
+  const str = String(text || '');
+  const lines = str.split('\n');
+  const headerLines = [];
+  for (let i = 0; i < Math.min(lines.length, 30); i++) {
+    const line = lines[i].trim();
     if (/^(?:yth|kepada|kpd|dengan\s+hormat|menindaklanjuti|sehubungan|merujuk|berdasarkan)\b/i.test(line)) {
       break;
     }
     headerLines.push(lines[i]);
   }
-  var headerText = headerLines.join('\n');
-  var date = extractDateFromText_(headerText);
+  const headerText = headerLines.join('\n');
+  const date = extractDateFromText_(headerText);
   if (date) return date;
   return extractDateFromText_(str);
 }
 
 function extractDateFromText_(str) {
   // Priority 1: Contextual — near "tanggal", "ditetapkan", "ditandatangani"
-  var ctxRe = new RegExp(
+  const ctxRe = new RegExp(
     '(?:tanggal|ditetapkan|ditandatangani)\\D{0,20}?' +
     '(?:' +
       '(\\d{1,2})\\s+(' + _MONTH_RE + ')\\s+(20\\d{2})' +
       '|(20\\d{2})[-/.](\\d{1,2})[-/.](\\d{1,2})' +
     ')', 'i');
-  var ctx = str.match(ctxRe);
+  const ctx = str.match(ctxRe);
   if (ctx) {
     if (ctx[1] && ctx[2] && ctx[3]) {
       return [ctx[3], _MONTH_NAMES[ctx[2].toLowerCase()], pad2_(ctx[1])].join('-');
@@ -166,18 +174,18 @@ function extractDateFromText_(str) {
     }
   }
   // Priority 2: ISO format anywhere — 2025-03-15, 2025/3/15
-  var iso = str.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  const iso = str.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
   if (iso) return [iso[1], pad2_(iso[2]), pad2_(iso[3])].join('-');
   // Priority 3: Full Indonesian — "15 Maret 2025"
-  var idRe = new RegExp('\\b(\\d{1,2})\\s+(' + _MONTH_RE + ')\\s+(20\\d{2})\\b', 'i');
-  var id = str.match(idRe);
+  const idRe = new RegExp('\\b(\\d{1,2})\\s+(' + _MONTH_RE + ')\\s+(20\\d{2})\\b', 'i');
+  const id = str.match(idRe);
   if (id) return [id[3], _MONTH_NAMES[id[2].toLowerCase()], pad2_(id[1])].join('-');
   // Priority 4: Month + year only — "Maret 2025" → 1st of month
-  var myRe = new RegExp('\\b(' + _MONTH_RE + ')\\s+(20\\d{2})\\b', 'i');
-  var my = str.match(myRe);
+  const myRe = new RegExp('\\b(' + _MONTH_RE + ')\\s+(20\\d{2})\\b', 'i');
+  const my = str.match(myRe);
   if (my) return [my[2], _MONTH_NAMES[my[1].toLowerCase()], '01'].join('-');
   // Priority 5: DD-MM-YYYY with dots/dashes (e.g., "15.03.2025")
-  var dmy = str.match(/\b(\d{1,2})[.\-](\d{1,2})[.\-](20\d{2})\b/);
+  const dmy = str.match(/\b(\d{1,2})[.\-](\d{1,2})[.\-](20\d{2})\b/);
   if (dmy) return [dmy[3], pad2_(dmy[2]), pad2_(dmy[1])].join('-');
   return '';
 }
@@ -192,12 +200,12 @@ function extractTingkatPerkembangan_(name) {
 }
 
 function extractKlasifikasiAkses_(text) {
-  var str = String(text || '');
-  var upper = str.toUpperCase();
+  const str = String(text || '');
+  const upper = str.toUpperCase();
   // Contextual patterns (higher confidence)
-  var ctx = str.match(/(?:bersifat|klasifikasi\s*akses|tingkat\s*akses|sifat\s*dokumen)\s*[:.]?\s*(Rahasia|Terbatas|Biasa|Terbuka|Umum)/i);
+  const ctx = str.match(/(?:bersifat|klasifikasi\s*akses|tingkat\s*akses|sifat\s*dokumen)\s*[:.]?\s*(Rahasia|Terbatas|Biasa|Terbuka|Umum)/i);
   if (ctx) {
-    var val = ctx[1].toLowerCase();
+    const val = ctx[1].toLowerCase();
     if (val === 'rahasia') return 'Rahasia';
     if (val === 'terbatas') return 'Terbatas';
     return 'Biasa';
@@ -210,18 +218,18 @@ function extractKlasifikasiAkses_(text) {
 }
 
 function extractUraian_(text, sourceName, activity, subActivity) {
-  var str = String(text || '');
+  const str = String(text || '');
   // Priority 1: "Perihal" or "Hal" — capture the subject line
-  var perihal = str.match(/(?:Perihal|Hal)\s*[:.]?\s*(.+?)(?=\n(?:Ke(?:pada)?|Lampiran|Yth|Nomor|Tanggal|$)|\n\n|$)/is);
+  const perihal = str.match(/(?:Perihal|Hal)\s*[:.]?\s*(.+?)(?=\n(?:Ke(?:pada)?|Lampiran|Yth|Nomor|Tanggal|$)|\n\n|$)/is);
   if (perihal && perihal[1].trim().length > 3) return cleanUraian_(perihal[1]);
   // Fallback: simpler Perihal pattern
-  var perihalSimple = str.match(/(?:Perihal|Hal)\s*[:.]?\s*(.+)/i);
+  const perihalSimple = str.match(/(?:Perihal|Hal)\s*[:.]?\s*(.+)/i);
   if (perihalSimple && perihalSimple[1].trim().length > 3) return cleanUraian_(perihalSimple[1]);
   // Priority 2: "Tentang" keyword (common in SK/SK)
-  var tentang = str.match(/\b[Tt]entang\s+(.+?)(?=\n|$)/);
+  const tentang = str.match(/\b[Tt]entang\s+(.+?)(?=\n|$)/);
   if (tentang && tentang[1].trim().length > 3) return cleanUraian_(tentang[1]);
   // Priority 3: Clean filename
-  var cleanedName = String(sourceName || '')
+  const cleanedName = String(sourceName || '')
     .replace(/\.[a-z0-9]+$/i, '')
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -282,7 +290,7 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
     nomor_surat: '',
     uraian_informasi_item: '',
     lokasi_simpan: fileName,
-    kode_klasifikasi: '',
+    kode_klasifikasi: typeof DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI !== 'undefined' ? DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI : 'PDP.07.1',
     klasifikasi_akses: 'Terbatas',
     jumlah: 1,
     satuan: 'Lembar',

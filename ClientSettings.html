@@ -219,7 +219,7 @@
           <div class="form-field">
             <label for="workspace-root-id">Folder Ruang Kerja Utama</label>
             <input id="workspace-root-id" type="hidden" value="${esc(settings.workspaceRootFolderId || '')}">
-            <div class="settings-folder-picker-card">
+            <div class="settings-folder-picker-card ${busy ? 'disabled' : ''}" style="${busy ? 'opacity:0.6; pointer-events:none;' : ''}" data-folder-picker data-target-input="workspace-root-id" data-title="Pilih Folder Ruang Kerja">
               <div class="settings-folder-info">
                 <div class="settings-folder-icon">${iconSvg('folder')}</div>
                 <div class="settings-folder-details">
@@ -229,7 +229,6 @@
                   </div>
                 </div>
               </div>
-              <button class="btn" data-folder-picker data-target-input="workspace-root-id" data-title="Pilih Folder Ruang Kerja" ${busy ? 'disabled' : ''}>Pilih</button>
             </div>
           </div>
 
@@ -237,7 +236,7 @@
           <div class="form-field">
             <label for="config-folder-id">Folder Konfigurasi Sistem</label>
             <input id="config-folder-id" type="hidden" value="${esc(settings.configFolderId || '')}">
-            <div class="settings-folder-picker-card">
+            <div class="settings-folder-picker-card ${busy ? 'disabled' : ''}" style="${busy ? 'opacity:0.6; pointer-events:none;' : ''}" data-folder-picker data-target-input="config-folder-id" data-title="Pilih Folder Konfigurasi">
               <div class="settings-folder-info">
                 <div class="settings-folder-icon" style="color: var(--warn); background: rgba(217, 119, 6, 0.1);">${iconSvg('folder')}</div>
                 <div class="settings-folder-details">
@@ -247,7 +246,6 @@
                   </div>
                 </div>
               </div>
-              <button class="btn" data-folder-picker data-target-input="config-folder-id" data-title="Pilih Folder Konfigurasi" ${busy ? 'disabled' : ''}>Pilih</button>
             </div>
           </div>
         </div>
@@ -799,7 +797,7 @@
           state.adoptExistingLoading = true;
           state.adoptExistingPreview = null;
           renderSettings();
-          showToast('Mengecek lembar rincian yang ada...');
+          showProcessToast('Mengecek lembar rincian yang ada...');
           const result = await api('previewExistingArchives', {
             year: (state.bootstrap.settings && state.bootstrap.settings.currentYear) || 2026
           });
@@ -830,7 +828,7 @@
         if (!await showConfirmModal('Daftarkan data lama yang terdeteksi ke Riwayat/Progres aplikasi? Berkas dan lembar lama tidak akan diubah.')) return;
         try {
           confirmAdoption.disabled = true;
-          showToast('Mengadaptasi data lama ke aplikasi...');
+          showProcessToast('Mengadaptasi data lama ke aplikasi...');
           const result = await api('adoptExistingArchives', {
             year: (state.bootstrap.settings && state.bootstrap.settings.currentYear) || 2026
           });
@@ -854,7 +852,7 @@
       triggerButton.addEventListener('click', async () => {
         try {
           triggerButton.disabled = true;
-          showToast('Memasang pemicu pemeliharaan...');
+          showProcessToast('Memasang pemicu pemeliharaan...');
           const result = await api('installMaintenanceTrigger', {});
           state.bootstrap = await api('getBootstrap', {});
           render();
@@ -891,7 +889,7 @@
         const confirmed = await showConfirmModal(`Apakah Anda yakin ingin menghapus tahun kerja ${year}? Tindakan ini akan menghapus semua konfigurasi tahun ini dan memindahkan folder terkait di Google Drive ke tempat sampah.`);
         if (!confirmed) return;
 
-        showToast(`Menghapus tahun kerja ${year}...`);
+        showProcessToast(`Menghapus tahun kerja ${year}...`);
         button.disabled = true;
         try {
           const result = await api('deleteYear', { year: year });
@@ -916,7 +914,7 @@
         e.stopPropagation();
         const selectedYear = Number(btn.dataset.year);
         try {
-          showToast(`Mengganti tahun kerja aktif ke ${selectedYear}...`);
+          showProcessToast(`Mengganti tahun kerja aktif ke ${selectedYear}...`);
           state.bootstrap = await api('saveSettings', { currentYear: selectedYear });
           state.selectedFolderId = null;
           state.selectedFolderName = null;
@@ -999,13 +997,13 @@
           state.workspaceInitTargetYear = payload.year;
           state.workspaceInitLoading = true;
           render();
-          showToast('Menyimpan dan menghubungkan ruang kerja...');
+          showProcessToast('Menyimpan dan menghubungkan ruang kerja...');
           state.bootstrap = await api('initializeWorkspace', payload);
           state.workspaceSetup = state.bootstrap.workspaceSetup;
           state.workspaceInitTargetYear = null;
           state.workspaceInitPhase = 'syncing';
           render();
-          showToast('Selesai membangun konfigurasi. Mensinkronisasi berkas fisik...');
+          showProcessToast('Selesai membangun konfigurasi. Mensinkronisasi berkas fisik...');
           
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.sessionId) {
             localStorage.setItem('portal_session_id', state.bootstrap.workspaceSetup.sessionId);
@@ -1164,9 +1162,9 @@
     if (!rows.length) return '<div class="empty settings-audit-empty">Belum ada audit log admin.</div>';
 
     const auditActionLabels = {
-      // Arsip surat
+      // Arsip item
       'ARCHIVE_CREATED': 'Arsipkan Item',
-      'ARCHIVE_DELETED': 'Hapus Surat',
+      'ARCHIVE_DELETED': 'Hapus Item',
       'ARCHIVE_ADOPTED': 'Adopsi Arsip',
       'METADATA_UPDATED': 'Ubah Metadata',
       'DRAFT_SAVED': 'Simpan Draf',
@@ -1227,7 +1225,7 @@
             : esc(activityName);
         }
       }
-      // Fallback: ambil subjek setelah ":" pada pesan (nama surat/folder/sub/akun).
+      // Fallback: ambil subjek setelah ":" pada pesan (nama item/folder/sub/akun).
       // Tidak pernah menampilkan ID mentah.
       if (row.message) {
         const m = row.message.match(/:\s*(.+)$/);
@@ -1388,7 +1386,7 @@
     document.querySelectorAll('[data-purge-sub]').forEach(button => {
       button.addEventListener('click', async () => {
         if (!await showConfirmModal('Hapus permanen baris konfigurasi sub-kegiatan ini? Folder Drive tidak ikut dihapus.')) return;
-        showToast('Menghapus baris konfigurasi...');
+        showProcessToast('Menghapus baris konfigurasi...');
         button.disabled = true;
         try {
           await api('purgeSubActivity', {
@@ -1466,13 +1464,13 @@
           state.workspaceInitTargetYear = payload.year;
           state.workspaceInitLoading = true;
           render();
-          showToast('Membuat struktur folder untuk tahun ' + payload.year + '...');
+          showProcessToast('Membuat struktur folder untuk tahun ' + payload.year + '...');
           state.bootstrap = await api('initializeWorkspace', payload);
           state.workspaceSetup = state.bootstrap.workspaceSetup;
           state.workspaceInitTargetYear = null;
           state.workspaceInitPhase = 'syncing';
           render();
-          showToast('Selesai membangun konfigurasi. Mensinkronisasi berkas fisik...');
+          showProcessToast('Selesai membangun konfigurasi. Mensinkronisasi berkas fisik...');
           
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.sessionId) {
             localStorage.setItem('portal_session_id', state.bootstrap.workspaceSetup.sessionId);

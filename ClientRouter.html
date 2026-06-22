@@ -548,7 +548,7 @@
       dashboard:        'Dasbor',
       process:          'Arsipkan Item',
       document_process: 'Arsipkan Dokumen',
-      templates:        'Templat Surat',
+      templates:        'Templat Item',
       history:          'Riwayat & Draf Arsip',
       inactive:         'Arsip Nonaktif',
       audit:            'Catatan Aktivitas',
@@ -738,18 +738,18 @@
     }
 
     const groups = {
-      'Surat Arsip': [],
+      'Item Arsip': [],
       'Kegiatan': [],
-      'Templat Surat': []
+      'Templat Item': []
     };
 
     results.forEach(function(r) {
       if (r.type === 'dokumen') {
-        groups['Surat Arsip'].push(r);
+        groups['Item Arsip'].push(r);
       } else if (r.type === 'kegiatan' || r.type === 'subkegiatan') {
         groups['Kegiatan'].push(r);
       } else if (r.type === 'template' || r.type === 'kategori template') {
-        groups['Templat Surat'].push(r);
+        groups['Templat Item'].push(r);
       }
     });
 
@@ -970,11 +970,18 @@
     // Kasus 2: Cache ada (baik stale, atau versinya sudah tidak valid).
     // Tampilkan data cache lama secara instan, namun tetap lakukan revalidasi asinkron di background.
     if (entry) {
-      if (!hasInflightFetch(viewName, params)) {
+      // Folder arsip yang sudah memuat >1 halaman (infinite scroll) JANGAN
+      // direvalidasi otomatis: refetch latar hanya mengambil halaman-1 dan akan
+      // menimpa akumulasi multi-halaman, membuat daftar "lompat balik" ke 60 item.
+      // Andalkan refresh manual / bump versi untuk menyegarkan kasus ini.
+      const isAccumulatedFolder = viewName === 'archive_folder'
+        && entry.data && Array.isArray(entry.data.files)
+        && entry.data.files.length > ((params && params.pageSize) ? params.pageSize : 0);
+      if (!isAccumulatedFolder && !hasInflightFetch(viewName, params)) {
         setInflightFetch(viewName, params);
         fetchFn()
           .then(function (data) {
-            setCachedView(viewName, params, data, currentVersion);
+            setCachedView(viewName, params, data, getCurrentDataVersion());
             if (state.view === viewName && paramsMatchCurrent(viewName, params)) {
               rerenderCurrentView(viewName);
             }
@@ -994,7 +1001,7 @@
     setInflightFetch(viewName, params);
     try {
       const data = await fetchFn();
-      setCachedView(viewName, params, data, currentVersion);
+      setCachedView(viewName, params, data, getCurrentDataVersion());
       return { data: data, source: 'fresh' };
     } finally {
       clearInflightFetch(viewName, params);

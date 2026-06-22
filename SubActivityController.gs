@@ -3,9 +3,11 @@
 const SubActivityController = {
   addSubActivity: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
     Validator.requireString(payload.subActivityName, 'Nama sub-kegiatan');
+    sanitizeNameForSheetAndDrive_(payload.subActivityName, 'Nama sub-kegiatan');
 
     return withLock_(() => {
       const config = CacheHelper.getConfig(year);
@@ -80,9 +82,11 @@ const SubActivityController = {
   },
   createParentFolder: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
     Validator.requireString(payload.folderName, 'Nama Folder Utama');
+    sanitizeNameForSheetAndDrive_(payload.folderName, 'Nama Folder Utama');
 
     return withLock_(() => {
       const config = CacheHelper.getConfig(year);
@@ -130,12 +134,14 @@ const SubActivityController = {
         }
       });
 
-      return this.syncSubActivities({ year: year, activityId: activity.activity_id });
+      // Teruskan _sessionId: syncSubActivities kini meminta sesi; ini panggilan internal.
+      return this.syncSubActivities({ year: year, activityId: activity.activity_id, _sessionId: payload._sessionId });
     }, 30000);
   },
 
   convertSubActivityToParent: function(payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
     Validator.requireString(payload.subActivityId, 'Sub Activity ID');
@@ -261,6 +267,7 @@ const SubActivityController = {
 
   syncSubActivities: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
 
@@ -298,52 +305,58 @@ const SubActivityController = {
 
   deleteSubActivity: function (payload) {
     payload = payload || {};
+    requireAdmin_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
     Validator.requireString(payload.subActivityId, 'Sub Activity ID');
 
-    const config = CacheHelper.getConfig(year);
-    const activity = ConfigService.findActivity(config, payload.activityId);
-    if (!activity) throw new Error('Kegiatan tidak ditemukan.');
+    return withLock_(() => {
+      const config = CacheHelper.getConfig(year);
+      const activity = ConfigService.findActivity(config, payload.activityId);
+      if (!activity) throw new Error('Kegiatan tidak ditemukan.');
 
-    const existingSub = config.subActivities.find(function (sub) { return sub.sub_activity_id === payload.subActivityId; });
-    if (!existingSub) throw new Error('Sub-kegiatan tidak ditemukan.');
+      const existingSub = config.subActivities.find(function (sub) { return sub.sub_activity_id === payload.subActivityId; });
+      if (!existingSub) throw new Error('Sub-kegiatan tidak ditemukan.');
 
-    const removed = ConfigRepository.deactivateSubActivity(year, activity.activity_id, existingSub.sub_activity_id, SUB_ACTIVITY_INACTIVE_REASON.MANUAL);
-    if (removed > 0) {
-      SpreadsheetService.markRekapSubActivityInactive(activity, existingSub, SUB_ACTIVITY_INACTIVE_REASON.MANUAL);
-    }
-    CacheHelper.invalidate(year);
-    return { success: removed > 0, bootstrap: AppController.getBootstrap() };
+      const removed = ConfigRepository.deactivateSubActivity(year, activity.activity_id, existingSub.sub_activity_id, SUB_ACTIVITY_INACTIVE_REASON.MANUAL);
+      if (removed > 0) {
+        SpreadsheetService.markRekapSubActivityInactive(activity, existingSub, SUB_ACTIVITY_INACTIVE_REASON.MANUAL);
+      }
+      CacheHelper.invalidate(year);
+      return { success: removed > 0, bootstrap: AppController.getBootstrap() };
+    }, 30000);
   },
 
   trashSubActivityFolder: function (payload) {
     payload = payload || {};
+    requireAdmin_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
     Validator.requireString(payload.subActivityId, 'Sub Activity ID');
 
-    const config = CacheHelper.getConfig(year);
-    const activity = ConfigService.findActivity(config, payload.activityId);
-    if (!activity) throw new Error('Kegiatan tidak ditemukan.');
+    return withLock_(() => {
+      const config = CacheHelper.getConfig(year);
+      const activity = ConfigService.findActivity(config, payload.activityId);
+      if (!activity) throw new Error('Kegiatan tidak ditemukan.');
 
-    const existingSub = ConfigRepository.getSubActivitiesForSync(year, activity.activity_id).find(function (sub) { return sub.sub_activity_id === payload.subActivityId; });
-    if (!existingSub) throw new Error('Sub-kegiatan tidak ditemukan.');
-    if (!existingSub.folder_id) throw new Error('Sub-kegiatan belum punya folder Drive.');
+      const existingSub = ConfigRepository.getSubActivitiesForSync(year, activity.activity_id).find(function (sub) { return sub.sub_activity_id === payload.subActivityId; });
+      if (!existingSub) throw new Error('Sub-kegiatan tidak ditemukan.');
+      if (!existingSub.folder_id) throw new Error('Sub-kegiatan belum punya folder Drive.');
 
-    try {
-      DriveApp.getFolderById(existingSub.folder_id).setTrashed(true);
-    } catch (error) {
+      try {
+        DriveApp.getFolderById(existingSub.folder_id).setTrashed(true);
+      } catch (error) {
+        CacheHelper.invalidate(year);
+        throw new Error('Folder tidak bisa dipindahkan ke Bin: ' + error.message);
+      }
+
+      const removed = ConfigRepository.deactivateSubActivity(year, activity.activity_id, existingSub.sub_activity_id, SUB_ACTIVITY_INACTIVE_REASON.DRIVE_TRASHED);
+      if (removed > 0) {
+        SpreadsheetService.markRekapSubActivityInactive(activity, existingSub, SUB_ACTIVITY_INACTIVE_REASON.DRIVE_TRASHED);
+      }
       CacheHelper.invalidate(year);
-      throw new Error('Folder tidak bisa dipindahkan ke Bin: ' + error.message);
-    }
-
-    const removed = ConfigRepository.deactivateSubActivity(year, activity.activity_id, existingSub.sub_activity_id, SUB_ACTIVITY_INACTIVE_REASON.DRIVE_TRASHED);
-    if (removed > 0) {
-      SpreadsheetService.markRekapSubActivityInactive(activity, existingSub, SUB_ACTIVITY_INACTIVE_REASON.DRIVE_TRASHED);
-    }
-    CacheHelper.invalidate(year);
-    return { success: removed > 0, folderId: existingSub.folder_id, bootstrap: AppController.getBootstrap() };
+      return { success: removed > 0, folderId: existingSub.folder_id, bootstrap: AppController.getBootstrap() };
+    }, 30000);
   },
 
   cleanupTrashedSubActivities: function (payload) {
@@ -356,11 +369,14 @@ const SubActivityController = {
 
   renameSubActivity: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
     Validator.requireString(payload.subActivityId, 'Sub Activity ID');
     Validator.requireString(payload.newName, 'Nama baru');
+    sanitizeNameForSheetAndDrive_(payload.newName, 'Nama baru');
 
+    return withLock_(() => {
     const config = CacheHelper.getConfig(year);
     const activity = ConfigService.findActivity(config, payload.activityId);
     if (!activity) throw new Error('Kegiatan tidak ditemukan.');
@@ -437,16 +453,19 @@ const SubActivityController = {
 
     CacheHelper.invalidate(year);
     return { success: true, bootstrap: AppController.getBootstrap() };
+    }, 30000);
   },
 
   getInactiveSubActivities: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     return ConfigRepository.getInactiveSubActivities(year);
   },
 
   restoreSubActivity: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
     Validator.requireString(payload.subActivityId, 'Sub Activity ID');
@@ -470,6 +489,7 @@ const SubActivityController = {
 
   purgeSubActivity: function (payload) {
     payload = payload || {};
+    requireAdmin_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
     Validator.requireString(payload.subActivityId, 'Sub Activity ID');
@@ -481,6 +501,7 @@ const SubActivityController = {
 
   updateSubActivityMetadata: function (payload) {
     payload = payload || {};
+    requireAuth_(payload);
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     Validator.requireString(payload.activityId, 'Activity ID');
     Validator.requireString(payload.subActivityId, 'Sub Activity ID');
@@ -493,7 +514,7 @@ const SubActivityController = {
       if (!subActivity) throw new Error('Sub-kegiatan tidak ditemukan.');
 
       if (payload.metadataLocks !== undefined || payload.kodeKlasifikasi !== undefined) {
-        let updates = {
+        const updates = {
           year: year,
           activityId: payload.activityId,
           subActivityId: payload.subActivityId

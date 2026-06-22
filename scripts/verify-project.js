@@ -13,7 +13,7 @@ function assert(condition, message) {
   }
 }
 
-const appController = read('AppController.gs') + '\n' + read('ArchiveController.gs') + '\n' + read('SubActivityController.gs') + '\n' + read('SettingsController.gs') + '\n' + read('PureFunctions.gs');
+const appController = read('WorkspaceController.gs') + '\n' + read('DriveController.gs') + '\n' + read('TemplateController.gs') + '\n' + read('AccountController.gs') + '\n' + read('SecurityHelpers.gs') + '\n' + read('ArchiveController.gs') + '\n' + read('SubActivityController.gs') + '\n' + read('SettingsController.gs') + '\n' + read('PureFunctions.gs');
 const appsscript = JSON.parse(read('appsscript.json'));
 const client = read('ClientState.html') + '\n' +
                read('ClientApi.html') + '\n' +
@@ -48,14 +48,14 @@ assert(spreadsheetService.includes('function getDetailStartColumn_'), 'Spreadshe
 assert(configConstants.includes('DETAIL_FALLBACK_START_COL = 2'), 'Spreadsheet detail fallback column must be B.');
 assert(!workspaceSetup.includes('hasRekapSheet: false'), 'Every laci workbook must include a rekap sheet.');
 assert(workspaceSetup.includes("'error_message', 'metadata_json'"), 'Workspace setup must create archive_log with metadata_json.');
-const initWorkspaceBody = read('AppController.gs').match(/initializeWorkspace: function \(payload\) \{([\s\S]*?)\n {2}\},/);
+const initWorkspaceBody = read('WorkspaceController.gs').match(/initializeWorkspace: function \(payload\) \{([\s\S]*?)\n {2}\},/);
 assert(
   !!initWorkspaceBody && /requireAdminIfWorkspaceSecured_\(payload\)/.test(initWorkspaceBody[1]) && !/requireAdmin_\(payload\)/.test(initWorkspaceBody[1]),
   'First workspace initialization must not require an existing admin session.'
 );
-assert(read('AppController.gs').includes('function requireAdminIfWorkspaceSecured_') && read('AppController.gs').includes('hasActiveAdminAccount_'), 'Workspace auth guard must allow first-run or half-initialized recovery before an admin exists.');
+assert(read('SecurityHelpers.gs').includes('function requireAdminIfWorkspaceSecured_') && read('SecurityHelpers.gs').includes('hasActiveAdminAccount_'), 'Workspace auth guard must allow first-run or half-initialized recovery before an admin exists.');
 assert(read('SettingsController.gs').includes('const adminResult = AuthService.saveDefaultAdmin();'), 'Workspace initialization must create the default admin through the internal auth service.');
-assert(!read('SettingsController.gs').includes('AppController.saveDefaultAdmin()'), 'Workspace initialization must not call the admin-protected saveDefaultAdmin endpoint.');
+assert(!read('SettingsController.gs').includes('AccountController.saveDefaultAdmin()'), 'Workspace initialization must not call the admin-protected saveDefaultAdmin endpoint.');
 
 assert(appController.includes('LockService.getScriptLock()'), 'Archive finalization must use LockService.');
 assert(appController.includes('SpreadsheetService.getNextItemNumber(activity, subActivity)'), 'Finalization must allocate item numbers inside the locked path.');
@@ -119,8 +119,8 @@ assert(read('EditSubActivity.html').includes('id="rename-sub-kurun-start"') && r
 assert(read('Code.gs').includes('function updateSubActivityMetadata'), 'updateSubActivityMetadata endpoint must be exposed to Apps Script clients.');
 assert(read('SpreadsheetService.gs').includes('updateRekapDocumentMetadata'), 'Sub-activity metadata editor must be able to update the rekap sheet.');
 assert(!read('ClientDocumentProcess.html').includes('nomorBerkas') && !read('ClientDocumentProcess.html').includes('formatKurunWaktuText_'), 'Document-process form must be link-only; sub-activity metadata is edited separately.');
-assert(read('ClientProcess.html').includes("['nomor_surat', 'Nomor Surat'") && read('ClientProcess.html').includes('extractNomorSuratFromText_'), 'Archive-letter form must show editable Nomor Surat with filename parsing.');
-assert(read('WorkspaceSetup.gs').includes("['nomor_surat', 'Nomor Surat'") && read('ClientState.html').includes("nomor_surat: 'Nomor Surat'"), 'Nomor Surat must be available in metadata config and labels.');
+assert(read('ClientProcess.html').includes("['nomor_surat', 'Nomor Item'") && read('ClientProcess.html').includes('extractNomorSuratFromText_'), 'Archive-letter form must show editable Nomor Surat with filename parsing.');
+assert(read('WorkspaceSetup.gs').includes("['nomor_surat', 'Nomor Item'") && read('ClientState.html').includes("nomor_surat: 'Nomor Item'"), 'Nomor Surat must be available in metadata config and labels.');
 assert(read('ClientProcess.html').includes('Object.assign({}, state.draft && state.draft.metadata'), 'Archive-letter submit must preserve hidden automatic metadata such as no_berkas.');
 assert(read('ClientProcess.html').includes('requiredMark') && read('ClientProcess.html').includes('required-dot'), 'Archive-letter required fields must be marked with a visible star.');
 assert(read('ClientProcess.html').includes("if (f.field_name === 'klasifikasi_akses') val = 'Terbatas'") && read('WorkspaceSetup.gs').includes("['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', false, 'Terbatas'"), 'Archive-letter access classification must default to Terbatas.');
@@ -149,7 +149,7 @@ assert(read('ParseEngine.gs').includes('analyzeStructure'), 'ParseEngine must in
 assert(read('ParseEngine.gs').includes('classifyDocumentType'), 'ParseEngine must include document type classification.');
 assert(read('ClientProcess.html').includes('triggerAutoParse_'), 'Auto-parse trigger function must exist in client.');
 assert(read('ClientProcess.html').includes('autoFillParseFields_'), 'Auto-parse auto-fill function must exist in client.');
-assert(read('Styles.html').includes('auto-parse-filled'), 'Auto-parse green highlight CSS must exist in Styles.');
+assert(read('StylesTables.html').includes('auto-parse-filled'), 'Auto-parse green highlight CSS must exist in Styles.');
 assert(read('MetadataService.gs').includes('extractKlasifikasiAkses_'), 'Klasifikasi akses extractor must exist in MetadataService.');
 
 assert(!readme.includes('apps-script/portal-arsip/README.md'), 'README must not point to missing apps-script path.');

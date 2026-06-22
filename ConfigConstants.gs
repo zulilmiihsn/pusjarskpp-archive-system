@@ -15,7 +15,7 @@ const PROP_KEYS = {
 const DEFAULT_YEAR = new Date().getFullYear();
 const TRASHED_SUB_ACTIVITY_RETENTION_DAYS = 30;
 const SESSION_TTL_MS = 2 * 24 * 60 * 60 * 1000;
-const DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI = '';
+const DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI = 'PDP.07.1';
 
 const HASH_ITERATIONS = 800;
 const HASH_ITERATIONS_V2 = 50000;
@@ -151,7 +151,13 @@ const REKAP_DOC_COLUMNS = [
   { key: 'data_fix_peserta', label: 'Data Fix Peserta', match: ['data fix peserta'] },
   { key: 'kumpulan_materi', label: 'Kumpulan Materi', match: ['kumpulan materi'] },
   { key: 'laporan', label: 'Laporan', match: ['laporan'] },
-  { key: 'sertifikat', label: 'Sertifikat', match: ['sertifikat'] }
+  { key: 'sertifikat', label: 'Sertifikat', match: ['sertifikat'] },
+  { key: 'evaluasi_penyelenggaraan', label: 'Evaluasi Penyelenggaraan', match: ['evaluasi penyelenggaraan'] },
+  { key: 'evaluasi_peserta', label: 'Evaluasi Peserta', match: ['evaluasi peserta'] },
+  { key: 'dokumentasi_rapat', label: 'Dokumentasi Rapat', match: ['dokumentasi rapat'] },
+  { key: 'berita_acara', label: 'Berita Acara', match: ['berita acara'] },
+  { key: 'piagam_penghargaan', label: 'Piagam Penghargaan', match: ['piagam penghargaan'] },
+  { key: 'video_pengajar', label: 'Video Pengajar/Fasilitator', match: ['video pengajar', 'video fasilitator', 'video pengajar/fasilitator'] }
 ];
 const REKAP_SUMMARY_COLUMNS = {
   nomorBerkas: ['nomor berkas'],

@@ -300,7 +300,7 @@
       submitBtn.disabled = true;
       submitBtn.innerHTML = 'Menyimpan...';
       const filledNames = filled.map(item => item.name).join(', ');
-      const loadingToast = showToast('Menyimpan ' + filledNames + '...', true);
+      const loadingToast = showProcessToast('Menyimpan ' + filledNames + '...', true);
 
       let successCount = 0;
       let failCount = 0;

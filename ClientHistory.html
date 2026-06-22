@@ -1,16 +1,45 @@
 <script>
-  function renderHistory() {
+  let currentHistoryPage = 1;
+
+  async function renderHistory(pageToLoad) {
+    const p = pageToLoad || currentHistoryPage;
+    let rows = [];
+    let meta = null;
+
+    if (p === 1 && state.bootstrap && state.bootstrap.history) {
+      rows = state.bootstrap.history;
+      meta = state.bootstrap.historyMeta;
+    } else {
+      showLoading('Memuat riwayat...');
+      try {
+        const resp = await api('getHistory', { page: p, pageSize: 50 });
+        rows = resp.items || [];
+        meta = resp;
+      } catch (error) {
+        setContent('<div class="error" style="margin:22px;">' + esc(errorMessage(error)) + '</div>');
+        return;
+      }
+    }
+
+    currentHistoryPage = p;
+
     setContent(`
       ${pageCardHtml({
         title: 'Riwayat Arsip',
         subtitle: 'Dokumen yang diproses melalui sistem akan tercatat di sini.',
         icon: iconSvg('history'),
         actions: '<button class="btn" id="refresh-history">' + iconSvg('refresh') + 'Segarkan</button>',
-        body: historyTable(state.bootstrap.history || []),
+        body: '<div id="history-table-wrap">' + historyTable(rows || [], false, meta) + '</div>',
         extraClass: 'history-page-card'
       })}
     `);
-    document.getElementById('refresh-history').addEventListener('click', loadBootstrap);
+    document.getElementById('refresh-history').addEventListener('click', () => {
+      if (currentHistoryPage === 1) {
+        loadBootstrap();
+      } else {
+        renderHistory(currentHistoryPage);
+      }
+    });
     bindResumeButtons();
   }
 
@@ -27,7 +56,7 @@
                 localStorage.setItem(typeof getProcessStateKey === 'function' ? getProcessStateKey() : ('portal_arsip_' + histYear + '_process_state_general'), JSON.stringify({ draft: state.draft, inputState: {} }));
               } catch(e) { console.warn('localStorage set failed:', e); }
               setView('process');
-             showToast('Melanjutkan draf...');
+             showProcessToast('Melanjutkan draf...');
           } else {
              showToast('Data draf kosong.');
           }
@@ -43,7 +72,7 @@
         const rowStr = button.dataset.row;
         const row = JSON.parse(decodeURIComponent(rowStr));
         button.disabled = true;
-        var delDraftToast = showToast('Menghapus draf...', true);
+        var delDraftToast = showProcessToast('Menghapus draf...', true);
         try {
           await api('deleteDraft', { archiveId: row.archive_id, year: row.year });
           if (delDraftToast) removeToast(delDraftToast);
@@ -63,13 +92,13 @@
         try {
           const row = JSON.parse(decodeURIComponent(rowStr));
           btn.disabled = true;
-          showToast('Mengambil data metadata...');
+          showProcessToast('Mengambil data metadata...');
           try {
             const draftObj = await api('getArchiveMetadata', { archiveId: row.archive_id, year: row.year, logData: row });
             state.draft = draftObj;
             state.editMode = true;
             setView('process');
-            showToast('Memasuki mode edit metadata...');
+            showProcessToast('Memasuki mode edit metadata...');
           } catch (e) {
             showToast('Gagal memuat metadata: ' + (e.message || e));
           }
@@ -82,11 +111,11 @@
 
     document.querySelectorAll('.delete-archive-btn').forEach(button => {
       button.addEventListener('click', async () => {
-        if (!await showConfirmModal('Hapus arsip ini selamanya? Surat akan dipindah ke Tempat Sampah Drive, dan baris spreadsheet akan dihapus beserta pengurutan ulang nomor item.')) return;
+        if (!await showConfirmModal('Hapus arsip ini selamanya? Item akan dipindah ke Tempat Sampah Drive, dan baris spreadsheet akan dihapus beserta pengurutan ulang nomor item.')) return;
         const rowStr = button.dataset.row;
         const row = JSON.parse(decodeURIComponent(rowStr));
         button.disabled = true;
-        var delArchiveToast = showToast('Menghapus arsip...', true);
+        var delArchiveToast = showProcessToast('Menghapus arsip...', true);
         try {
           await api('trashArchiveFile', { fileId: row.final_file_id, year: row.year });
           if (delArchiveToast) removeToast(delArchiveToast);
@@ -99,9 +128,15 @@
         }
       });
     });
+    document.querySelectorAll('.history-page-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const p = parseInt(btn.dataset.page);
+        if (p) renderHistory(p);
+      });
+    });
   }
 
-  function historyTable(rows, isSimplified = false) {
+  function historyTable(rows, isSimplified = false, meta = null) {
     if (!rows || !rows.length) {
       return `
         <div class="empty-state-container">
@@ -119,6 +154,19 @@
         </div>
       `;
     }
+    let paginationHtml = '';
+    if (meta && meta.totalPages > 1) {
+      paginationHtml = `
+        <div class="pagination-controls mt-6 flex justify-between" style="align-items: center; border-top: 1px solid var(--border); padding-top: 12px;">
+          <span class="muted small">Halaman ${meta.page} dari ${meta.totalPages} (Total: ${meta.total})</span>
+          <div class="flex gap-2">
+            <button class="btn btn-sm btn-outline history-page-btn" data-page="${meta.page - 1}" ${meta.page <= 1 ? 'disabled' : ''}>Prev</button>
+            <button class="btn btn-sm btn-outline history-page-btn" data-page="${meta.page + 1}" ${meta.page >= meta.totalPages ? 'disabled' : ''}>Next</button>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="overflow-auto">
         <table>
@@ -155,7 +203,7 @@
           </tbody>
         </table>
       </div>
-    `;
+    ` + paginationHtml;
   }
 
   function statusBadge(status) {

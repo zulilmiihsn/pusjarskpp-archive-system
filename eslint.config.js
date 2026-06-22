@@ -34,10 +34,10 @@ const GAS_GLOBALS = {
 
 module.exports = [
   {
-    ignores: ['node_modules/**', 'tests/**', 'scripts/**', '**/*.html', 'eslint.config.js']
+    ignores: ['node_modules/**', 'scripts/**', '**/*.html', 'eslint.config.js']
   },
   {
-    files: ['**/*.gs'],
+    files: ['**/*.gs', '**/*.js'],
     languageOptions: {
       ecmaVersion: 2019,
       sourceType: 'script',
@@ -50,7 +50,7 @@ module.exports = [
       eqeqeq: 'error',
       'no-empty': ['error', { allowEmptyCatch: true }],
       'prefer-const': 'warn',
-      'no-var': 'off',
+      'no-var': 'warn',
       'no-undef': 'off',
 
       // Subset rule core penangkap-bug (tak butuh paket @eslint/js).

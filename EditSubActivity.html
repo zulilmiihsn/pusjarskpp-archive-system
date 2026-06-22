@@ -88,7 +88,7 @@
       var ketEl = document.getElementById('rename-sub-keterangan');
       var jEl = document.getElementById('rename-sub-jumlah');
       if (nEl) nEl.value = meta.no_berkas || sub.sort_order || '';
-      if (kEl) kEl.value = meta.kode_klasifikasi || sub.default_kode_klasifikasi || '';
+      if (kEl) kEl.value = meta.kode_klasifikasi || sub.default_kode_klasifikasi || 'PDP.07.1';
       var kurunParts = String(meta.kurun_waktu || '').trim().split(/\s+-\s+/);
       if (ksEl) ksEl.value = parseKurunDate_(kurunParts[0] || '');
       if (keEl) keEl.value = parseKurunDate_(kurunParts[1] || '');
@@ -126,7 +126,7 @@
     updateLockUI_(field, newLockState);
 
     if (newLockState === false && _currentEditSub) {
-      var processToast = showToast('Menghitung nilai default dari detail sheet...');
+      var processToast = showProcessToast('Menghitung nilai default dari detail sheet...');
       try {
         var year = state.bootstrap.settings.currentYear;
         var res = await api('getArchiveMetadataDefaults', {

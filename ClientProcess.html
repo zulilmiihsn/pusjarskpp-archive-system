@@ -148,7 +148,7 @@
 
   async function resumableUploadFile(file) {
     const totalSize = file.size;
-    showToast('Menyiapkan upload berkas besar (' + (totalSize / 1024 / 1024).toFixed(1) + ' MB)...');
+    showProcessToast('Menyiapkan upload berkas besar (' + (totalSize / 1024 / 1024).toFixed(1) + ' MB)...');
 
     const session = await api('initInboxResumableUpload', {
       name: file.name,
@@ -189,7 +189,7 @@
 
       const pct = Math.round(startByte / totalSize * 100);
       if (chunkIndex % 2 === 0 || pct < 100) {
-        showToast('Mengunggah... ' + pct + '%');
+        showProcessToast('Mengunggah... ' + pct + '%');
       }
     }
 
@@ -211,7 +211,7 @@
         return;
       }
 
-      showToast('Mengunggah berkas dokumen...');
+      showProcessToast('Mengunggah berkas dokumen...');
       const reader = new FileReader();
       reader.onload = async () => {
         try {
@@ -391,6 +391,12 @@
     var input = document.getElementById('source-file');
     if (input) input.value = '';
     if (state.draft) {
+      // Cegah kebocoran memori: lepas object URL & entri cache lokal sebelum di-null-kan.
+      var sf = state.draft.sourceFile;
+      if (sf) {
+        if (sf._objectUrl) { try { URL.revokeObjectURL(sf._objectUrl); } catch (e) {} }
+        if (sf._uploadToken && _localDataCache[sf._uploadToken]) { delete _localDataCache[sf._uploadToken]; }
+      }
       state.draft.sourceFile = { id: '', name: '', url: '', mimeType: '', fileSize: 0 };
     }
     var dz = document.getElementById('dropzone');
@@ -476,7 +482,7 @@
   function autoFillParseFields_(fields) {
     var filledCount = 0;
     var labels = {
-      nomor_surat: 'Nomor Surat', kode_klasifikasi: 'Kode Klasifikasi (Jika Surat Keluar)',
+      nomor_surat: 'Nomor Item', kode_klasifikasi: 'Kode Klasifikasi (Jika Item Keluar)',
       uraian_informasi_item: 'Uraian', tanggal: 'Tanggal',
       klasifikasi_akses: 'Klasifikasi Akses', jumlah: 'Jumlah Halaman',
       pengirim: 'Pengirim', penerima: 'Penerima',
@@ -556,9 +562,10 @@
 
       fields.forEach(f => {
         let val = f.default_value || '';
-        if (f.field_name === 'no_filing_cabinet') val = '02';
-        if (f.field_name === 'no_laci') val = (activity ? activity.laci_no : '') || '';
-        if (f.field_name === 'no_folder') val = (sub ? sub.no_folder : '') || (activity ? activity.folder_no : '') || '';
+        if (f.field_name === 'no_filing_cabinet') val = (activity ? activity.laci_folder_id : '') || '';
+        if (f.field_name === 'no_laci') val = '';
+        if (f.field_name === 'no_folder') val = '';
+        if (f.field_name === 'kode_klasifikasi') val = '';
         if (f.field_name === 'no_berkas') val = (sub ? sub.sort_order : '') || '';
         if (f.field_name === 'nomor_item_arsip') val = '01';
         if (f.field_name === 'klasifikasi_akses') val = 'Terbatas';
@@ -643,8 +650,8 @@
         <div class="process-card">
           <div class="process-card-header">
             <div class="process-card-step">1</div>
-            <div class="process-card-title">${state.editMode ? 'Konteks Surat' : 'Surat Sumber'}</div>
-            <div class="process-card-desc">${state.editMode ? 'Informasi kategori kegiatan dan sub-kegiatan' : 'Unggah berkas surat'}</div>
+            <div class="process-card-title">${state.editMode ? 'Konteks Item' : 'Item Sumber'}</div>
+            <div class="process-card-desc">${state.editMode ? 'Informasi kategori kegiatan dan sub-kegiatan' : 'Unggah berkas item'}</div>
           </div>
 
           <div class="process-target-context" id="target-context" style="margin-bottom: 24px;">
@@ -750,7 +757,7 @@
     const target = draft.targetFolderName || (draft.subActivity ? draft.subActivity.sub_activity_name : 'Folder tujuan');
     return `
       <div>
-        <div class="small muted">Lokasi surat</div>
+        <div class="small muted">Lokasi item</div>
         <div class="breadcrumb-line">${breadcrumb.map(i => '<span>' + esc(i) + '</span>').join('<span class="breadcrumb-sep">/</span>')}</div>
         <strong>${esc(target)}</strong>
         ${draft.targetLocked && draft.subActivity ? `
@@ -900,9 +907,23 @@
         newMetadata[key] = oldMetadata[key];
       } else {
         let val = f.default_value || '';
-        if (key === 'no_filing_cabinet') val = '02';
-        if (key === 'no_laci') val = activity.laci_no || '';
-        if (key === 'no_folder') val = sub.no_folder || activity.folder_no || '';
+        if (key === 'no_filing_cabinet') {
+          val = activity.laci_no + '. Laci ' + activity.activity_name;
+          if (activity.laci_folder_id) {
+            newMetadata['_no_filing_cabinet_url'] = 'https://drive.google.com/drive/folders/' + activity.laci_folder_id;
+            newMetadata['_no_filing_cabinet_path'] = val;
+          }
+        }
+        if (key === 'no_laci') {
+          val = sub.sub_activity_name || '';
+          if (sub.folder_id) {
+            newMetadata['_no_laci_url'] = 'https://drive.google.com/drive/folders/' + sub.folder_id;
+            newMetadata['_no_laci_path'] = val;
+          }
+        }
+        if (key === 'no_folder') {
+          val = '01';
+        }
         if (key === 'no_berkas') val = sub.sort_order || '';
         if (key === 'nomor_item_arsip') val = '01';
         if (key === 'klasifikasi_akses') val = 'Terbatas';
@@ -1042,9 +1063,15 @@
         if (state.draft.metadata.nomor_item_arsip !== nextNum) {
           state.draft.metadata.nomor_item_arsip = nextNum;
           changed = true;
-          const input = document.querySelector(`[data-field="nomor_item_arsip"]`);
-          if (input && document.activeElement !== input) {
-            input.value = nextNum;
+          const numInput = document.querySelector(`[data-field="nomor_item_arsip"]`);
+          if (numInput && document.activeElement !== numInput) {
+            numInput.value = nextNum;
+          }
+          
+          const folderInput = document.querySelector(`[data-field="no_folder"]`);
+          if (folderInput && folderInput.hasAttribute('readonly')) {
+            state.draft.metadata.no_folder = nextNum;
+            folderInput.value = nextNum;
           }
         }
       }
@@ -1115,7 +1142,7 @@
         if (uraianField) inner += metadataField(uraianField, metadata[uraianField.field_name], hints);
       }
 
-      section2Html = card('2', 'Identitas Surat', 'Informasi utama arsip',
+      section2Html = card('2', 'Identitas Item', 'Informasi utama arsip',
         inner,
         'metadata-grid-3'
       );
@@ -1172,7 +1199,7 @@
           `}
           <button class="btn btn-primary" id="finalize-archive" data-action="submit-process">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-            ${state.editMode ? 'Simpan Perubahan' : 'Simpan Surat ke Folder'} <span class="kbd-badge">Ctrl+Enter</span>
+            ${state.editMode ? 'Simpan Perubahan' : 'Simpan Item ke Folder'} <span class="kbd-badge">Ctrl+Enter</span>
           </button>
         </div>
       </div>
@@ -1196,10 +1223,9 @@
     const byName = {};
     result.forEach(f => { byName[f.field_name] = f; });
     [
-      ['nomor_surat', 'Nomor Surat', false, 'text', 2.5],
-      ['perihal', 'Perihal', false, 'text', 2.6],
-      ['kepada', 'Kepada', false, 'text', 2.7],
-      ['dari', 'Dari', false, 'text', 2.8],
+      ['nomor_surat', 'Nomor Item', false, 'text', 2.5],
+      ['kepada', 'Kepada', false, 'text', 8.1],
+      ['dari', 'Dari', false, 'text', 8.2],
       ['no_filing_cabinet', 'No Filing Cabinet', false, 'text', 9],
       ['no_laci', 'No Laci', true, 'text', 10],
       ['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', false, 'select', 12]
@@ -1222,7 +1248,7 @@
 
   function orderMetadataFields_(fields) {
     const preferred = [
-      'nomor_item_arsip', 'nomor_surat', 'kode_klasifikasi', 'perihal', 'kepada', 'dari', 'tanggal', 'uraian_informasi_item',
+      'nomor_item_arsip', 'nomor_surat', 'kode_klasifikasi', 'tanggal', 'uraian_informasi_item', 'kepada', 'dari',
       'tingkat_perkembangan', 'jumlah', 'satuan', 'no_filing_cabinet', 'no_laci', 'no_folder',
       'klasifikasi_akses', 'ket', 'lokasi_simpan'
     ];
@@ -1235,7 +1261,7 @@
   }
 
   const METADATA_TOOLTIPS = {
-    nomor_surat: 'Nomor surat dari dokumen. Terisi otomatis dari nama file jika terbaca, tetapi tetap bisa dikoreksi manual.',
+    nomor_surat: 'Nomor item dari dokumen. Terisi otomatis dari nama file jika terbaca, tetapi tetap bisa dikoreksi manual.',
     kode_klasifikasi: 'Kode arsip sesuai JRA, contoh: DL.01.01 untuk Diklat Kepemimpinan',
     tingkat_perkembangan: 'Wujud dokumen: Asli (dokumen asli/elektronik bertanda tangan) atau Salinan (turunan/fotokopi/cetak).',
     jumlah: 'Jumlah dokumen. Gunakan tombol + dan - atau ketik langsung.',
@@ -1275,90 +1301,27 @@
     let inputHtml;
     let extraAttrs = '';
 
-    if (key === 'no_filing_cabinet') {
-      const laciOptions = [];
-      if (state.bootstrap && state.bootstrap.activities) {
-        const seen = {};
-        state.bootstrap.activities.forEach(function(a) {
-          if (a.laci_folder_id && !seen[a.laci_folder_id]) {
-            seen[a.laci_folder_id] = true;
-            laciOptions.push({ id: a.laci_folder_id, label: 'LACI NO ' + a.laci_no + ' (' + a.activity_name.toUpperCase() + ')' });
-          }
-        });
-      }
-      
-      const isCustomValue = safeCur && !laciOptions.find(o => o.id === safeCur) && safeCur !== 'custom';
-      const selectValue = isCustomValue ? 'custom' : (safeCur || '');
-
-      let optsHtml = '<option value="">-- Pilih Filing Cabinet --</option>';
-      laciOptions.forEach(function(o) {
-        optsHtml += '<option value="' + esc(o.id) + '"' + (o.id === selectValue ? ' selected' : '') + '>' + esc(o.label) + '</option>';
-      });
-      optsHtml += '<option value="custom"' + (selectValue === 'custom' ? ' selected' : '') + '>Custom (Tulis ID Folder...)</option>';
-
+    if (key === 'no_filing_cabinet' || key === 'no_laci' || key === 'no_folder') {
       inputHtml = `
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <select id="meta-${safeKey}-select" class="form-select" onchange="
-            const val = this.value;
-            const customInput = document.getElementById('meta-${safeKey}');
-            if(val === 'custom') {
-              customInput.style.display = 'block';
-              customInput.value = '';
-              customInput.focus();
-            } else {
-              customInput.style.display = 'none';
-              customInput.value = val;
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input type="text" id="meta-${safeKey}" data-field="${safeKey}" class="form-input" style="flex:1;" value="${safeCur}" placeholder="${safeHint}" readonly oninput="
+            if(window.state && window.state.draft) {
+              window.state.draft.metadata['${safeKey}'] = this.value;
+              delete window.state.draft.metadata['_${safeKey}_url'];
+              delete window.state.draft.metadata['_${safeKey}_path'];
             }
-            if(window.state && window.state.draft) window.state.draft.metadata['${safeKey}'] = customInput.value;
-          ">${optsHtml}</select>
-          
-          <input type="text" id="meta-${safeKey}" data-field="${safeKey}" class="form-input" style="display:${selectValue === 'custom' ? 'block' : 'none'};" value="${safeCur}" placeholder="Masukkan ID Folder Drive..." oninput="
-            if(window.state && window.state.draft) window.state.draft.metadata['${safeKey}'] = this.value;
           " />
-        </div>
-      `;
-    } else if (key === 'no_laci') {
-      var laciNameOptions = [];
-      if (state.bootstrap && state.bootstrap.subActivities && state.draft && state.draft.activity) {
-        var seenLaci = {};
-        state.bootstrap.subActivities.forEach(function(sub) {
-          if (sub.activity_id === state.draft.activity.activity_id && sub.parent_folder_name && !seenLaci[sub.parent_folder_name]) {
-            seenLaci[sub.parent_folder_name] = true;
-            laciNameOptions.push(sub.parent_folder_name);
-          }
-        });
-      }
-      
-      var selectValue = safeCur;
-      var optionExists = laciNameOptions.includes(selectValue);
-      var isCustomValue = selectValue && !optionExists;
-      if (isCustomValue) selectValue = 'custom';
-
-      var loptsHtml = '<option value="">-- Pilih No Laci --</option>';
-      laciNameOptions.forEach(function(name) {
-        loptsHtml += '<option value="' + esc(name) + '"' + (name === selectValue ? ' selected' : '') + '>' + esc(name) + '</option>';
-      });
-      loptsHtml += '<option value="custom"' + (selectValue === 'custom' ? ' selected' : '') + '>Custom (Ketik Manual...)</option>';
-
-      inputHtml = `
-        <div style="display:flex; flex-direction:column; gap:8px;">
-          <select id="meta-${safeKey}-select" class="form-select" onchange="
-            const val = this.value;
-            const customInput = document.getElementById('meta-${safeKey}');
-            if(val === 'custom') {
-              customInput.style.display = 'block';
-              customInput.value = '';
-              customInput.focus();
-            } else {
-              customInput.style.display = 'none';
-              customInput.value = val;
-            }
-            if(window.state && window.state.draft) window.state.draft.metadata['${safeKey}'] = customInput.value;
-          ">${loptsHtml}</select>
-          
-          <input type="text" id="meta-${safeKey}" data-field="${safeKey}" class="form-input" style="display:${selectValue === 'custom' ? 'block' : 'none'};" value="${safeCur}" placeholder="Ketik Nama Laci Manual..." autocomplete="off" oninput="
-            if(window.state && window.state.draft) window.state.draft.metadata['${safeKey}'] = this.value;
-          " />
+          <button type="button" class="btn btn-sm btn-outline" style="padding: 0 8px; height: 36px;" onclick="
+            var input = document.getElementById('meta-${safeKey}');
+            input.removeAttribute('readonly');
+            input.focus();
+            this.style.display = 'none';
+          " title="Ubah manual">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+          </button>
         </div>
       `;
     } else if (key === 'uraian_informasi_item') {
@@ -1388,22 +1351,8 @@
     return '<div class="' + cls + '">' + labelHtml + inputHtml + hintHtml + '</div>';
   }
 
-  // Rakit kolom Uraian dari komponen: nomor surat/perihal/kepada/dari.
-  // Bagian kosong dilewati (tanpa garis miring dobel). Uraian tetap bisa
-  // ditimpa manual; mengubah salah satu komponen merakit ulang.
-  const URAIAN_PARTS = ['nomor_surat', 'perihal', 'kepada', 'dari'];
-  function assembleUraian_() {
-    if (!state.draft || !state.draft.metadata) return;
-    const m = state.draft.metadata;
-    const uraian = URAIAN_PARTS
-      .map(k => String(m[k] == null ? '' : m[k]).trim())
-      .filter(Boolean)
-      .join('/');
-    m.uraian_informasi_item = uraian;
-    const el = document.getElementById('meta-uraian_informasi_item');
-    if (el && el.value !== uraian) el.value = uraian;
-    updateFileName();
-  }
+  // Logic assembleUraian_ dihapus sesuai request, user akan ketik Uraian langsung.
+  // Kepada dan Dari akan disimpan sebagai metadata terpisah (bisa dipakai nanti di backend).
 
   function bindMetadataReview() {
     if (!state.draft) return;
@@ -1415,11 +1364,16 @@
         if (!state.draft) return;
         const f = input.dataset.field;
         state.draft.metadata[f] = input.value;
-        if (URAIAN_PARTS.indexOf(f) !== -1) {
-          assembleUraian_();
-        } else {
-          updateFileName();
+        
+        if (f === 'nomor_item_arsip') {
+          const folderInput = document.querySelector(`[data-field="no_folder"]`);
+          if (folderInput && folderInput.hasAttribute('readonly')) {
+            state.draft.metadata.no_folder = input.value;
+            folderInput.value = input.value;
+          }
         }
+        
+        updateFileName();
       };
 
       input.addEventListener('input', handler);
@@ -1436,6 +1390,11 @@
                 input.value = padded;
                 if (state.draft && state.draft.metadata) {
                   state.draft.metadata[input.dataset.field] = padded;
+                  const folderInput = document.querySelector(`[data-field="no_folder"]`);
+                  if (folderInput && folderInput.hasAttribute('readonly')) {
+                    state.draft.metadata.no_folder = padded;
+                    folderInput.value = padded;
+                  }
                   updateFileName();
                 }
               }
@@ -1451,8 +1410,17 @@
             if (isNaN(val)) val = 0;
             if (e.key === 'ArrowUp') val++;
             if (e.key === 'ArrowDown') val = Math.max(0, val - 1);
-            input.value = String(val).padStart(2, '0');
-            padInput();
+            let padded = String(val).padStart(2, '0');
+            input.value = padded;
+            if (state.draft && state.draft.metadata) {
+              state.draft.metadata[input.dataset.field] = padded;
+              const folderInput = document.querySelector(`[data-field="no_folder"]`);
+              if (folderInput && folderInput.hasAttribute('readonly')) {
+                state.draft.metadata.no_folder = padded;
+                folderInput.value = padded;
+              }
+              updateFileName();
+            }
           }
         });
       }
@@ -1496,20 +1464,10 @@
       }
     });
 
-    if (_kbdHandler) document.removeEventListener('keydown', _kbdHandler);
-    _kbdHandler = function(e) {
-      if (!e.ctrlKey && !e.metaKey) return;
-      if (e.key === 's') {
-        e.preventDefault();
-        var btn = document.getElementById('save-draft-btn');
-        if (btn) btn.click();
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        var btn = document.getElementById('finalize-archive');
-        if (btn) btn.click();
-      }
-    };
-    document.addEventListener('keydown', _kbdHandler);
+    // Ctrl+S / Ctrl+Enter kini ditangani delegator keyboard global di ClientRouter
+    // (dengan guard .disabled & offsetParent). Handler lokal dihapus karena duplikat
+    // tanpa guard dan memicu finalize ganda pada Ctrl+Enter. Bersihkan jika ada sisa.
+    if (_kbdHandler) { document.removeEventListener('keydown', _kbdHandler); _kbdHandler = null; }
   }
 
   async function handleSaveDraft() {
@@ -1530,7 +1488,7 @@
       // Tunggu unggahan latar yang masih berjalan supaya tidak mengunggah ulang
       // (file dobel di Drive) atau menyimpan draf tanpa fileId.
       if (_pendingUpload) {
-        var savePendingToast = showToast('Menyelesaikan unggahan berkas...', true);
+        var savePendingToast = showProcessToast('Menyelesaikan unggahan berkas...', true);
         try { await _pendingUpload; } catch (e) {}
         if (savePendingToast) removeToast(savePendingToast);
       }
@@ -1557,7 +1515,7 @@
         }
       }
 
-      var saveDraftToast = showToast('Menyimpan draf ke peladen...', true);
+      var saveDraftToast = showProcessToast('Menyimpan draf ke peladen...', true);
       await api('saveDraftToLog', {
         year: state.draft.year,
         activityId: state.draft.activity ? state.draft.activity.activity_id : '',
@@ -1588,7 +1546,7 @@
   
   async function awaitSourceFileId_() {
     if (_pendingUpload) {
-      showToast('Menyelesaikan unggahan...', true);
+      showProcessToast('Menyelesaikan unggahan...', true);
       await _pendingUpload;
     }
     var sourceFileId = state.draft.sourceFile ? state.draft.sourceFile.id : '';
@@ -1690,7 +1648,12 @@
     };
   }
   
+  let _finalizeInFlight = false;
   async function handleFinalize() {
+    // Guard re-entrancy: ada jeda 800ms + re-render form di tengah finalize yang
+    // memunculkan tombol baru; tanpa flag ini klik/Ctrl+Enter kedua bisa submit ganda.
+    if (_finalizeInFlight) return;
+    _finalizeInFlight = true;
     var saveBtn = document.getElementById('save-draft-btn');
     var finalBtn = document.getElementById('finalize-archive');
     try {
@@ -1717,7 +1680,7 @@
       await new Promise(function (r) { return window.setTimeout(r, 800); });
       resetFormAfterSubmit_(snap);
   
-      var loadingToast = showToast(snap.editMode ? 'Menyimpan perubahan...' : 'Menyimpan arsip...', true);
+      var loadingToast = showProcessToast(snap.editMode ? 'Menyimpan perubahan...' : 'Menyimpan arsip...', true);
       try {
         var result = await submitArchivePayload_(snap, metadata, sourceFileId);
         try { localStorage.removeItem(snap.restoreKey); } catch (e) {}
@@ -1730,6 +1693,8 @@
       showToast(errorMessage(error));
       if (saveBtn) { saveBtn.disabled = false; }
       if (finalBtn) { finalBtn.classList.remove('is-loading'); finalBtn.disabled = false; }
+    } finally {
+      _finalizeInFlight = false;
     }
   }
 
@@ -1933,7 +1898,7 @@
           const row = JSON.parse(decodeURIComponent(btn.dataset.row));
           if (row.metadata_json) {
             state.draft = JSON.parse(row.metadata_json);
-            showToast('Melanjutkan draf...');
+            showProcessToast('Melanjutkan draf...');
             renderProcess();
           } else {
             showToast('Data draf kosong.');
@@ -1949,7 +1914,7 @@
         if (!await showConfirmModal('Hapus draf ini selamanya?')) return;
         const row = JSON.parse(decodeURIComponent(button.dataset.row));
         button.disabled = true;
-        var delDraftToast = showToast('Menghapus draf...', true);
+        var delDraftToast = showProcessToast('Menghapus draf...', true);
         try {
           await api('deleteDraft', { archiveId: row.archive_id, year: row.year });
           await loadBootstrap();

@@ -377,10 +377,10 @@ const ConfigRepository = {
     
     let newSortOrder = 1;
     if (existingRows.length > 0) {
-      newSortOrder = existingRows.reduce(function (max, r) { var n = Number(r.sort_order) || 0; return n > max ? n : max; }, 0) + 1;
+      newSortOrder = existingRows.reduce(function (max, r) { const n = Number(r.sort_order) || 0; return n > max ? n : max; }, 0) + 1;
     } else {
       const prevRows = allRowsForYear.filter(row => (actMap[row.activity_id] || 0) <= currentActSortOrder);
-      newSortOrder = prevRows.reduce(function (max, r) { var n = Number(r.sort_order) || 0; return n > max ? n : max; }, 0) + 1;
+      newSortOrder = prevRows.reduce(function (max, r) { const n = Number(r.sort_order) || 0; return n > max ? n : max; }, 0) + 1;
     }
 
     // Geser sort_order di sheet Config
@@ -392,10 +392,10 @@ const ConfigRepository = {
     const shiftedSubActivities = [];
     
     if (yearCol !== -1 && sortCol !== -1) {
-      let bulkUpdates = [];
+      const bulkUpdates = [];
       for (let i = 1; i < valuesAll.length; i++) {
         if (Number(valuesAll[i][yearCol]) === Number(payload.year)) {
-          let oldSort = Number(valuesAll[i][sortCol]) || 0;
+          const oldSort = Number(valuesAll[i][sortCol]) || 0;
           if (oldSort >= newSortOrder) {
             valuesAll[i][sortCol] = oldSort + 1;
             bulkUpdates.push([oldSort + 1]);
@@ -779,10 +779,22 @@ const ConfigRepository = {
     const sheet = getOrCreateSheet_(ss, CONFIG_SHEETS.DOCUMENT_TYPES);
     ensureHeaders_(sheet, this.DOCUMENT_TYPE_HEADERS);
     let rows = readSheetObjects_(ss, CONFIG_SHEETS.DOCUMENT_TYPES);
-    if (!rows.length) {
-      this._seedDocumentTypes_(sheet);
+    
+    // Auto-seed missing ones
+    let seededAny = false;
+    const existingKeys = {};
+    rows.forEach(r => { if (r.key) existingKeys[r.key] = true; });
+    
+    const missingDocs = REKAP_DOC_COLUMNS.filter(t => !existingKeys[t.key]);
+    if (missingDocs.length > 0) {
+      this._seedDocumentTypes_(sheet, missingDocs, rows.length);
+      seededAny = true;
+    }
+    
+    if (seededAny) {
       rows = readSheetObjects_(ss, CONFIG_SHEETS.DOCUMENT_TYPES);
     }
+
     return rows
       // Baris harus punya key DAN label (header kolom). Tanpa label = belum
       // lengkap → diabaikan supaya kolom tak dibuat dengan nama key mentah.
@@ -807,17 +819,19 @@ const ConfigRepository = {
       .sort(function (a, b) { return a.sort_order - b.sort_order; });
   },
 
-  _seedDocumentTypes_: function (sheet) {
-    const rows = REKAP_DOC_COLUMNS.map(function (t, i) {
+  _seedDocumentTypes_: function (sheet, docsToSeed, existingCount) {
+    const toSeed = docsToSeed || REKAP_DOC_COLUMNS;
+    const startIndex = existingCount || 0;
+    const rows = toSeed.map(function (t, i) {
       const labelKey = normalizeHeaderKey_(t.label);
       // Simpan alias tambahan saja (selain yang sama dengan label).
       const extraAliases = (t.match || []).filter(function (m) {
         return normalizeHeaderKey_(m) !== labelKey;
       });
-      return [t.key, t.label, t.formLabel || '', extraAliases.join('; '), i + 1, 'TRUE'];
+      return [t.key, t.label, t.formLabel || '', extraAliases.join('; '), startIndex + i + 1, 'TRUE'];
     });
     if (rows.length) {
-      sheet.getRange(2, 1, rows.length, this.DOCUMENT_TYPE_HEADERS.length).setValues(rows);
+      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, this.DOCUMENT_TYPE_HEADERS.length).setValues(rows);
     }
   }
 };

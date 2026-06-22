@@ -249,12 +249,12 @@ const AuthService = {
  * @return {{accountId: string, username: string, role: string, displayName: string}}
  */
 function requireAuth_(payload) {
-  var sessionId = payload && payload._sessionId;
+  const sessionId = payload && payload._sessionId;
   if (!sessionId) throw new Error('Sesi login tidak ditemukan. Silakan login terlebih dahulu.');
   try {
-    var data = PropertiesService.getScriptProperties().getProperty('sess_' + sessionId);
+    const data = PropertiesService.getScriptProperties().getProperty('sess_' + sessionId);
     if (data) {
-      var session = JSON.parse(data);
+      const session = JSON.parse(data);
       if (session.expiresAt && Date.now() < session.expiresAt) {
         slideSession_(sessionId, session);
         return {
@@ -275,7 +275,7 @@ function requireAuth_(payload) {
  */
 function slideSession_(sessionId, session) {
   try {
-    var remaining = session.expiresAt - Date.now();
+    const remaining = session.expiresAt - Date.now();
     if (remaining < SESSION_TTL_MS / 2) {
       session.expiresAt = Date.now() + SESSION_TTL_MS;
       PropertiesService.getScriptProperties().setProperty('sess_' + sessionId, JSON.stringify(session));
@@ -289,7 +289,7 @@ function slideSession_(sessionId, session) {
  * @return {{accountId: string, username: string, role: string, displayName: string}}
  */
 function requireAdmin_(payload) {
-  var user = requireAuth_(payload);
+  const user = requireAuth_(payload);
   if (user.role !== 'admin') throw new Error('Akses ditolak. Hanya admin yang dapat melakukan tindakan ini.');
   return user;
 }
