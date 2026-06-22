@@ -515,6 +515,8 @@
       if (!f || !f.value) return;
       var target = findFormInput_(key);
       if (!target) return;
+      // Jangan timpa nilai yang sudah diketik user (input punya isi & bukan hasil autofill).
+      if (target.input.value && !target.input.classList.contains('auto-parse-filled')) return;
       setFieldValue_(target.input, target.key, f.value, true);
       filledCount++;
     });

@@ -92,7 +92,28 @@ global.LockService = {
 // Fake ScriptApp
 global.ScriptApp = {
   getProjectTriggers: () => [],
-  newTrigger: () => ({ timeBased: () => ({ everyHours: () => ({ create: () => ({}) }) }) })
+  newTrigger: () => ({ timeBased: () => ({ everyHours: () => ({ create: () => ({}) }) }) }),
+  getOAuthToken: () => 'mock-oauth-token'
+};
+
+// Advanced Drive service mock (configurable per test via _driveMock)
+const _driveMock = { copyResult: null, removed: [], exportText: '' };
+global._driveMock = _driveMock;
+global.Drive = {
+  Files: {
+    copy: (resource, fileId, optArgs) => _driveMock.copyResult || { id: 'tmp-doc-' + fileId },
+    remove: (id) => { _driveMock.removed.push(id); },
+    get: (id, opts) => ({ id: id, parents: [] }),
+    list: () => ({ files: [] })
+  }
+};
+
+// UrlFetchApp mock — returns _driveMock.exportText as the exported plain text
+global.UrlFetchApp = {
+  fetch: (url, opts) => ({
+    getResponseCode: () => 200,
+    getContentText: () => _driveMock.exportText || ''
+  })
 };
 
 // Load actual GAS code into NodeJS sandbox (using eval)
@@ -127,5 +148,8 @@ module.exports = {
     Object.keys(Properties).forEach(k => delete Properties[k]);
     Object.keys(Cache).forEach(k => delete Cache[k]);
     Object.keys(mockFiles).forEach(k => delete mockFiles[k]);
+    _driveMock.copyResult = null;
+    _driveMock.removed = [];
+    _driveMock.exportText = '';
   }
 };

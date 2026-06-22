@@ -149,6 +149,35 @@ test('ParseEngine.analyze - surat KELUAR boleh mengisi kode_klasifikasi', () => 
   assert.ok(r.fields.kode_klasifikasi && r.fields.kode_klasifikasi.value, 'kode_klasifikasi harus terisi untuk surat keluar');
 });
 
+// --- Ekstraksi isi dokumen via konversi (OCR/convert) untuk autofill ---
+
+function fakeFile(id, sizeBytes) {
+  return { getId: () => id, getSize: () => sizeBytes || 1000, getName: () => 'surat.pdf' };
+}
+
+test('extractTextViaConversion_ - PDF: OCR id, baca teks, hapus doc sementara', () => {
+  global._driveMock.copyResult = { id: 'tmp-doc-1' };
+  global._driveMock.exportText = 'LAN RI Kalimantan Timur\nNomor: 100/AB.02/2025';
+  const out = extractTextViaConversion_(fakeFile('file-1'), 'application/pdf');
+  assert.strictEqual(out.method, 'ocr_id');
+  assert.ok(out.text.indexOf('Kalimantan Timur') >= 0, 'harus mengembalikan teks hasil export');
+  assert.deepStrictEqual(global._driveMock.removed, ['tmp-doc-1'], 'doc sementara wajib dihapus');
+});
+
+test('extractTextViaConversion_ - Word: convert tanpa OCR', () => {
+  global._driveMock.copyResult = { id: 'tmp-doc-2' };
+  global._driveMock.exportText = 'Isi dokumen word';
+  const out = extractTextViaConversion_(fakeFile('file-2'), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  assert.strictEqual(out.method, 'convert');
+  assert.ok(out.text.indexOf('word') >= 0);
+});
+
+test('extractTextViaConversion_ - file terlalu besar dilewati (jaga kuota)', () => {
+  const out = extractTextViaConversion_(fakeFile('file-3', 30 * 1024 * 1024), 'application/pdf');
+  assert.strictEqual(out.method, 'skipped_too_large');
+  assert.strictEqual(out.text, '');
+});
+
 console.log(`\nIntegration Tests Finished: ${passed} passed, ${failed} failed.`);
 if (failed > 0) {
   process.exit(1);

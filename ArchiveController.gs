@@ -12,6 +12,52 @@ const PARSEABLE_MIME_TYPES = {
   'text/plain': true
 };
 
+// Batas ukuran file untuk ekstraksi isi (jaga kuota & waktu eksekusi GAS).
+const PARSE_EXTRACT_MAX_BYTES = 25 * 1024 * 1024; // 25MB
+
+/**
+ * Ekstrak teks isi dokumen via konversi Drive → Google Doc, lalu export text/plain.
+ * PDF: pakai OCR bahasa Indonesia (menangani surat hasil scan).
+ * Word/ODT/RTF: konversi biasa (cepat, tanpa OCR).
+ * Doc sementara selalu dihapus. Export via UrlFetch + token OAuth agar cukup pakai
+ * scope Drive yang sudah ada (tak perlu scope Documents tambahan).
+ * @return {{text: string, method: string}}
+ */
+function extractTextViaConversion_(file, mimeType) {
+  try {
+    const size = file.getSize ? file.getSize() : 0;
+    if (size && size > PARSE_EXTRACT_MAX_BYTES) return { text: '', method: 'skipped_too_large' };
+
+    const isPdf = (mimeType === 'application/pdf');
+    const resource = { mimeType: 'application/vnd.google-apps.document', name: 'tmp_parse' };
+    const optArgs = { supportsAllDrives: true };
+    if (isPdf) optArgs.ocrLanguage = 'id'; // OCR untuk scan; PDF digital tetap terbaca
+
+    const copied = Drive.Files.copy(resource, cleanId_(file.getId()), optArgs);
+    const docId = copied && copied.id;
+    if (!docId) return { text: '', method: 'conversion_failed' };
+
+    let text = '';
+    try {
+      const token = ScriptApp.getOAuthToken();
+      const url = 'https://www.googleapis.com/drive/v3/files/' + docId +
+        '/export?mimeType=' + encodeURIComponent('text/plain');
+      const resp = UrlFetchApp.fetch(url, {
+        headers: { Authorization: 'Bearer ' + token },
+        muteHttpExceptions: true
+      });
+      if (resp.getResponseCode() === 200) text = resp.getContentText();
+    } finally {
+      try { Drive.Files.remove(docId, { supportsAllDrives: true }); }
+      catch (e) { try { DriveApp.getFileById(docId).setTrashed(true); } catch (e2) {} }
+    }
+    return { text: String(text || ''), method: isPdf ? 'ocr_id' : 'convert' };
+  } catch (e) {
+    console.warn('extractTextViaConversion_ failed: ' + e.message);
+    return { text: '', method: 'conversion_failed' };
+  }
+}
+
 const ArchiveController = {
   initInboxResumableUpload: function (payload) {
     payload = payload || {};
@@ -698,6 +744,14 @@ const ArchiveController = {
     // file di dalam ruang kerja. Penting di USER_DEPLOYING (script baca sbg pemilik).
     const psYear = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     requireWithinWorkspace_(payload.fileId, psYear);
+
+    // Cache hasil parse per fileId: buka file yang sama lagi = instan, tak konversi ulang.
+    const parseCacheKey = 'parsecache_' + cleanId_(payload.fileId);
+    try {
+      const cachedParse = CacheService.getScriptCache().get(parseCacheKey);
+      if (cachedParse) { const r = JSON.parse(cachedParse); r.cached = true; return r; }
+    } catch (e) { /* cache opsional */ }
+
     const startTime = Date.now();
     const file = DriveApp.getFileById(cleanId_(payload.fileId));
     const mimeType = file.getMimeType();
@@ -737,6 +791,17 @@ const ArchiveController = {
       console.warn('Method 1 failed: ' + e.message);
     }
 
+    // Method 2: ekstrak ISI dokumen via konversi Drive (OCR untuk PDF scan, convert untuk Word).
+    // Inilah yang membuat autofill membaca isi surat sungguhan, bukan sekadar nama file.
+    if (!text && mimeType !== 'text/plain') {
+      const conv = extractTextViaConversion_(file, mimeType);
+      if (conv.text && conv.text.trim()) {
+        text = conv.text;
+        extractionMethods.push(conv.method);
+      } else if (conv.method) {
+        extractionErrors.push('konversi: ' + conv.method);
+      }
+    }
 
     // Fallback to filename if nothing extracted
     if (!text) {
@@ -802,7 +867,7 @@ const ArchiveController = {
       fields.jumlah = { value: String(pageCount), score: 0.6, confidence: 'medium', source: 'page_estimation' };
     }
 
-    return {
+    const result = {
       fields: fields,
       rawTextLength: engineResult.rawTextLength || text.length,
       parseDuration: Date.now() - startTime,
@@ -810,9 +875,17 @@ const ArchiveController = {
       totalFields: engineResult.totalFields || 9,
       documentType: engineResult.documentType || '',
       documentDirection: engineResult.documentDirection || 'masuk',
+      extractionMethods: extractionMethods,
       structure: engineResult.structure || {},
       debug: debugInfo
     };
+
+    // Simpan ke cache (6 jam). Lewati diam-diam bila terlalu besar untuk CacheService.
+    try {
+      CacheService.getScriptCache().put(parseCacheKey, JSON.stringify(result), 21600);
+    } catch (e) { /* >100KB atau cache penuh: abaikan */ }
+
+    return result;
   },
 
   bulkAddArchiveDocumentLinks: function (payload) {
