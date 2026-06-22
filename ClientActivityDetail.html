@@ -436,7 +436,9 @@
                 <span class="small">Buka Spreadsheet Laci</span>
               </a>
             </div>
-            ` : ''}
+            ` : `
+            <div class="button-row mt-16" style="visibility: hidden; pointer-events: none; height: 38px;"></div>
+            `}
           </div>
           <div class="flex items-center gap-4 shrink-0">
             ${!isGuest() && !state.currentParentFolderView && (activity.laciFolder.url || itemFolderUrl) ? `
