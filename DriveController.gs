@@ -10,7 +10,9 @@ const DriveController = {
     auditAction_(actor, 'DRIVE_ITEM_RENAMED', { folderId: payload.itemId, message: 'Mengganti nama item Drive: ' + (payload.name || '-') });
     return r;
   },
-  listDriveFolders: function (payload) { requireAuth_(payload || {}); return SettingsController.listDriveFolders(payload); },
+  // Dipakai folder-picker SAAT SETUP AWAL (belum ada login/admin). Guard bootstrap-aware:
+  // terbuka selama workspace belum dikonfigurasi, admin-only setelah terkonfigurasi.
+  listDriveFolders: function (payload) { requireAdminIfWorkspaceSecured_(payload || {}); return SettingsController.listDriveFolders(payload); },
   listArchiveFolder: function (payload) {
     payload = payload || {};
     requireAuth_(payload);
