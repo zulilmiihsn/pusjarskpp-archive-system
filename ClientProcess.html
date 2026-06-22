@@ -258,7 +258,7 @@
           + '<div class="file-preview-fallback"><div class="modern-spinner"><div class="modern-spinner-ring"></div></div><div class="file-preview-fallback-hint">Google Drive sedang memproses dokumen...</div></div>'
           + '</div>';
       }
-      var src = 'https://drive.google.com/file/d/' + esc(f.id) + '/preview';
+      var src = 'https:\/\/drive.google.com/file/d/' + esc(f.id) + '/preview';
       return '<div class="file-preview-body" style="position:relative;">'
         + '<iframe class="file-preview-iframe" id="drive-preview-iframe" src="' + src + '" allow="autoplay"></iframe>'
         + '<button type="button" class="btn btn-sm btn-outline" style="position:absolute; bottom:10px; right:10px; background:white; z-index:10; box-shadow:0 2px 5px rgba(0,0,0,0.2);" onclick="var iframe=document.getElementById(\'drive-preview-iframe\'); if(iframe){ iframe.src = iframe.src; }">'
@@ -938,14 +938,14 @@
         if (key === 'no_filing_cabinet') {
           val = activity.laci_no + '. Laci ' + activity.activity_name;
           if (activity.laci_folder_id) {
-            newMetadata['_no_filing_cabinet_url'] = 'https://drive.google.com/drive/folders/' + activity.laci_folder_id;
+            newMetadata['_no_filing_cabinet_url'] = 'https:\/\/drive.google.com/drive/folders/' + activity.laci_folder_id;
             newMetadata['_no_filing_cabinet_path'] = val;
           }
         }
         if (key === 'no_laci') {
           val = sub.sub_activity_name || '';
           if (sub.folder_id) {
-            newMetadata['_no_laci_url'] = 'https://drive.google.com/drive/folders/' + sub.folder_id;
+            newMetadata['_no_laci_url'] = 'https:\/\/drive.google.com/drive/folders/' + sub.folder_id;
             newMetadata['_no_laci_path'] = val;
           }
         }

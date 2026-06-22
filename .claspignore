@@ -18,3 +18,10 @@ README.md
 .claspignore
 tests/**
 scripts/**
+
+# Junk/artefak build & debug — jangan ikut ke-push ke GAS
+Concatenated.html
+EvaluatedIndex.html
+tmp_*.html
+temp_*.html
+._*
