@@ -1166,6 +1166,8 @@
     border-radius: var(--radius-lg);
     background: var(--surface);
     padding: 20px 22px 22px;
+    min-width: 0;
+    overflow: hidden;
   }
 
   .process-card + .process-card {
@@ -1179,6 +1181,19 @@
     margin-bottom: 16px;
     padding-bottom: 12px;
     border-bottom: 1px solid var(--line);
+    min-width: 0;
+  }
+  
+  .process-target-context {
+    min-width: 0;
+    overflow: hidden;
+    word-wrap: break-word;
+  }
+  
+  .process-target-context strong {
+    display: block;
+    word-break: break-word;
+    white-space: normal;
   }
 
   .process-card-step {
@@ -1212,6 +1227,7 @@
   .process-layout {
     display: grid;
     gap: 14px;
+    min-width: 0;
   }
 
   .process-sticky-bar {
@@ -1524,6 +1540,9 @@
     padding: 16px;
     border-width: 2px;
     border-style: dashed;
+    min-width: 0;
+    overflow: hidden;
+    word-wrap: break-word;
   }
 
   .process-card .dropzone.has-file {

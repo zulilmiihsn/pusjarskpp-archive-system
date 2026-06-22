@@ -1,11 +1,11 @@
 <style>
   /* ── Font ── */
 
-  @import url('//fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+  @import url('//fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
 
 /*  */
   :root {
-    --font: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font: 'Outfit', system-ui, -apple-system, sans-serif;
 
     /* Sidebar (deep government blue) */
     --nav-bg:        #1B3A6B;
@@ -159,7 +159,7 @@
   .app-shell {
     display: grid;
     grid-template-columns: 248px minmax(0, 1fr);
-    height: 100dvh;
+    min-height: 100dvh;
     overflow: hidden;
   }
 
@@ -277,6 +277,10 @@
   .nav-item:hover {
     background: var(--nav-active-bg);
     color: #FFFFFF;
+  }
+  
+  .nav-item:active {
+    transform: scale(0.98);
   }
 
   .nav-item.active {
@@ -429,7 +433,9 @@
     padding: 28px 28px 60px;
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     min-height: 0;
+    min-width: 0;
   }
 
 /*  */
@@ -448,6 +454,21 @@
   .grid-3   { grid-template-columns: repeat(3, minmax(0,1fr)); }
   .grid-4   { grid-template-columns: repeat(4, minmax(0,1fr)); }
   .stack    { display: grid; gap: 18px; }
+  
+  /* Asymmetric Bento Grids */
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 20px;
+  }
+  .bento-span-4 { grid-column: span 4; }
+  .bento-span-6 { grid-column: span 6; }
+  .bento-span-8 { grid-column: span 8; }
+  .bento-span-12 { grid-column: span 12; }
+  
+  @media (max-width: 992px) {
+    .bento-span-4, .bento-span-6, .bento-span-8 { grid-column: span 12; }
+  }
 
   .metric {
     background: var(--surface);
@@ -560,6 +581,9 @@
     border-color: #D1D5DB;
     box-shadow: var(--shadow);
     transform: translateY(-2px);
+  }
+  .activity-card:active {
+    transform: scale(0.98);
   }
 
   .activity-card h3 {
@@ -746,17 +770,20 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0,1fr));
     gap: 16px;
+    min-width: 0;
   }
 
   .metadata-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
   }
   
   .metadata-grid-3 {
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    min-width: 0;
   }
 
-  .form-field        { display: grid; gap: 5px; }
+  .form-field        { display: grid; gap: 5px; min-width: 0; }
   .form-field.full   { grid-column: 1 / -1; }
 
   .form-field.has-error input,
@@ -790,6 +817,7 @@
 
   input, select, textarea {
     width: 100%;
+    min-width: 0;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     min-height: 42px;
@@ -1325,6 +1353,7 @@
     transition: color 140ms ease, border-color 140ms ease;
   }
   .tab-btn:hover { color: var(--text); }
+  .tab-btn:active { transform: scale(0.98); }
   .tab-btn.active {
     color: var(--accent);
     border-bottom-color: var(--accent);

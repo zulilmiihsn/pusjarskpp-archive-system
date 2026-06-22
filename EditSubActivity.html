@@ -15,13 +15,11 @@
     var renameFormalInput = document.getElementById('rename-sub-formal-name');
     var renameSheetInput = document.getElementById('rename-sub-sheet-name');
     var renameNoFolderInput = document.getElementById('rename-sub-no-folder');
-    var renameRekapRowInput = document.getElementById('rename-sub-rekap-row');
 
     renameInput.value = sub ? (sub.sub_activity_name || '') : '';
     if (renameFormalInput) renameFormalInput.value = sub ? (sub.formal_archive_name || sub.effective_formal_archive_name || sub.sub_activity_name || '') : '';
     if (renameSheetInput) renameSheetInput.value = sub ? (sub.target_sheet_name || sub.effective_target_sheet_name || sub.sub_activity_name || '') : '';
     if (renameNoFolderInput) renameNoFolderInput.value = sub ? (sub.no_folder || '') : '';
-    if (renameRekapRowInput) renameRekapRowInput.value = sub ? (sub.rekap_row_number || '') : '';
 
     ['rename-sub-nomor-berkas','rename-sub-kode-klasifikasi','rename-sub-kurun-start','rename-sub-kurun-end',
      'rename-sub-no-filing-cabinet','rename-sub-no-laci','rename-sub-keterangan','rename-sub-jumlah'].forEach(function (id) {
@@ -222,7 +220,6 @@
           formalArchiveName: (document.getElementById('rename-sub-formal-name') || {}).value || '',
           targetSheetName: (document.getElementById('rename-sub-sheet-name') || {}).value || '',
           noFolder: (document.getElementById('rename-sub-no-folder') || {}).value || '',
-          rekapRowNumber: (document.getElementById('rename-sub-rekap-row') || {}).value || '',
           parentFolderName: _currentEditSub.forceParentName || '',
           year: year
         });
@@ -234,7 +231,6 @@
           formalArchiveName: (document.getElementById('rename-sub-formal-name') || {}).value || '',
           targetSheetName: (document.getElementById('rename-sub-sheet-name') || {}).value || '',
           noFolder: (document.getElementById('rename-sub-no-folder') || {}).value || '',
-          rekapRowNumber: (document.getElementById('rename-sub-rekap-row') || {}).value || '',
           mappingStatus: 'SIAP',
           year: year
         });
@@ -368,14 +364,7 @@
             <input type="text" id="rename-sub-keterangan" placeholder="Keterangan tambahan..." autocomplete="off">
           </div>
 
-          <details class="mt-12">
-            <summary class="small muted" style="cursor:pointer;">Opsi lanjutan</summary>
-            <div class="form-field mt-12">
-              <label for="rename-sub-rekap-row">Baris rangkuman</label>
-              <input type="text" id="rename-sub-rekap-row" placeholder="auto">
-            </div>
-            <div class="small muted mt-8">Kosongkan jika app boleh mencari baris dari nama formal atau nomor berkas.</div>
-          </details>
+
         </fieldset>
         <div id="rename-sub-metadata-spinner" style="display: none; position: absolute; top: 0; left: 0; right: 0; bottom: 0; align-items: center; justify-content: center; pointer-events: none; z-index: 10;">
           <div class="modern-spinner"><div class="modern-spinner-ring"></div></div>

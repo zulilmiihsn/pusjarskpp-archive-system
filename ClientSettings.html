@@ -717,26 +717,31 @@
         </div>
 
         <!-- Advanced + Save -->
-        <div style="padding:0 12px 10px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
-          <details style="margin:0;">
-            <summary style="cursor:pointer; font-size:11px; color:var(--muted); user-select:none; list-style:none; display:inline-flex; align-items:center; gap:3px;">
-              <svg style="transition:transform 200ms;" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-              Opsi lanjutan
+        <div style="padding:10px 12px; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; border-top: 1px solid var(--line);">
+          <details style="margin:0; flex: 1;">
+            <summary style="cursor:pointer; font-size:11.5px; font-weight: 600; color:var(--muted); user-select:none; list-style:none; display:inline-flex; align-items:center; gap:6px; padding-top: 4px; transition: color 0.2s;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              Penyesuaian Manual (Tingkat Lanjut)
             </summary>
-            <div style="margin-top:8px; display:grid; grid-template-columns:120px 1fr; gap:10px; align-items:center;">
-              <div>
-                <label style="font-size:10px;font-weight:500;color:var(--muted);display:block;margin-bottom:3px;">Baris Rangkuman</label>
+            <div style="margin-top:12px; padding: 14px; border-radius: var(--radius-md); background: var(--bg); border: 1px dashed var(--border); display: flex; align-items: flex-start; gap: 16px;">
+              <div style="flex-shrink: 0; width: 140px;">
+                <label style="font-size:11px; font-weight:600; color:var(--text); display:block; margin-bottom:6px;">Target Baris di Excel</label>
                 <input class="mapping-input" data-field="rekapRowNumber"
                   value="${esc(sub.rekap_row_number || '')}"
                   placeholder="otomatis"
-                  style="font-size:12px; padding:5px 8px; text-align:center;">
+                  style="font-size:13px; padding:8px 12px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
               </div>
-              <p style="font-size:11px; color:var(--muted); margin:0; line-height:1.4;">
-                Isi hanya jika aplikasi salah menemukan baris rangkuman. Kosongkan agar aplikasi mencari otomatis.
-              </p>
+              <div style="flex: 1; padding-top: 2px;">
+                <p style="font-size:12px; color:var(--text); margin:0 0 6px 0; line-height:1.5; font-weight: 500;">
+                  Biarkan kosong agar sistem otomatis melacak posisi baris datanya.
+                </p>
+                <p style="font-size:12px; color:var(--muted); margin:0; line-height:1.6;">
+                  Jika sistem mencatat data ke baris yang salah, Anda bisa mengetik manual nomor barisnya di sini (misal: <strong>12</strong>) untuk memaksa aplikasi mengunci ke baris tersebut.
+                </p>
+              </div>
             </div>
           </details>
-          <button class="btn btn-sm btn-primary" data-save-sub-mapping style="flex-shrink:0;">Simpan Pemetaan</button>
+          <button class="btn btn-sm btn-primary" data-save-sub-mapping style="flex-shrink:0; margin-top: 2px;">Simpan Pemetaan</button>
         </div>
       </div>
     `;
