@@ -20,18 +20,20 @@ const SettingsController = {
       };
     }
 
-    // Auto-fix if initialization failed before creating admin account
+    // Cek READ-ONLY apakah admin ada. JANGAN buat admin di sini: getBootstrap adalah READ
+    // yang dipanggil tiap load halaman. Membuat admin sbg efek samping = akun + sesi admin
+    // siluman tanpa password pernah ditampilkan ke user (sumber "tiba-tiba login admin").
+    // Pembuatan admin HANYA di initializeWorkspace yang menampilkan password.
     try {
-      const adminResult = AuthService.saveDefaultAdmin();
-      if (adminResult && adminResult.created) {
+      if (!hasActiveAdminAccount_()) {
         return {
           configured: false,
           settings: settings,
-          message: 'Akun admin sebelumnya gagal dibuat. Sistem telah meresetnya. Silakan ulangi Inisialisasi Ruang Kerja.'
+          message: 'Akun admin belum ada. Silakan ulangi Inisialisasi Ruang Kerja untuk membuat admin & kata sandi.'
         };
       }
     } catch (e) {
-      // Ignore
+      // Bila pengecekan gagal, jangan blok app — lanjutkan.
     }
 
     const activities = config.activities.map((activity) => {
