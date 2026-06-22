@@ -73,7 +73,7 @@ const SettingsController = {
 
     let triggerInstalled = false;
     try {
-      const handlerName = 'cleanupTrashedSubActivities';
+      const handlerName = 'runArchiveMaintenance';
       const triggers = ScriptApp.getProjectTriggers();
       triggerInstalled = triggers.some(trigger => trigger.getHandlerFunction && trigger.getHandlerFunction() === handlerName);
     } catch (e) {
