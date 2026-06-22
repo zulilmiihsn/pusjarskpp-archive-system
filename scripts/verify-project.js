@@ -127,10 +127,10 @@ assert(read('ClientProcess.html').includes("if (f.field_name === 'klasifikasi_ak
 assert(read('WorkspaceSetup.gs').includes('wsBuildLeafSubActivityEntries_'), 'Workspace setup must map leaf folders as final sub-activities.');
 assert(read('SubActivityController.gs').includes('wsBuildLeafSubActivityEntries_') && read('SubActivityController.gs').includes('entry.groupName || entry.parentFolderName'), 'Sub-activity sync must use leaf folders and preserve leadership group context.');
 
-// Target akhir = USER_DEPLOYING (app perantara, sheet backend privat). Ditunda ke
-// rollout terkontrol (perlu deployment baru + re-auth owner + un-share sheet ke 10 user).
-// Hardening lain (auth guard, scope-walk, lock, cascade) sudah aman di USER_ACCESSING.
-assert(appsscript.webapp.executeAs === 'USER_ACCESSING', 'Web app executes as accessing user (USER_DEPLOYING flip deferred to controlled rollout).');
+// USER_DEPLOYING: app jadi perantara, spreadsheet/folder backend tetap privat ke owner,
+// gerbang = login+RBAC app. Aman setelah auth guard + requireWithinWorkspace_ (IDOR) terpasang.
+// Catatan deploy: butuh deployment versi baru + re-auth owner + un-share sheet dari 10 user.
+assert(appsscript.webapp.executeAs === 'USER_DEPLOYING', 'Web app must execute as deploying user (shared 10-user model; backend sheets stay private).');
 assert(appsscript.webapp.access === 'DOMAIN', 'Web app access must be domain-restricted.');
 assert(appsscript.oauthScopes.includes('https://www.googleapis.com/auth/script.external_request'), 'Manifest must include external request scope for UrlFetchApp resumable uploads.');
 assert(appsscript.oauthScopes.includes('https://www.googleapis.com/auth/script.scriptapp'), 'Manifest must allow trigger installation.');

@@ -445,10 +445,14 @@ function wsSyncExistingFilesInFolder_(year, report, startTime) {
 
         if (metadataList.length > 0) {
           totalSynced += metadataList.length;
-          // Bulk write to Spreadsheet
-          const writeResults = SpreadsheetService.appendArchiveRowsBulk(activity, subActivity, metadataList);
-          SpreadsheetService.updateRekapSummary(activity, subActivity, {}); // Update rekap once per sub activity
-          
+          // Bulk write to Spreadsheet — lock sempit: cegah interleave dgn finalizeArchive
+          // pada detail/rekap sheet yang sama (race pemilihan baris). Reentrant per-eksekusi.
+          const writeResults = withLock_(function () {
+            const wr = SpreadsheetService.appendArchiveRowsBulk(activity, subActivity, metadataList);
+            SpreadsheetService.updateRekapSummary(activity, subActivity, {}); // Update rekap once per sub activity
+            return wr;
+          });
+
           // Log them
           for (let i = 0; i < metadataList.length; i++) {
             const fileInfo = currentFiles[i];
@@ -476,7 +480,6 @@ function wsSyncExistingFilesInFolder_(year, report, startTime) {
               metadata_json: JSON.stringify({ importedFromExisting: true, metadata: metadata, finalFileName: fileInfo.name })
             });
           }
-          totalSynced += metadataList.length;
         }
 
         pageToken = result.nextPageToken;
