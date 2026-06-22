@@ -570,6 +570,15 @@ const ParseEngine = (function () {
   //  HELPER FUNCTIONS
   // ═══════════════════════════════════════════════════════════════
 
+  // Deteksi arah surat: jika KOP/header memuat instansi "LAN RI Kalimantan Timur"
+  // berarti surat KELUAR (dikeluarkan oleh kita). Bila tidak ada → surat MASUK.
+  // Toleransi spasi antar-kata & case agar tahan variasi OCR.
+  const LANRI_KALTIM_RE = /LAN\s*RI\s+Kalimantan\s+Timur/i;
+  function detectDirection_(headerText, fullText) {
+    const zone = String(headerText || '') + '\n' + String(fullText || '').substring(0, 600);
+    return LANRI_KALTIM_RE.test(zone) ? 'keluar' : 'masuk';
+  }
+
   function resolveMonth_(name) {
     return INDONESIAN_MONTHS[String(name || '').toLowerCase().replace(/\.$/, '')] || null;
   }
@@ -659,6 +668,10 @@ const ParseEngine = (function () {
     const bottomText = structure.signature.lines.join('\n');
     const optimizedText = topText + '\n\n' + bottomText;
 
+    // Pass 2.6: Deteksi arah surat (masuk/keluar) dari KOP header
+    const headerTextForDir = structure.header.lines.join('\n');
+    const direction = detectDirection_(headerTextForDir, text);
+
     // Pass 3: Classify document type
     const docType = classifyDocumentType_(topText, fileName);
 
@@ -703,7 +716,9 @@ const ParseEngine = (function () {
     // Pass 5: Build result
     const fields = {};
     if (nomorSurat) fields.nomor_surat = nomorSurat;
-    if (kodeKlasifikasi) fields.kode_klasifikasi = kodeKlasifikasi;
+    // Kode klasifikasi hanya relevan untuk surat KELUAR. Surat MASUK: biarkan kosong
+    // (jangan autofill) sesuai aturan kearsipan di kantor ini.
+    if (kodeKlasifikasi && direction === 'keluar') fields.kode_klasifikasi = kodeKlasifikasi;
     if (tanggal) fields.tanggal = tanggal;
     let uraianFallback = String(fileName || '')
       .replace(/\.[a-z0-9]+$/i, '')
@@ -739,6 +754,7 @@ const ParseEngine = (function () {
       fieldCount: fieldCount,
       totalFields: 9,
       documentType: docType,
+      documentDirection: direction,
       structure: {
         headerLines: structure.header.lines.length,
         bodyLines: structure.body.lines.length,
@@ -756,7 +772,8 @@ const ParseEngine = (function () {
     analyze: analyze,
     normalizeText: normalizeText_,
     analyzeStructure: analyzeStructure_,
-    classifyDocumentType: classifyDocumentType_
+    classifyDocumentType: classifyDocumentType_,
+    detectDirection: detectDirection_
   };
 
 })();

@@ -121,6 +121,34 @@ test('B6 - requireAdminIfWorkspaceSecured_ fail-closed saat baca akun gagal', ()
   assert.throws(() => requireAdminIfWorkspaceSecured_({ _sessionId: sid }), /Akses ditolak/);
 });
 
+// --- ParseEngine: deteksi arah surat masuk/keluar (autofill) ---
+
+test('ParseEngine.detectDirection - KOP LAN RI Kalimantan Timur = keluar', () => {
+  assert.strictEqual(ParseEngine.detectDirection('PEMERINTAH\nLAN RI Kalimantan Timur\nNomor: 1', ''), 'keluar');
+});
+
+test('ParseEngine.detectDirection - toleran spasi/case OCR', () => {
+  assert.strictEqual(ParseEngine.detectDirection('lan  ri   kalimantan timur', ''), 'keluar');
+});
+
+test('ParseEngine.detectDirection - tanpa KOP itu = masuk', () => {
+  assert.strictEqual(ParseEngine.detectDirection('Dinas Pendidikan Provinsi\nNomor: 2', ''), 'masuk');
+});
+
+test('ParseEngine.analyze - surat MASUK tidak mengisi kode_klasifikasi', () => {
+  const txt = 'Dinas X\nNomor: 100/AB.02/2025\nKode: KP.01.02\nPerihal: Undangan rapat\n\nIsi surat...';
+  const r = ParseEngine.analyze(txt, 'surat.pdf', {});
+  assert.strictEqual(r.documentDirection, 'masuk');
+  assert.ok(!r.fields.kode_klasifikasi, 'kode_klasifikasi harus kosong untuk surat masuk');
+});
+
+test('ParseEngine.analyze - surat KELUAR boleh mengisi kode_klasifikasi', () => {
+  const txt = 'LAN RI Kalimantan Timur\nNomor: 100/AB.02/2025\nKode: KP.01.02\nPerihal: Undangan rapat\n\nIsi surat...';
+  const r = ParseEngine.analyze(txt, 'surat.pdf', {});
+  assert.strictEqual(r.documentDirection, 'keluar');
+  assert.ok(r.fields.kode_klasifikasi && r.fields.kode_klasifikasi.value, 'kode_klasifikasi harus terisi untuk surat keluar');
+});
+
 console.log(`\nIntegration Tests Finished: ${passed} passed, ${failed} failed.`);
 if (failed > 0) {
   process.exit(1);

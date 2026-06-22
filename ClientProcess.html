@@ -460,10 +460,12 @@
         _parseDone = true;
         var fields = result.fields || {};
         var filledCount = autoFillParseFields_(fields);
+        applyDirectionRules_(result.documentDirection);
         if (filledCount > 0) {
           result._filledCount = filledCount;
           _parseResults = result;
-          showToast(filledCount + ' kolom terisi otomatis.');
+          var arahLabel = result.documentDirection === 'keluar' ? ' (terdeteksi surat keluar)' : ' (terdeteksi surat masuk)';
+          showToast(filledCount + ' kolom terisi otomatis' + arahLabel + '.');
         } else {
           _parseResults = null;
         }
@@ -479,31 +481,52 @@
       });
   }
 
+  // Alias: key dari parser -> kemungkinan nama field di form (urut prioritas).
+  // Parser memakai pengirim/penerima/uraian_informasi_item, tapi form bisa memakai
+  // dari/kepada/perihal. Cari input yang benar-benar ada lalu tulis ke key itu.
+  var PARSE_FIELD_ALIASES = {
+    penerima: ['penerima', 'kepada'],
+    pengirim: ['pengirim', 'dari'],
+    uraian_informasi_item: ['uraian_informasi_item', 'perihal', 'uraian']
+  };
+
+  function findFormInput_(key) {
+    var candidates = PARSE_FIELD_ALIASES[key] || [key];
+    for (var i = 0; i < candidates.length; i++) {
+      var c = candidates[i];
+      var input = document.querySelector('[data-field="' + c + '"]') || document.querySelector('[name="' + c + '"]');
+      if (input) return { input: input, key: c };
+    }
+    return null;
+  }
+
+  function setFieldValue_(input, key, value, highlight) {
+    if (state.draft && state.draft.metadata) state.draft.metadata[key] = value;
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    if (highlight) input.classList.add('auto-parse-filled'); else input.classList.remove('auto-parse-filled');
+  }
+
   function autoFillParseFields_(fields) {
     var filledCount = 0;
-    var labels = {
-      nomor_surat: 'Nomor Item', kode_klasifikasi: 'Kode Klasifikasi (Jika Item Keluar)',
-      uraian_informasi_item: 'Uraian', tanggal: 'Tanggal',
-      klasifikasi_akses: 'Klasifikasi Akses', jumlah: 'Jumlah Halaman',
-      pengirim: 'Pengirim', penerima: 'Penerima',
-      tanda_tangan: 'Tanda Tangan', lampiran: 'Lampiran'
-    };
     Object.keys(fields).forEach(function (key) {
       var f = fields[key];
       if (!f || !f.value) return;
-      var input = document.querySelector('[data-field="' + key + '"]') || document.querySelector('[name="' + key + '"]');
-      if (!input) return;
-      if (state.draft && state.draft.metadata) {
-        state.draft.metadata[key] = f.value;
-      }
-      input.value = f.value;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-      input.classList.add('auto-parse-filled');
+      var target = findFormInput_(key);
+      if (!target) return;
+      setFieldValue_(target.input, target.key, f.value, true);
       filledCount++;
     });
     updateFileName();
     return filledCount;
+  }
+
+  // Surat MASUK: kode klasifikasi harus kosong. Bersihkan field-nya bila terdeteksi masuk.
+  function applyDirectionRules_(direction) {
+    if (direction !== 'masuk') return;
+    var target = findFormInput_('kode_klasifikasi');
+    if (target && target.input.value) setFieldValue_(target.input, target.key, '', false);
   }
 
   function refreshFilePreview_() {

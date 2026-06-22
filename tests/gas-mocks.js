@@ -99,7 +99,7 @@ global.ScriptApp = {
 function loadGasScripts() {
   const root = path.resolve(__dirname, '..');
   const files = [
-    'ConfigConstants.gs', 'ConfigHelpers.gs', 'PureFunctions.gs', 'SecurityHelpers.gs', 'ConfigRepository.gs', 
+    'ConfigConstants.gs', 'ConfigHelpers.gs', 'PureFunctions.gs', 'ParseEngine.gs', 'SecurityHelpers.gs', 'ConfigRepository.gs',
     'ConfigService.gs', 'DriveService.gs', 'SheetHelpers.gs', 'SpreadsheetService.gs', 
     'WorkspaceSetup.gs', 'AuthService.gs', 'AccountController.gs', 'SettingsController.gs', 
     'WorkspaceController.gs', 'TemplateController.gs', 'SubActivityController.gs', 'ArchiveController.gs',

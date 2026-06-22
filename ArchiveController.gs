@@ -809,6 +809,7 @@ const ArchiveController = {
       fieldCount: Object.keys(fields).length,
       totalFields: engineResult.totalFields || 9,
       documentType: engineResult.documentType || '',
+      documentDirection: engineResult.documentDirection || 'masuk',
       structure: engineResult.structure || {},
       debug: debugInfo
     };
