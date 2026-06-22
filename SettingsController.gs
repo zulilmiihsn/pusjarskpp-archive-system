@@ -203,9 +203,12 @@ const SettingsController = {
   },
 
   forceResetAdmin: function() {
-    const activeUser = Session.getEffectiveUser();
+    // getActiveUser (BUKAN getEffectiveUser): di USER_DEPLOYING getEffectiveUser = pemilik
+    // deploy untuk SEMUA pemanggil sehingga owner-check bocor. getActiveUser = identitas
+    // user pengakses sebenarnya (satu domain) -> hanya pemilik asli yang lolos.
+    const activeUser = Session.getActiveUser();
     const activeEmail = activeUser ? activeUser.getEmail() : null;
-    if (!activeEmail) throw new Error('Identitas tidak ditemukan. Pastikan Anda menjalankan skrip sebagai diri sendiri.');
+    if (!activeEmail) throw new Error('Identitas Google tidak terdeteksi. Tidak dapat memverifikasi pemilik workspace.');
 
     const ssId = PropertiesService.getScriptProperties().getProperty(PROP_KEYS.CONFIG_SPREADSHEET_ID);
     if (!ssId) throw new Error('Workspace belum diinisialisasi.');

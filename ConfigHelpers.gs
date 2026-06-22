@@ -169,8 +169,10 @@ function verifyPassword_(password, username, storedHash) {
 }
 
 function generatePassword_(length) {
-  const len = length || 14;
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+  const len = length || 6;
+  // Charset tanpa simbol & karakter ambigu (0/O/1/I/l) agar password 6-karakter
+  // mudah dibaca & diketik saat login.
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   // Sumber indeks dari entropi UUID, bukan Math.random.
   let pool = '';
   while (pool.length < len * 2) pool += Utilities.getUuid().replace(/-/g, '');
