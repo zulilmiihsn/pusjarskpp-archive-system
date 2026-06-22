@@ -198,7 +198,14 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
     klasifikasi_akses: 'Terbatas',
     jumlah: 1,
     satuan: 'Lembar',
-    tanggal: '2026-06-08' // fixed for unit testing consistency
+    tanggal: '2026-06-08', // fixed for unit testing consistency
+    no_filing_cabinet: defaultActivity ? defaultActivity.laci_no + '. Laci ' + defaultActivity.activity_name : '',
+    _no_filing_cabinet_path: defaultActivity ? defaultActivity.laci_no + '. Laci ' + defaultActivity.activity_name : '',
+    _no_filing_cabinet_url: (defaultActivity && defaultActivity.laci_folder_id) ? 'https://drive.google.com/drive/folders/' + defaultActivity.laci_folder_id : '',
+    no_laci: defaultSubActivity ? (defaultSubActivity.sub_activity_name || '') : '',
+    _no_laci_path: defaultSubActivity ? (defaultSubActivity.sub_activity_name || '') : '',
+    _no_laci_url: (defaultSubActivity && defaultSubActivity.folder_id) ? 'https://drive.google.com/drive/folders/' + defaultSubActivity.folder_id : '',
+    no_folder: defaultSubActivity ? (defaultSubActivity.no_folder || defaultSubActivity.noFolder || '') : (defaultActivity ? (defaultActivity.folder_no || '') : '')
   };
 
   const nameWithoutExt = fileName.replace(/\.[a-z0-9]+$/i, '').trim();
@@ -227,6 +234,9 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   if (!meta.nomor_item_arsip) meta.nomor_item_arsip = '01';
   if (!meta.no_berkas) meta.no_berkas = '1';
   if (!meta.tingkat_perkembangan) meta.tingkat_perkembangan = 'Asli';
+  
+  // Sinkronkan no_folder dengan nomor_item_arsip (seperti logic di form)
+  meta.no_folder = meta.nomor_item_arsip;
 
   return meta;
 }

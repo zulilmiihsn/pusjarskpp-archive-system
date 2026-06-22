@@ -339,13 +339,10 @@ function summarizeDetailSheet_(sheet, subActivity) {
       metadata[field] = (val === null || val === undefined) ? '' : String(val).trim();
     });
 
-    // Jumlah (lembar): predikat identik dgn SUMIFS (lihat buildJumlahFormula_),
-    // pakai nilai mentah sel agar semantik angka sama persis.
-    if (isLembarCountableRow_(metadata)) {
-      const raw = row[jumlahCol - 1];
-      const n = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/[^0-9.\-]/g, ''));
-      if (!isNaN(n)) sumLembar += n;
-    }
+    // Jumlah (lembar): cukup parse nilai yang ada di kolom jumlah
+    const raw = row[jumlahCol - 1];
+    const n = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(/[^0-9.\-]/g, ''));
+    if (!isNaN(n)) sumLembar += n;
 
     // Agregat lain pakai predikat "baris bermakna".
     if (!hasMeaningfulDetailData_(metadata)) return;
@@ -368,19 +365,6 @@ function summarizeDetailSheet_(sheet, subActivity) {
     akses: formatAccessSummary_(aksesByKey),
     lastRow: lastRow
   };
-}
-
-// Predikat baris yang dihitung untuk kolom Jumlah Rekap. SENGAJA dibuat
-// identik dengan penjaga SUMIFS di buildJumlahFormula_ (nomor item terisi &
-// bukan baris catatan) supaya mode gembok-tertutup (formula live) dan
-// gembok-terbuka (snapshot JS) SELALU menghasilkan angka yang sama.
-function isLembarCountableRow_(metadata) {
-  const item = String(metadata.nomor_item_arsip || '').trim();
-  if (!item) return false;
-  const noteRe = /^(keterangan|kolom)/i;
-  if (noteRe.test(item)) return false;
-  if (noteRe.test(String(metadata.no_berkas || '').trim())) return false;
-  return true;
 }
 
 function getDetailDataValues_(sheet) {
@@ -418,12 +402,21 @@ function formatAccessSummary_(aksesByKey) {
 
 function parseDateCell_(value) {
   if (!value) return null;
-  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) return value;
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    if (value.getFullYear() <= 1900) return null;
+    return value;
+  }
   const text = String(value).trim();
+  if (!text) return null;
   const iso = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  if (iso) {
+    const d = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+    if (d.getFullYear() <= 1900) return null;
+    return d;
+  }
   const parsed = new Date(text);
-  return isNaN(parsed.getTime()) ? null : parsed;
+  if (isNaN(parsed.getTime()) || parsed.getFullYear() <= 1900) return null;
+  return parsed;
 }
 
 function formatDateRange_(startDate, endDate) {
@@ -605,15 +598,19 @@ function formatBasicDetailSheet_(sheet, activity, subActivity) {
   sheet.getRange('N6:N7').merge().setValue('Ket.\nLokasi\nSimpan');
   sheet.getRange('B8:N8').setValues([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]]);
 
-  sheet.getRange('B6:M8')
+  // Format umum untuk header (B6:N8)
+  sheet.getRange('B6:N8')
     .setBackground('#b4c6e7')
     .setFontWeight('bold')
     .setFontFamily('Arial')
-    .setFontSize(10)
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle')
     .setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID)
     .setWrap(true);
+
+  // Ukuran font spesifik: Baris judul (6-7) dan Baris nomor (8)
+  sheet.getRange('B6:N7').setFontSize(10);
+  sheet.getRange('B8:N8').setFontSize(7);
 
   const dataRows = 24;
   sheet.getRange(DETAIL_DATA_START_ROW, DETAIL_FALLBACK_START_COL, dataRows, DETAIL_FIELD_ORDER.length)
@@ -892,20 +889,12 @@ function buildKurunWaktuFormula_(detailSheet) {
   return "=IF(COUNTA(" + rangeRef + ")>0" + s + " TEXT(MIN(" + rangeRef + ")" + s + " \"d mmmm yyyy\") & \" - \" & TEXT(MAX(" + rangeRef + ")" + s + " \"d mmmm yyyy\")" + s + " \"\")";
 }
 
+// Jumlah = SUM kolom "jumlah" (lembar) tiap dokumen, bukan hitungan baris.
 function buildJumlahFormula_(detailSheet) {
   const ref = detailSheetFormulaRef_(detailSheet);
-  // Jumlah = SUM kolom "jumlah" (lembar) tiap dokumen, bukan hitungan baris.
-  // Pakai SUMIFS dgn penjaga yg sama (item terisi & bukan baris catatan).
   const jumlahLetter = getDetailColumnLetter_(detailSheet, 'jumlah', 'H');
-  const itemLetter = getDetailColumnLetter_(detailSheet, 'nomor_item_arsip', 'C');
-  const bLetter = getDetailColumnLetter_(detailSheet, 'no_berkas', 'B');
   const sumRange = ref + '!' + jumlahLetter + '9:' + jumlahLetter;
-  const itemRange = ref + '!' + itemLetter + '9:' + itemLetter;
-  const bRange = ref + '!' + bLetter + '9:' + bLetter;
-  const s = formulaSep_(detailSheet.getParent());
-  return "=SUMIFS(" + sumRange + s + " " + itemRange + s + " \"<>\"" + s + " " +
-         bRange + s + " \"<>Keterangan*\"" + s + " " + bRange + s + " \"<>Kolom*\"" + s + " " +
-         itemRange + s + " \"<>Keterangan*\"" + s + " " + itemRange + s + " \"<>Kolom*\") & \" lembar\"";
+  return "=SUM(" + sumRange + ") & \" lembar\"";
 }
 
 function buildAksesFormula_(detailSheet) {

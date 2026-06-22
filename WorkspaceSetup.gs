@@ -544,19 +544,18 @@ function wsEnsureArchiveSpreadsheet_(laciFolder, activity, year, report) {
 }
 
 function wsInstallRekapTriggerIfMissing_(spreadsheetId) {
-  try {
-    const triggers = ScriptApp.getProjectTriggers();
-    for (let i = 0; i < triggers.length; i++) {
-      if (triggers[i].getHandlerFunction() === 'onRekapSheetEdit' && triggers[i].getTriggerSourceId() === spreadsheetId) {
-        return;
-      }
+  // DINONAKTIFKAN: Google Apps Script memiliki batas maksimal 20 installable trigger per user per script.
+  // Karena jumlah sub-kegiatan bisa lebih dari 20, memasang onEdit trigger pada setiap spreadsheet
+  // akan menyebabkan error "This script has too many triggers" dan menyebabkan inisialisasi crash (INTERNAL ERROR).
+  // Sinkronisasi Kode Klasifikasi 2 arah dari Spreadsheet ke App dihentikan. Gunakan antarmuka App untuk mengubah kode.
+}
+
+function cleanupOldRekapTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'onRekapSheetEdit') {
+      ScriptApp.deleteTrigger(triggers[i]);
     }
-    ScriptApp.newTrigger('onRekapSheetEdit')
-      .forSpreadsheet(spreadsheetId)
-      .onEdit()
-      .create();
-  } catch (e) {
-    console.warn('Gagal memasang trigger onEdit untuk spreadsheet ' + spreadsheetId + ': ' + e.message);
   }
 }
 
@@ -812,6 +811,12 @@ function wsPrepareArchiveWorkbook_(ss, activity) {
   } else {
     wsFormatDetailSheet_(first);
   }
+
+  // Sembunyikan sheet template bawaan agar tidak mengganggu
+  ['Template Detail Item', 'Template Detail Kegiatan', 'Template Kegiatan'].forEach(function(name) {
+    const tSheet = ss.getSheetByName(name);
+    if (tSheet) tSheet.hideSheet();
+  });
 }
 
 function wsWriteConfig_(ss, year, root, referenceRoot, daftarArsip, arsipDiklat, tahunFolder, inbox, templateFolder, activityRows, subActivityRows) {
@@ -1039,17 +1044,21 @@ function wsStyleDetailSheet_(sheet) {
   const width = 13;
   const dataRows = 24;
 
+  // Format umum untuk header (Baris 6-8)
   sheet.getRange(6, startCol, 3, width)
     .setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID)
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle')
     .setFontFamily('Bookman Old Style')
-    .setFontSize(11)
     .setFontWeight('normal')
     .setBackground('#b4c6e7')
     .setWrap(true);
-  sheet.getRange(8, startCol, 1, width)
-    .setFontSize(7);
+
+  // Ukuran font spesifik: Baris judul (6-7) dan Baris nomor (8)
+  sheet.getRange(6, startCol, 2, width).setFontSize(11);
+  sheet.getRange(8, startCol, 1, width).setFontSize(7);
+
+  // Format data baris bawah
   sheet.getRange(9, startCol, dataRows, width)
     .setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID)
     .setFontFamily('Bookman Old Style')
