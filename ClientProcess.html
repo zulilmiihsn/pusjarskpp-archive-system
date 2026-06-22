@@ -1154,26 +1154,8 @@
 
     let section2Html = '';
     if (section2Fields.length) {
-      const gridFields = section2Fields.filter(f => f.field_name !== 'tanggal' && f.field_name !== 'uraian_informasi_item');
-      const tanggalField = section2Fields.find(f => f.field_name === 'tanggal');
-      const uraianField = section2Fields.find(f => f.field_name === 'uraian_informasi_item');
-
-      let inner = gridFields.map(f => metadataField(f, metadata[f.field_name], hints)).join('');
-
-      if (tanggalField && uraianField) {
-        inner += '<div class="tanggal-uraian-row">'
-          + metadataField(tanggalField, metadata[tanggalField.field_name], hints)
-          + metadataField(uraianField, metadata[uraianField.field_name], hints)
-          + '</div>';
-      } else {
-        if (tanggalField) inner += metadataField(tanggalField, metadata[tanggalField.field_name], hints);
-        if (uraianField) inner += metadataField(uraianField, metadata[uraianField.field_name], hints);
-      }
-
-      section2Html = card('2', 'Identitas Item', 'Informasi utama arsip',
-        inner,
-        'metadata-grid-3'
-      );
+      let inner = renderFields(section2Fields);
+      section2Html = card('2', 'Identitas Item', 'Informasi utama arsip', inner);
     }
 
     let section3Html = '';
@@ -1345,9 +1327,9 @@
             input.focus();
             this.style.display = 'none';
           " title="Ubah manual">
-            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 20h9"></path>
-              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
             </svg>
           </button>
         </div>
