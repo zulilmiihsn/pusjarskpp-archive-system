@@ -30,14 +30,29 @@
 
 
   let _syncing = false;
+  let _syncIsSilent = false;
 
   async function syncDrive_(activity, isSilent = false) {
-    if (_syncing) return;
-    _syncing = true;
-
     const syncBtn = document.getElementById('btn-sync-drive');
     const syncIcon = document.getElementById('sync-icon');
     const syncText = document.getElementById('sync-text');
+
+    if (_syncing) {
+      if (!isSilent && _syncIsSilent) {
+        // Switch background sync to visible foreground sync
+        _syncIsSilent = false;
+        if (syncBtn) {
+          syncBtn.disabled = true;
+          if (syncIcon) syncIcon.style.animation = 'spin 1s linear infinite';
+          if (syncText) syncText.textContent = 'Menyinkronkan...';
+        }
+        showProcessToast('Memindai folder Google Drive...');
+      }
+      return;
+    }
+
+    _syncing = true;
+    _syncIsSilent = isSilent;
 
     if (!isSilent && syncBtn) {
       syncBtn.disabled = true;
@@ -61,36 +76,41 @@
           const hasInteraction = document.querySelector('.sub-dropdown-menu.open') ||
             Array.from(document.querySelectorAll('[id$="-modal"]')).some(m => m.style.display === 'flex');
 
-          if (isSilent && hasInteraction) {
+          if (_syncIsSilent && hasInteraction) {
             showToast('Folder baru disinkronkan di latar belakang.');
           } else {
             renderActivityDetail();
             showToast('Folder baru berhasil disinkronkan dari Drive!');
           }
-        } else if (!isSilent) {
+        } else if (!_syncIsSilent) {
           showToast('Sinkronisasi selesai. Data aplikasi sudah diperbarui.');
         }
-      } else if (!isSilent) {
+      } else if (!_syncIsSilent) {
         showToast('Folder Drive sudah up-to-date.');
       }
     } catch (error) {
-      if (!isSilent) {
+      if (!_syncIsSilent) {
         showToast('Gagal sinkronisasi: ' + (errorMessage(error)));
       }
     } finally {
       _syncing = false;
-      if (!isSilent && syncBtn) {
-        syncBtn.disabled = false;
-        if (syncIcon) syncIcon.style.animation = '';
-        if (syncText) syncText.textContent = 'Sinkronkan Drive';
+      const finalBtn = document.getElementById('btn-sync-drive');
+      const finalIcon = document.getElementById('sync-icon');
+      const finalText = document.getElementById('sync-text');
+      if (!_syncIsSilent && finalBtn) {
+        finalBtn.disabled = false;
+        if (finalIcon) finalIcon.style.animation = '';
+        if (finalText) finalText.textContent = 'Sinkronkan Drive';
       }
     }
   }
 
 
   async function submitDeleteSub_(deleteModal, deleteSubmitBtn, currentDeleteSubId) {
-    deleteSubmitBtn.disabled = true;
-    deleteSubmitBtn.textContent = 'Menonaktifkan...';
+    deleteModal.style.display = 'none';
+    const card = document.querySelector('.tall-card[data-sub-id="' + currentDeleteSubId + '"]');
+    if (card) card.style.display = 'none';
+
     var deleteSubToast = showProcessToast('Menonaktifkan sub-kegiatan...', true);
     try {
       const result = await api('deleteSubActivity', {
@@ -100,21 +120,20 @@
       });
       if (deleteSubToast) removeToast(deleteSubToast);
       state.bootstrap = result.bootstrap;
-      deleteModal.style.display = 'none';
       renderActivityDetail();
       showToast('Sub-kegiatan dinonaktifkan dari menu aktif.');
     } catch (error) {
       if (deleteSubToast) removeToast(deleteSubToast);
       showToast('Gagal menonaktifkan: ' + (errorMessage(error)));
-    } finally {
-      deleteSubmitBtn.disabled = false;
-      deleteSubmitBtn.textContent = 'Ya, Nonaktifkan';
+      if (card) card.style.display = '';
     }
   }
 
   async function submitTrashSub_(trashModal, trashSubmitBtn, currentTrashSubId) {
-    trashSubmitBtn.disabled = true;
-    trashSubmitBtn.textContent = 'Memindahkan...';
+    trashModal.style.display = 'none';
+    const card = document.querySelector('.tall-card[data-sub-id="' + currentTrashSubId + '"]');
+    if (card) card.style.display = 'none';
+
     var trashSubToast = showProcessToast('Memindahkan folder ke Tempat Sampah...', true);
     try {
       const result = await api('trashSubActivityFolder', {
@@ -124,15 +143,12 @@
       });
       if (trashSubToast) removeToast(trashSubToast);
       state.bootstrap = result.bootstrap;
-      trashModal.style.display = 'none';
       renderActivityDetail();
       showToast('Sub-kegiatan dihapus.');
     } catch (error) {
       if (trashSubToast) removeToast(trashSubToast);
       showToast('Gagal memindahkan folder: ' + (errorMessage(error)));
-    } finally {
-      trashSubmitBtn.disabled = false;
-      trashSubmitBtn.textContent = 'Ya, Hapus';
+      if (card) card.style.display = '';
     }
   }
 
@@ -377,7 +393,7 @@
     const subs = activity.subActivities || [];
     const activityHistory = (state.bootstrap.history || []).filter(item => item.activity_id === activity.activity_id);
     const colorTheme = getActivityColor(activity.activity_id);
-    const firstSubFolderUrl = subs.reduce((acc, s) => acc || (s.folder && s.folder.url ? s.folder.url : null), null) || activity.targetFolder.url;
+    const itemFolderUrl = (activity.targetFolder && activity.targetFolder.url) || subs.reduce((acc, s) => acc || (s.folder && s.folder.url ? s.folder.url : null), null);
 
     setContent(`
       <div class="toolbar mb-20">
@@ -419,7 +435,7 @@
             ` : ''}
           </div>
           <div class="flex items-center gap-4 shrink-0">
-            ${!isGuest() && !state.currentParentFolderView && (activity.laciFolder.url || firstSubFolderUrl) ? `
+            ${!isGuest() && !state.currentParentFolderView && (activity.laciFolder.url || itemFolderUrl) ? `
               <div class="dropdown">
                 <button class="sub-action-btn" data-action="toggle-dropdown" title="Buka Folder">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -430,7 +446,7 @@
                 </button>
                 <div class="sub-dropdown-menu">
                   ${activity.laciFolder.url ? `<a href="${esc(activity.laciFolder.url)}" target="_blank" class="sub-dropdown-item" style="text-decoration:none;">Buka Folder Laci</a>` : ''}
-                  ${firstSubFolderUrl ? `<a href="${esc(firstSubFolderUrl)}" target="_blank" class="sub-dropdown-item" style="text-decoration:none;">Buka Folder Item</a>` : ''}
+                  ${itemFolderUrl ? `<a href="${esc(itemFolderUrl)}" target="_blank" class="sub-dropdown-item" style="text-decoration:none;">Buka Folder Item</a>` : ''}
                 </div>
               </div>
             ` : ''}
