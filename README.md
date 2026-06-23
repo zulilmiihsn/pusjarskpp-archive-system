@@ -24,8 +24,9 @@ Dokumen pra-development ada di:
 
 Implementasi production Google Apps Script ada di:
 
-- `Code.gs`, `AppController.gs`, `Config.gs`, `DriveService.gs`, `SpreadsheetService.gs`, `MetadataService.gs`, dan `WorkspaceSetup.gs`
-- `Index.html`, `ClientRouter.html`, `ClientState.html`, `ClientApi.html`, `ClientDashboard.html`, `ClientActivityDetail.html`, `ClientArchiveFolder.html`, `ClientProcess.html`, `ClientHistory.html`, `ClientTemplates.html`, `ClientAccounts.html`, `ClientSettings.html`, `ClientFolderPicker.html`, `ClientLogin.html`, `ClientUtils.html`, `ClientAssets.html`, dan `Styles.html`
+- Backend `.gs`: dispatcher `Code.gs`; controller (`ArchiveController`, `SubActivityController`, `SettingsController`, `AccountController`, `DriveController`, `WorkspaceController`, `TemplateController`); service/helper (`DriveService`, `SpreadsheetService`, `SheetHelpers`, `ConfigRepository`, `ConfigService`, `ConfigConstants`, `ConfigHelpers`, `MetadataService`, `ParseEngine`, `AuthService`, `CacheHelper`, `SecurityHelpers`, `PureFunctions`, `Validator`, `SystemLogger`, `VersionService`, `WorkspaceSetup`)
+- Frontend HTML (di-include lewat `Index.html`): `ClientRouter`, `ClientState`, `ClientApi`, `ClientDashboard`, `ClientActivityDetail`, `EditSubActivity`, `ClientArchiveFolder`, `ClientProcess`, `ClientDocumentProcess`, `ClientHistory`, `ClientTemplates`, `ClientAccounts`, `ClientSettings`, `ClientFolderPicker`, `ClientLogin`, `ClientUtils`, `ClientAssets`/`ClientAssetsHeavy`
+- Styling: `StylesBase`, `StylesLayout`, `StylesComponents`, `StylesForms`, `StylesTables`
 - `appsscript.json` sebagai manifest Apps Script
 
 Catatan penting:
@@ -44,18 +45,18 @@ cmd /c npm test
 .\node_modules\.bin\clasp.cmd push
 ```
 
-Manifest production saat ini disetel untuk akses internal domain dan eksekusi sebagai user yang sedang mengakses:
+Manifest production disetel untuk akses internal domain dan eksekusi sebagai pemilik deploy:
 
 ```json
 {
   "webapp": {
-    "executeAs": "USER_ACCESSING",
+    "executeAs": "USER_DEPLOYING",
     "access": "DOMAIN"
   }
 }
 ```
 
-Dengan konfigurasi ini, setiap user harus punya permission Google Drive/Sheets yang relevan. Ini lebih aman untuk arsip internal dibanding menjalankan semua aksi memakai otoritas deployer.
+Setiap operator kantor men-deploy web app-nya sendiri memakai akun masing-masing, sehingga semua aksi Drive/Sheets berjalan dengan otoritas pemilik deploy atas workspace-nya sendiri. Model ini dipilih agar tiap kantor mengelola arsipnya secara mandiri tanpa berbagi satu deployer pusat.
 
 ## Safety Guard
 
