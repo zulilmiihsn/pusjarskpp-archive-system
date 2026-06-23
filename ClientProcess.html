@@ -117,8 +117,24 @@
       } catch (e) {
         state.draft.finalFileName = sourceName || 'dokumen.pdf';
       }
-      const preview = document.getElementById('final-name-preview');
-      if (preview) preview.textContent = state.draft.finalFileName;
+      var previewEl = document.getElementById('final-name-preview');
+      if (previewEl) {
+        previewEl.innerText = state.draft.finalFileName;
+        
+        // Auto-scroll marquee logic
+        previewEl.classList.remove('is-marquee');
+        previewEl.style.removeProperty('--scroll-amount');
+        
+        // Request animation frame gives DOM time to render the new innerText width
+        requestAnimationFrame(function() {
+          var parent = previewEl.parentElement;
+          if (parent && previewEl.scrollWidth > parent.clientWidth) {
+            var scrollAmount = previewEl.scrollWidth - parent.clientWidth + 16; // Add padding buffer
+            previewEl.style.setProperty('--scroll-amount', '-' + scrollAmount + 'px');
+            previewEl.classList.add('is-marquee');
+          }
+        });
+      }
       saveProcessStateToLocal();
     }, 200);
     return state.draft.finalFileName;
@@ -972,6 +988,7 @@
           val = '01';
         }
         if (key === 'no_berkas') val = sub.sort_order || '';
+        if (key === 'kode_klasifikasi') val = '';
         if (key === 'nomor_item_arsip') val = '01';
         if (key === 'klasifikasi_akses') val = 'Terbatas';
         newMetadata[key] = val;
@@ -1236,7 +1253,9 @@
       <div class="process-sticky-bar" id="finalize-bar">
         <div class="preview-section">
           <div class="preview-label">Nama Berkas Akhir</div>
-          <div class="preview-name" id="final-name-preview">${esc(draft.finalFileName || metadata.lokasi_simpan || '')}</div>
+          <div class="preview-name-wrap">
+            <div class="preview-name" id="final-name-preview">${esc(draft.finalFileName || metadata.lokasi_simpan || '')}</div>
+          </div>
         </div>
         <div class="action-group">
           ${state.editMode ? '' : `
