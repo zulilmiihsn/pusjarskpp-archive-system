@@ -34,7 +34,7 @@ global.Session = {
   getEffectiveUser: () => ({
     getEmail: () => 'admin@example.com'
   }),
-  // Identitas Google aktif = owner mock (cocok dgn mockFiles owner di test forceResetAdmin).
+  // Identitas Google aktif = owner mock.
   // Sesi via makeSession tak set activeEmail, jadi binding lunak requireAuth_ tetap dilewati.
   getActiveUser: () => ({
     getEmail: () => 'admin@example.com'

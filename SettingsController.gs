@@ -204,46 +204,6 @@ const SettingsController = {
     return bootstrap;
   },
 
-  forceResetAdmin: function() {
-    // getActiveUser (BUKAN getEffectiveUser): di USER_DEPLOYING getEffectiveUser = pemilik
-    // deploy untuk SEMUA pemanggil sehingga owner-check bocor. getActiveUser = identitas
-    // user pengakses sebenarnya (satu domain) -> hanya pemilik asli yang lolos.
-    const activeUser = Session.getActiveUser();
-    const activeEmail = activeUser ? activeUser.getEmail() : null;
-    if (!activeEmail) throw new Error('Identitas Google tidak terdeteksi. Tidak dapat memverifikasi pemilik workspace.');
-
-    const ssId = PropertiesService.getScriptProperties().getProperty(PROP_KEYS.CONFIG_SPREADSHEET_ID);
-    if (!ssId) throw new Error('Workspace belum diinisialisasi.');
-
-    // Verifikasi bahwa user adalah pemilik file workspace untuk mencegah eksekusi sewenang-wenang
-    let isOwner = false;
-    try {
-      const file = DriveApp.getFileById(cleanId_(ssId));
-      isOwner = file.getOwner().getEmail() === activeEmail;
-    } catch (e) {
-      throw new Error('Gagal memverifikasi kepemilikan workspace. Pastikan Anda adalah pemilik file.');
-    }
-    if (!isOwner) throw new Error('Akses ditolak. Hanya pemilik workspace yang dapat melakukan reset admin.');
-
-    const ss = openSpreadsheetById_(ssId);
-    let sheet = ss.getSheetByName(CONFIG_SHEETS.ACCOUNTS);
-    if (!sheet) sheet = ss.insertSheet(CONFIG_SHEETS.ACCOUNTS);
-
-    const existing = sheet.getDataRange().getDisplayValues();
-    if (existing.length > 1) {
-      sheet.getRange(2, 1, existing.length - 1, existing[0].length).clearContent();
-    }
-
-    sheet.getRange(1, 1, 1, ACCOUNT_HEADERS.length).setValues([ACCOUNT_HEADERS]);
-    sheet.getRange(1, 1, 1, ACCOUNT_HEADERS.length).setFontWeight('normal');
-
-    const password = generatePassword_();
-    const hash = hashPasswordV2_(password, 'admin');
-    sheet.appendRow([Utilities.getUuid(), 'admin', hash, 'admin', 'Administrator', 'TRUE', new Date().toISOString(), new Date().toISOString()]);
-
-    return { password: password };
-  },
-
   ensureArchiveMaintenanceTrigger: function () {
     const handlerName = 'runArchiveMaintenance';
     const legacyHandler = 'cleanupTrashedSubActivities';

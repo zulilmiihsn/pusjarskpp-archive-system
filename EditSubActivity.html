@@ -38,6 +38,7 @@
         _currentEditSub.forceParentName = forceParentName;
     }
 
+    renameModal.classList.remove('is-closing');
     renameModal.style.display = 'grid';
     renameInput.focus();
 
@@ -202,7 +203,7 @@
   }
 
   function closeEditSubModal() {
-    document.getElementById('rename-sub-modal').style.display = 'none';
+    hideElementAnimated(document.getElementById('rename-sub-modal'));
     _currentEditSub = null;
   }
 

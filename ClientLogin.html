@@ -73,7 +73,6 @@
           </button>
         </div>
         <div style="padding:14px 28px;border-top:1px solid var(--line);text-align:center;">
-          <a id="login-reset-admin" href="#" style="display:block;font-size:12px;color:var(--accent);font-weight:600;margin-bottom:8px;cursor:pointer;text-decoration:none;">Lupa kata sandi admin? Reset (khusus pemilik workspace)</a>
           <span style="font-size:12px;color:var(--subtle);font-weight:500;">Portal Arsip PUSJARSKPP LAN RI</span>
         </div>
       </div>
@@ -115,31 +114,9 @@
       pwToggle.querySelector('.login-pw-eye-off').style.display = isPw ? '' : 'none';
     });
 
-    const close = () => { backdrop.remove(); style.remove(); state._loginPromptShown = false; };
+    const close = () => { hideElementAnimated(backdrop, () => { backdrop.remove(); style.remove(); }); state._loginPromptShown = false; };
     backdrop.querySelector('#login-modal-close')?.addEventListener('click', close);
     backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
-
-    // Pemulihan: pemilik workspace yang lupa/tak punya kata sandi admin bisa reset & dapat
-    // kata sandi baru. Server batasi ke pemilik (Session.getActiveUser == owner file).
-    const resetLink = backdrop.querySelector('#login-reset-admin');
-    if (resetLink) {
-      resetLink.addEventListener('click', async (e) => {
-        e.preventDefault();
-        if (!confirm('Reset kata sandi admin? Hanya pemilik workspace yang bisa. Kata sandi admin lama tidak akan berlaku lagi.')) return;
-        const label = resetLink.textContent;
-        resetLink.textContent = 'Memproses reset...';
-        resetLink.style.pointerEvents = 'none';
-        try {
-          const r = await api('forceResetAdmin', {});
-          close();
-          showAdminPasswordModal(r.password);
-        } catch (err) {
-          resetLink.textContent = label;
-          resetLink.style.pointerEvents = '';
-          showToast('Gagal reset: ' + (err.message || String(err)));
-        }
-      });
-    }
 
     const doLogin = async () => {
       const username = document.getElementById('login-username')?.value.trim();
@@ -354,7 +331,7 @@
       </div>
     `;
     document.body.appendChild(backdrop);
-    backdrop.querySelector('#admin-pw-close').onclick = () => backdrop.remove();
-    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+    backdrop.querySelector('#admin-pw-close').onclick = () => hideElementAnimated(backdrop, () => backdrop.remove());
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) hideElementAnimated(backdrop, () => backdrop.remove()); });
   }
 </script>

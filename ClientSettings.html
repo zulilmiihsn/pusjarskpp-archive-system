@@ -950,6 +950,7 @@
 
     if (resetBtn && resetModal) {
       resetBtn.addEventListener('click', function () {
+        resetModal.classList.remove('is-closing');
         resetModal.style.display = 'flex';
         if (resetInput) resetInput.value = '';
         if (resetConfirm) resetConfirm.disabled = true;
@@ -968,7 +969,7 @@
         try {
           var resetResult = await api('resetWorkspace');
           showToast('Ruang kerja berhasil direset. ' + resetResult.removed + ' spreadsheet dihapus.');
-          if (resetModal) resetModal.style.display = 'none';
+          if (resetModal) hideElementAnimated(resetModal);
           state.currentUser = { role: 'guest', username: '', displayName: 'Tamu' };
           localStorage.removeItem('portal_session_id');
           state.bootstrap = null;
@@ -982,9 +983,9 @@
         }
       });
     }
-    if (resetClose) resetClose.addEventListener('click', function () { resetModal.style.display = 'none'; });
-    if (resetCancel) resetCancel.addEventListener('click', function () { resetModal.style.display = 'none'; });
-    if (resetModal) resetModal.addEventListener('click', function (e) { if (e.target === resetModal) resetModal.style.display = 'none'; });
+    if (resetClose) resetClose.addEventListener('click', function () { hideElementAnimated(resetModal); });
+    if (resetCancel) resetCancel.addEventListener('click', function () { hideElementAnimated(resetModal); });
+    if (resetModal) resetModal.addEventListener('click', function (e) { if (e.target === resetModal) hideElementAnimated(resetModal); });
   }
 
   function bindWorkspaceInit() {
@@ -1435,11 +1436,12 @@
     
     const openModal = () => {
       populateModalYearOptions();
+      modal.classList.remove('is-closing');
       modal.style.display = 'flex';
     };
-    
+
     const closeModal = () => {
-      modal.style.display = 'none';
+      hideElementAnimated(modal);
     };
     
     if (openBtn) openBtn.addEventListener('click', openModal);
@@ -1581,12 +1583,13 @@
       });
 
       updateModalUI();
+      modal.classList.remove('is-closing');
       modal.style.display = 'grid';
     }
 
     document.getElementById('custom-theme-cancel')?.addEventListener('click', () => {
       customColors = JSON.parse(localStorage.getItem('portal_custom_colors') || '{"kepemimpinan":"#10B981","latsar":"#F43F5E","teknis":"#F59E0B","lain":"#8B5CF6"}');
-      document.getElementById('custom-theme-modal').style.display = 'none';
+      hideElementAnimated(document.getElementById('custom-theme-modal'));
     });
 
     document.getElementById('custom-theme-save')?.addEventListener('click', () => {
@@ -1596,7 +1599,7 @@
       document.querySelectorAll('.theme-option-card').forEach(c => c.classList.remove('active'));
       document.querySelector('.theme-option-card[data-theme="custom"]').classList.add('active');
       renderCustomThemePreviewDots();
-      document.getElementById('custom-theme-modal').style.display = 'none';
+      hideElementAnimated(document.getElementById('custom-theme-modal'));
 
       let styleEl = document.getElementById('custom-theme-style');
       if (!styleEl) {

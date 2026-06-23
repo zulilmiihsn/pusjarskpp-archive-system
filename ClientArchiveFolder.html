@@ -414,6 +414,24 @@
   /* ── Helper per-region (gaya B: rangka tetap, isi region bisa di-swap) ── */
   window._optimisticDeletedFiles = window._optimisticDeletedFiles || new Set();
   window._optimisticDeletedFolders = window._optimisticDeletedFolders || new Set();
+  // Item yang baru diarsipkan tapi belum tentu terindeks Drive.Files.list (eventual
+  // consistency). Disuntik tiap paint sampai hasil server beneran memuatnya, lalu
+  // dilepas. Mirror pola _optimisticDeletedFiles. Map: folderId -> array file DTO.
+  window._optimisticAddedFiles = window._optimisticAddedFiles || Object.create(null);
+
+  function mergeOptimisticAddedFiles_(files, context) {
+    const folderId = context && context.folderId;
+    if (!folderId) return files;
+    const added = window._optimisticAddedFiles[folderId];
+    if (!added || !added.length) return files;
+    const serverIds = new Set((files || []).map(f => f.id));
+    // Reconcile: lepas item optimistic yang sudah muncul di hasil server.
+    const stillPending = added.filter(f => !serverIds.has(f.id));
+    if (stillPending.length) window._optimisticAddedFiles[folderId] = stillPending;
+    else delete window._optimisticAddedFiles[folderId];
+    // Prepend yang masih pending (server belum sempat indeks).
+    return stillPending.concat(files || []);
+  }
 
   function getValidArchiveFolders_(result) {
     let folders = result.folders || [];
@@ -423,8 +441,9 @@
     return folders;
   }
 
-  function splitArchiveFiles_(result) {
+  function splitArchiveFiles_(result, context) {
     let allFiles = result.files || [];
+    allFiles = mergeOptimisticAddedFiles_(allFiles, context);
     if (window._optimisticDeletedFiles) {
       allFiles = allFiles.filter(f => !window._optimisticDeletedFiles.has(f.id));
     }
@@ -484,7 +503,7 @@
 
   function archiveFolderContentHtml(result, context) {
     const folders = getValidArchiveFolders_(result);
-    const split = splitArchiveFiles_(result);
+    const split = splitArchiveFiles_(result, context);
     const surat = split.surat;
     const dokumen = split.dokumen;
     const hasMore = !!result.nextPageToken;
@@ -528,7 +547,7 @@
     if (!grid || !suratCount) return false; // rangka belum terpasang
 
     const folders = getValidArchiveFolders_(result);
-    const split = splitArchiveFiles_(result);
+    const split = splitArchiveFiles_(result, context);
     const surat = split.surat;
     const dokumen = split.dokumen;
     const hasMore = !!result.nextPageToken;
@@ -1024,11 +1043,12 @@
     if (sheetInput) sheetInput.value = isSubActivityEdit ? (sub.target_sheet_name || sub.effective_target_sheet_name || sub.sub_activity_name || '') : '';
     if (noFolderInput) noFolderInput.value = isSubActivityEdit ? (sub.no_folder || '') : '';
     if (rekapRowInput) rekapRowInput.value = isSubActivityEdit ? (sub.rekap_row_number || '') : '';
+    modal.classList.remove('is-closing');
     modal.style.display = 'grid';
     window.setTimeout(() => input.focus(), 30);
 
     const close = () => {
-      modal.style.display = 'none';
+      hideElementAnimated(modal);
       submit.onclick = null;
       cancel.onclick = null;
       if(closeBtn) closeBtn.onclick = null;
@@ -1181,19 +1201,17 @@
 
     submitBtn.textContent = 'Simpan';
     submitBtn.disabled = false;
+    modal.classList.remove('is-closing');
     modal.style.display = 'grid';
 
     window.setTimeout(function() { urlInput.focus(); }, 50);
 
     var closeModal = function() {
-      modal.style.opacity = '0';
-      setTimeout(function() {
-        modal.style.display = 'none';
-        modal.style.opacity = '1';
+      hideElementAnimated(modal, function() {
         submitBtn.onclick = null;
         cancelBtn.onclick = null;
         closeBtn.onclick = null;
-      }, 200);
+      });
     };
 
     var handleSubmit = function() {

@@ -1810,6 +1810,17 @@
       try {
         var result = await submitArchivePayload_(snap, metadata, sourceFileId);
         try { localStorage.removeItem(snap.restoreKey); } catch (e) {}
+        // Optimistic: suntik item baru ke folder arsip supaya langsung tampil saat
+        // kembali, tanpa menunggu Drive.Files.list terindeks (eventual consistency).
+        // Hanya untuk arsip baru — edit memakai file id yang sudah ada.
+        if (!snap.editMode && result && result.finalFile && result.finalFile.id && snap.targetFolderId) {
+          var optFile = Object.assign({ updated: new Date().toISOString() }, result.finalFile);
+          window._optimisticAddedFiles = window._optimisticAddedFiles || Object.create(null);
+          var bucket = window._optimisticAddedFiles[snap.targetFolderId] || [];
+          if (!bucket.some(function (f) { return f.id === optFile.id; })) bucket.unshift(optFile);
+          window._optimisticAddedFiles[snap.targetFolderId] = bucket;
+          invalidateViewCache('archive_folder');
+        }
         if (loadingToast) removeToast(loadingToast);
         showToast(result.warning || 'Selesai: ' + (result.finalFile ? result.finalFile.name : ''));
       } catch (error) {

@@ -15,12 +15,12 @@
 
   function openModal_(modalId) {
     const el = document.getElementById(modalId);
-    if (el) el.style.display = 'grid';
+    if (el) { el.classList.remove('is-closing'); el.style.display = 'grid'; }
   }
 
   function closeModal_(modalId) {
     const el = document.getElementById(modalId);
-    if (el) el.style.display = 'none';
+    if (el) hideElementAnimated(el);
   }
 
   window._navigateToFolder = function(folderName) {
@@ -67,26 +67,31 @@
         year: state.bootstrap.settings.currentYear
       });
 
-      if (result.updated) {
+      // Selalu terapkan bootstrap terbaru, walau result.updated=false.
+      // `updated` cuma menandai apakah sheet berubah DI sync ini — bukan apakah
+      // state client sudah cocok dengan server. Tanpa ini, folder yang dibuat
+      // lewat createParentFolder (bootstrap-nya bisa telat karena Drive eventual
+      // consistency) tak pernah muncul sampai hard refresh.
+      if (result.bootstrap) {
         state.bootstrap = result.bootstrap;
         populateDashboardNav();
-        const stillViewing = state.view === 'activity_detail' && state.selectedActivityId === activity.activity_id;
+      }
 
-        if (stillViewing) {
-          const hasInteraction = document.querySelector('.sub-dropdown-menu.open') ||
-            Array.from(document.querySelectorAll('[id$="-modal"]')).some(m => m.style.display === 'flex');
-
-          if (_syncIsSilent && hasInteraction) {
-            showToast('Folder baru disinkronkan di latar belakang.');
-          } else {
-            renderActivityDetail();
-            showToast('Folder baru berhasil disinkronkan dari Drive!');
-          }
-        } else if (!_syncIsSilent) {
-          showToast('Sinkronisasi selesai. Data aplikasi sudah diperbarui.');
+      const stillViewing = state.view === 'activity_detail' && state.selectedActivityId === activity.activity_id;
+      if (stillViewing) {
+        const hasInteraction = document.querySelector('.sub-dropdown-menu.open') ||
+          Array.from(document.querySelectorAll('[id$="-modal"]')).some(m => m.style.display === 'flex');
+        if (!(_syncIsSilent && hasInteraction)) {
+          renderActivityDetail();
         }
-      } else if (!_syncIsSilent) {
-        showToast('Folder Drive sudah up-to-date.');
+      }
+
+      if (!_syncIsSilent) {
+        if (result.updated) {
+          showToast(stillViewing ? 'Folder baru berhasil disinkronkan dari Drive!' : 'Sinkronisasi selesai. Data aplikasi sudah diperbarui.');
+        } else {
+          showToast('Folder Drive sudah up-to-date.');
+        }
       }
     } catch (error) {
       if (!_syncIsSilent) {
@@ -107,7 +112,7 @@
 
 
   async function submitDeleteSub_(deleteModal, deleteSubmitBtn, currentDeleteSubId) {
-    deleteModal.style.display = 'none';
+    hideElementAnimated(deleteModal);
     const card = document.querySelector('.tall-card[data-sub-id="' + currentDeleteSubId + '"]');
     if (card) card.style.display = 'none';
 
@@ -132,7 +137,7 @@
   }
 
   async function submitTrashSub_(trashModal, trashSubmitBtn, currentTrashSubId) {
-    trashModal.style.display = 'none';
+    hideElementAnimated(trashModal);
     const card = document.querySelector('.tall-card[data-sub-id="' + currentTrashSubId + '"]');
     if (card) card.style.display = 'none';
 
@@ -355,7 +360,8 @@
         if (res && res.bootstrap) {
           state.bootstrap = res.bootstrap;
         }
-        
+        invalidateViewCache();
+
         btn.innerHTML = '<span class="spinner" style="margin-right: 8px;"></span> Memverifikasi Sinkronisasi...';
         showProcessToast('Folder berhasil dibuat di Drive. Menyelaraskan data...', true);
         

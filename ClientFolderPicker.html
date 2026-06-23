@@ -208,8 +208,17 @@
   }
 
   function closeFolderPicker() {
-    state.folderPicker = null;
-    renderFolderPicker();
+    const host = document.getElementById('folder-picker-root');
+    const backdrop = host && host.querySelector('.modal-backdrop');
+    if (backdrop) {
+      hideElementAnimated(backdrop, function () {
+        state.folderPicker = null;
+        renderFolderPicker();
+      });
+    } else {
+      state.folderPicker = null;
+      renderFolderPicker();
+    }
   }
 
   function ensureFolderPickerHost() {

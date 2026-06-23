@@ -183,11 +183,16 @@
         </div>
       `;
       document.body.appendChild(host);
-      const close = () => { host.remove(); resolve(false); };
+      const backdrop = host.querySelector('.modal-backdrop');
+      const dismiss = (result) => {
+        hideElementAnimated(backdrop, () => host.remove());
+        resolve(result);
+      };
+      const close = () => dismiss(false);
       host.querySelector('#confirm-modal-close').onclick = close;
       host.querySelector('#confirm-modal-no').onclick = close;
-      host.querySelector('#confirm-modal-yes').onclick = () => { host.remove(); resolve(true); };
-      host.querySelector('.modal-backdrop').onclick = (e) => { if (e.target === e.currentTarget) close(); };
+      host.querySelector('#confirm-modal-yes').onclick = () => dismiss(true);
+      backdrop.onclick = (e) => { if (e.target === e.currentTarget) close(); };
     });
   }
 

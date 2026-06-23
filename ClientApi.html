@@ -62,7 +62,42 @@
     if (contentEl) {
       contentEl.innerHTML = html;
       contentEl.scrollTop = 0;
+      // Retrigger animasi masuk halaman: lepas kelas, paksa reflow, pasang lagi.
+      contentEl.classList.remove('view-anim');
+      void contentEl.offsetWidth;
+      contentEl.classList.add('view-anim');
     }
+  }
+
+  // Sembunyikan elemen (modal) dengan animasi keluar lalu set display:none.
+  // Selalu menutup pada akhirnya (animationend ATAU fallback timeout) supaya
+  // tak ada modal yang macet. Instan saat prefers-reduced-motion.
+  function hideElementAnimated(el, onDone) {
+    if (!el) { if (typeof onDone === 'function') onDone(); return; }
+    const finish = function () {
+      // Dibatalkan bila modal dibuka ulang sebelum animasi selesai (open melepas is-closing).
+      if (!el.classList.contains('is-closing')) return;
+      el.classList.remove('is-closing');
+      el.style.display = 'none';
+      if (typeof onDone === 'function') onDone();
+    };
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || el.style.display === 'none') {
+      el.classList.remove('is-closing');
+      el.style.display = 'none';
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    el.classList.add('is-closing');
+    let done = false;
+    const handler = function () {
+      if (done) return;
+      done = true;
+      el.removeEventListener('animationend', handler);
+      finish();
+    };
+    el.addEventListener('animationend', handler);
+    window.setTimeout(handler, 220); // fallback bila animationend tak terpicu
   }
 
   let activePersistentToast = null;

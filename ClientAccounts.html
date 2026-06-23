@@ -269,7 +269,7 @@
     const modal = document.getElementById('account-modal');
     const cancel = document.getElementById('account-modal-cancel');
     const close = document.getElementById('account-modal-close');
-    const closeModal = () => { modal.style.display = 'none'; };
+    const closeModal = () => { hideElementAnimated(modal); };
     cancel?.addEventListener('click', closeModal);
     close?.addEventListener('click', closeModal);
     modal?.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
@@ -428,6 +428,7 @@
 
     if (spinner) spinner.classList.remove('active');
     updateAccAvatarPreview();
+    modal.classList.remove('is-closing');
     modal.style.display = 'grid';
     window.setTimeout(() => username.focus(), 50);
 
@@ -458,7 +459,7 @@
       }
 
       // OPTIMISTIC UI: Instantly close modal and show toast
-      modal.style.display = 'none';
+      hideElementAnimated(modal);
       const isEdit = !!_currentEditAccountId;
       const pt = showProcessToast(isEdit ? 'Menyimpan perubahan...' : 'Menambahkan akun...');
       
@@ -490,6 +491,7 @@
       } catch (error) {
         pt.error('Gagal: ' + (errorMessage(error)));
         // Revert UI on failure: reopen modal
+        modal.classList.remove('is-closing');
         modal.style.display = 'grid';
         submit.disabled = false;
         submit.classList.remove('loading');

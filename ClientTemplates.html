@@ -650,6 +650,7 @@
   function openUploadModal(preselectedCategoryId) {
     const modal = document.getElementById('tpl-upload-modal');
     if (!modal) return;
+    modal.classList.remove('is-closing');
     modal.style.display = 'grid';
     document.getElementById('tpl-upload-file').value = '';
     document.getElementById('tpl-upload-name').value = '';
@@ -660,7 +661,7 @@
 
   function closeUploadModal() {
     const modal = document.getElementById('tpl-upload-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) hideElementAnimated(modal);
   }
 
   function bindUploadEvents(categories) {
@@ -808,12 +809,12 @@
 
   function openCategoryManager() {
     const modal = document.getElementById('tpl-cat-modal');
-    if (modal) modal.style.display = 'grid';
+    if (modal) { modal.classList.remove('is-closing'); modal.style.display = 'grid'; }
   }
 
   function closeCategoryManager() {
     const modal = document.getElementById('tpl-cat-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) hideElementAnimated(modal);
   }
 
   function bindCatManagerEvents(categories) {
@@ -864,6 +865,7 @@
     document.getElementById('tpl-cat-form-name').value = category ? category.name : '';
     document.getElementById('tpl-cat-form-color').value = category ? normalizeTemplateCategoryColor(category.color) : DEFAULT_TEMPLATE_CATEGORY_COLOR;
 
+    modal.classList.remove('is-closing');
     modal.style.display = 'grid';
     syncTemplateColorPickerState();
     updateCategoryFormPreview();
@@ -874,7 +876,7 @@
 
   function closeCategoryFormModal() {
     const modal = document.getElementById('tpl-cat-form-modal');
-    if (modal) modal.style.display = 'none';
+    if (modal) hideElementAnimated(modal);
   }
 
   function syncTemplateColorPickerState() {

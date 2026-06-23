@@ -21,9 +21,6 @@ const WorkspaceController = {
     auditAction_(actor, 'WORKSPACE_INIT', { year: payload.year, message: 'Inisialisasi ruang kerja tahun ' + (payload.year || '-') });
     return r;
   },
-  forceResetAdmin: function() {
-    return SettingsController.forceResetAdmin();
-  },
   deleteYear: function (payload) {
     SystemLogger.warn('WORKSPACE_DELETE_YEAR', 'Deleting year config', { year: payload.year });
     payload = payload || {};
