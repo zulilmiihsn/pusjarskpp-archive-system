@@ -42,6 +42,67 @@ function buildDetailRowValues_(metadata) {
   });
 }
 
+// Bangun satu sel detail arsip: nilai + format (border SOLID, wrap, vertical middle),
+// konversi tanggal -> formula =DATE() + format DATE, format '00' utk nomor item, dan
+// link sel bila ada *_url. Dipakai append/bulk/update agar formatnya konsisten.
+function buildDetailCellData_(fieldName, val, metadata) {
+  const isItem = fieldName === 'nomor_item_arsip';
+  const isNumericField = fieldName === 'jumlah' || isItem;
+  const numericVal = Number(val);
+  let userEnteredValue;
+  let numberFormat;
+
+  if (fieldName === 'tanggal' && val) {
+    const d = parseDateCell_(val);
+    if (d) {
+      userEnteredValue = { formulaValue: '=DATE(' + d.getFullYear() + ',' + (d.getMonth() + 1) + ',' + d.getDate() + ')' };
+      numberFormat = { type: 'DATE', pattern: 'd mmmm yyyy' };
+    } else {
+      userEnteredValue = { stringValue: String(val) };
+    }
+  } else if (isNumericField && !isNaN(numericVal) && String(val).trim() !== '') {
+    userEnteredValue = { numberValue: numericVal };
+  } else {
+    userEnteredValue = { stringValue: String(val) };
+  }
+
+  const cellData = {
+    userEnteredValue: userEnteredValue,
+    userEnteredFormat: {
+      wrapStrategy: 'WRAP',
+      verticalAlignment: 'MIDDLE',
+      borders: {
+        top: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+        bottom: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+        left: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
+        right: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } }
+      }
+    }
+  };
+
+  if (numberFormat) {
+    cellData.userEnteredFormat.numberFormat = numberFormat;
+  }
+  if (isItem) {
+    cellData.userEnteredFormat.numberFormat = { type: 'NUMBER', pattern: '00' };
+  }
+
+  if (fieldName === 'lokasi_simpan' && metadata._lokasi_simpan_url) {
+    cellData.userEnteredFormat.textFormat = { link: { uri: metadata._lokasi_simpan_url } };
+  }
+  if (fieldName === 'no_filing_cabinet' && metadata._no_filing_cabinet_url) {
+    cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_filing_cabinet_url } };
+  }
+  if (fieldName === 'no_laci' && metadata._no_laci_url) {
+    cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_laci_url } };
+  }
+  if (fieldName === 'no_folder' && metadata._no_folder_url) {
+    cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_folder_url } };
+  }
+
+  return cellData;
+}
+
 function extractMetadataFromRow_(rowValues) {
   const metadata = {};
   DETAIL_FIELD_ORDER.forEach(function (key, i) {
@@ -113,65 +174,7 @@ const SpreadsheetService = {
 
     const rowData = { values: [] };
     for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
-      const fieldName = DETAIL_FIELD_ORDER[c];
-      const val = rowValues[c] || '';
-      const isJumlah = fieldName === 'jumlah';
-      const isItem = fieldName === 'nomor_item_arsip';
-      const isNumericField = isJumlah || isItem;
-      const numericVal = Number(val);
-      let userEnteredValue;
-      let numberFormat = undefined;
-      
-      if (fieldName === 'tanggal' && val) {
-        const d = parseDateCell_(val);
-        if (d) {
-          userEnteredValue = { formulaValue: '=DATE(' + d.getFullYear() + ',' + (d.getMonth() + 1) + ',' + d.getDate() + ')' };
-          numberFormat = { type: 'DATE', pattern: 'd mmmm yyyy' };
-        } else {
-          userEnteredValue = { stringValue: String(val) };
-        }
-      } else if (isNumericField && !isNaN(numericVal) && String(val).trim() !== '') {
-        userEnteredValue = { numberValue: numericVal };
-      } else {
-        userEnteredValue = { stringValue: String(val) };
-      }
-
-      const cellData = {
-        userEnteredValue: userEnteredValue,
-        userEnteredFormat: {
-          wrapStrategy: 'WRAP',
-          verticalAlignment: 'MIDDLE',
-          borders: {
-            top: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
-            bottom: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
-            left: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
-            right: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } }
-          }
-        }
-      };
-
-      if (numberFormat) {
-         cellData.userEnteredFormat.numberFormat = numberFormat;
-      }
-      if (isItem) {
-         cellData.userEnteredFormat.numberFormat = { type: 'NUMBER', pattern: '00' };
-      }
-
-      if (fieldName === 'lokasi_simpan' && metadata._lokasi_simpan_url) {
-         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._lokasi_simpan_url } };
-      }
-
-      if (fieldName === 'no_filing_cabinet' && metadata._no_filing_cabinet_url) {
-         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_filing_cabinet_url } };
-      }
-      if (fieldName === 'no_laci' && metadata._no_laci_url) {
-         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_laci_url } };
-      }
-      if (fieldName === 'no_folder' && metadata._no_folder_url) {
-         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_folder_url } };
-      }
-
-      rowData.values.push(cellData);
+      rowData.values.push(buildDetailCellData_(DETAIL_FIELD_ORDER[c], rowValues[c] || '', metadata));
     }
 
     const request = {
@@ -272,65 +275,7 @@ const SpreadsheetService = {
       
       const rowData = { values: [] };
       for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
-        const fieldName = DETAIL_FIELD_ORDER[c];
-        const val = rowVals[c] || '';
-        const isJumlah = fieldName === 'jumlah';
-        const isItem = fieldName === 'nomor_item_arsip';
-        const isNumericField = isJumlah || isItem;
-        const numericVal = Number(val);
-        let userEnteredValue;
-        let numberFormat = undefined;
-        
-        if (fieldName === 'tanggal' && val) {
-          const d = parseDateCell_(val);
-          if (d) {
-            userEnteredValue = { formulaValue: '=DATE(' + d.getFullYear() + ',' + (d.getMonth() + 1) + ',' + d.getDate() + ')' };
-            numberFormat = { type: 'DATE', pattern: 'd mmmm yyyy' };
-          } else {
-            userEnteredValue = { stringValue: String(val) };
-          }
-        } else if (isNumericField && !isNaN(numericVal) && String(val).trim() !== '') {
-          userEnteredValue = { numberValue: numericVal };
-        } else {
-          userEnteredValue = { stringValue: String(val) };
-        }
-
-        const cellData = {
-          userEnteredValue: userEnteredValue,
-          userEnteredFormat: {
-            wrapStrategy: 'WRAP',
-            verticalAlignment: 'MIDDLE',
-            borders: {
-              top: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
-              bottom: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
-              left: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
-              right: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } }
-            }
-          }
-        };
-
-        if (numberFormat) {
-           cellData.userEnteredFormat.numberFormat = numberFormat;
-        }
-        if (isItem) {
-           cellData.userEnteredFormat.numberFormat = { type: 'NUMBER', pattern: '00' };
-        }
-
-        if (fieldName === 'lokasi_simpan' && meta._lokasi_simpan_url) {
-           cellData.userEnteredFormat.textFormat = { link: { uri: meta._lokasi_simpan_url } };
-        }
-
-        if (fieldName === 'no_filing_cabinet' && meta._no_filing_cabinet_url) {
-           cellData.userEnteredFormat.textFormat = { link: { uri: meta._no_filing_cabinet_url } };
-        }
-        if (fieldName === 'no_laci' && meta._no_laci_url) {
-           cellData.userEnteredFormat.textFormat = { link: { uri: meta._no_laci_url } };
-        }
-        if (fieldName === 'no_folder' && meta._no_folder_url) {
-           cellData.userEnteredFormat.textFormat = { link: { uri: meta._no_folder_url } };
-        }
-
-        rowData.values.push(cellData);
+        rowData.values.push(buildDetailCellData_(DETAIL_FIELD_ORDER[c], rowVals[c] || '', meta));
       }
       rowsData.push(rowData);
     }
@@ -417,45 +362,7 @@ const SpreadsheetService = {
 
     const rowData = { values: [] };
     for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
-      const fieldName = DETAIL_FIELD_ORDER[c];
-      const val = rowValues[c] || '';
-      const isJumlah = fieldName === 'jumlah';
-      const isItem = fieldName === 'nomor_item_arsip';
-      const isNumericField = isJumlah || isItem;
-      const numericVal = Number(val);
-      const cellData = {
-        userEnteredValue: (isNumericField && !isNaN(numericVal) && String(val).trim() !== '') ? { numberValue: numericVal } : { stringValue: String(val) },
-        userEnteredFormat: {
-          wrapStrategy: 'WRAP',
-          verticalAlignment: 'MIDDLE',
-          borders: {
-            top: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
-            bottom: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
-            left: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } },
-            right: { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0 } }
-          }
-        }
-      };
-
-      if (isItem) {
-         cellData.userEnteredFormat.numberFormat = { type: 'NUMBER', pattern: '00' };
-      }
-
-      if (fieldName === 'lokasi_simpan' && metadata._lokasi_simpan_url) {
-         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._lokasi_simpan_url } };
-      }
-
-      if (fieldName === 'no_filing_cabinet' && metadata._no_filing_cabinet_url) {
-         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_filing_cabinet_url } };
-      }
-      if (fieldName === 'no_laci' && metadata._no_laci_url) {
-         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_laci_url } };
-      }
-      if (fieldName === 'no_folder' && metadata._no_folder_url) {
-         cellData.userEnteredFormat.textFormat = { link: { uri: metadata._no_folder_url } };
-      }
-
-      rowData.values.push(cellData);
+      rowData.values.push(buildDetailCellData_(DETAIL_FIELD_ORDER[c], rowValues[c] || '', metadata));
     }
 
     const request = {
