@@ -12,6 +12,20 @@ function sanitizeCellValue_(value) {
 
 function buildDetailRowValues_(metadata) {
   return DETAIL_FIELD_ORDER.map(function (key) {
+    if (key === 'uraian_informasi_item') {
+      const parts = [];
+      const nomor = String(metadata.nomor_surat || '').trim();
+      const uraian = String(metadata.uraian_informasi_item || '').trim();
+      const kepada = String(metadata.kepada || '').trim();
+      const dari = String(metadata.dari || '').trim();
+      
+      if (nomor) parts.push(nomor);
+      if (uraian) parts.push(uraian);
+      if (kepada) parts.push(kepada);
+      if (dari) parts.push(dari);
+      
+      return sanitizeCellValue_(parts.join(' / '));
+    }
     if (key === 'lokasi_simpan' && metadata._lokasi_simpan_url) {
       return sanitizeCellValue_(metadata._lokasi_simpan_url);
     }

@@ -154,6 +154,9 @@ const ArchiveController = {
              if (!metadata.nomor_surat && savedMeta.metadata.nomor_surat) metadata.nomor_surat = savedMeta.metadata.nomor_surat;
              if (!metadata.satuan && savedMeta.metadata.satuan) metadata.satuan = savedMeta.metadata.satuan;
              if (!metadata.ket && savedMeta.metadata.ket) metadata.ket = savedMeta.metadata.ket;
+             if (savedMeta.metadata.uraian_informasi_item) metadata.uraian_informasi_item = savedMeta.metadata.uraian_informasi_item;
+             if (savedMeta.metadata.kepada) metadata.kepada = savedMeta.metadata.kepada;
+             if (savedMeta.metadata.dari) metadata.dari = savedMeta.metadata.dari;
            }
          } catch (e) { console.warn('getArchiveMetadata: failed to parse metadata_json: ' + e.message); }
        }
