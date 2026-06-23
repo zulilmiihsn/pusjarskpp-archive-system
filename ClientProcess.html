@@ -1269,12 +1269,21 @@
   function ensureProcessRequiredFields_(fields, activityId) {
     const result = fields.slice();
     const byName = {};
-    result.forEach(f => { byName[f.field_name] = f; });
+    result.forEach(f => { 
+      byName[f.field_name] = f;
+      // Force overrides as requested
+      if (f.field_name === 'nomor_surat') {
+        f.is_required = 'TRUE';
+        f.spreadsheet_column_name = 'Nomor Surat';
+      }
+      if (f.field_name === 'no_filing_cabinet') f.is_required = 'TRUE';
+      if (f.field_name === 'satuan') f.is_required = 'TRUE';
+    });
     [
-      ['nomor_surat', 'Nomor Item', false, 'text', 2.5],
+      ['nomor_surat', 'Nomor Surat', true, 'text', 2.5],
       ['kepada', 'Kepada', false, 'text', 8.1],
       ['dari', 'Dari', false, 'text', 8.2],
-      ['no_filing_cabinet', 'No Filing Cabinet', false, 'text', 9],
+      ['no_filing_cabinet', 'No Filing Cabinet', true, 'text', 9],
       ['no_laci', 'No Laci', true, 'text', 10],
       ['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', false, 'select', 12]
     ].forEach(item => {
