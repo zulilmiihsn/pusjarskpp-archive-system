@@ -2,19 +2,9 @@
 
 const AccountController = {
   getAdminAuditLogs: function (payload) { requireAdmin_(payload); return SettingsController.getAdminAuditLogs(payload); },
-  listAccounts: function (payload) { 
-    requireAdmin_(payload); 
-    const all = ConfigService.listAccounts().map(stripAccountSecrets_);
-    const page = payload && payload.page ? Math.max(1, payload.page) : 1;
-    const pageSize = payload && payload.pageSize ? Math.max(1, payload.pageSize) : 50;
-    const total = all.length;
-    const start = (page - 1) * pageSize;
-    return {
-      items: all.slice(start, start + pageSize),
-      total: total,
-      page: page,
-      totalPages: Math.ceil(total / pageSize)
-    };
+  listAccounts: function (payload) {
+    requireAdmin_(payload);
+    return paginate_(ConfigService.listAccounts().map(stripAccountSecrets_), payload);
   },
   saveAccount: function (payload) {
     payload = payload || {};
@@ -59,16 +49,20 @@ const AccountController = {
   getHistory: function (payload) {
     payload = payload || {};
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
-    const all = CacheHelper.getConfig(year).history || [];
-    const page = payload && payload.page ? Math.max(1, payload.page) : 1;
-    const pageSize = payload && payload.pageSize ? Math.max(1, payload.pageSize) : 50;
-    const total = all.length;
-    const start = (page - 1) * pageSize;
-    return {
-      items: all.slice(start, start + pageSize),
-      total: total,
-      page: page,
-      totalPages: Math.ceil(total / pageSize)
-    };
+    return paginate_(CacheHelper.getConfig(year).history || [], payload);
   }
 };
+
+// Paginasi seragam untuk endpoint daftar (akun, riwayat). page mulai 1, pageSize default 50.
+function paginate_(all, payload) {
+  const page = payload && payload.page ? Math.max(1, payload.page) : 1;
+  const pageSize = payload && payload.pageSize ? Math.max(1, payload.pageSize) : 50;
+  const total = all.length;
+  const start = (page - 1) * pageSize;
+  return {
+    items: all.slice(start, start + pageSize),
+    total: total,
+    page: page,
+    totalPages: Math.ceil(total / pageSize)
+  };
+}
