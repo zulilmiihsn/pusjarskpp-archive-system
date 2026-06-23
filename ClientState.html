@@ -174,13 +174,7 @@
   /* ── State accessor helpers (single source of truth) ── */
   function getSettings() { return state.bootstrap && state.bootstrap.settings; }
   function getCurrentYear() { const s = getSettings(); return s ? s.currentYear : null; }
-  function getActivities() { return state.bootstrap ? state.bootstrap.activities || [] : []; }
-  function getHistory() { return state.bootstrap ? state.bootstrap.history || [] : []; }
-  function getProgress() { return state.bootstrap ? state.bootstrap.progress || {} : {}; }
-  function getDraft() { return state.draft; }
-  function setDraft(val) { state.draft = val; }
   function isGuest() { return state.currentUser && state.currentUser.role === 'guest'; }
-  function isAdmin() { return state.currentUser && state.currentUser.role === 'admin'; }
   function isKegiatanView() { return state.view === 'activity_detail' || state.view === 'archive_folder'; }
   function isAdminView() { return ['accounts', 'settings', 'audit', 'inactive'].indexOf(state.view) !== -1; }
 

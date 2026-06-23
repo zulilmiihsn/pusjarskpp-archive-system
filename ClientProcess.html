@@ -97,15 +97,6 @@
     updateFileName();
   }
 
-  function getDropTarget() {
-    const select = document.getElementById('activity-id');
-    if (!select) return { id: '', name: '' };
-    const activity = getActivity(select.value);
-    return activity
-      ? { id: activity.activity_id, name: activity.activity_name }
-      : { id: '', name: '' };
-  }
-
   let _fileNameTimer = null;
   async function updateFileName() {
     if (!state.draft) return '';
@@ -138,25 +129,6 @@
       saveProcessStateToLocal();
     }, 200);
     return state.draft.finalFileName;
-  }
-
-  function setSourceFile(name, id, url) {
-    if (!state.draft) {
-      state.draft = { sourceFile: {}, metadata: {} };
-    }
-    state.draft.sourceFile = { id: id || '', name: name || '', url: url || '' };
-
-    var container = document.getElementById('dropzone-content');
-    var dz = document.getElementById('dropzone');
-    if (container) {
-      container.className = 'file-preview-wrap';
-      container.innerHTML = getFilePreviewHtml_(state.draft.sourceFile);
-    }
-    if (dz) dz.classList.add('has-file');
-
-    bindPreviewActions_();
-
-    fillNomorSuratFromSourceName_(false);
   }
 
   const MAX_UPLOAD_MB = 10;
