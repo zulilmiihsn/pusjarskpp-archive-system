@@ -102,6 +102,7 @@
     flex: 1;
     min-width: 0;
     overflow: hidden;
+    container-type: inline-size;
   }
 
   .archive-row-main strong {
@@ -111,6 +112,17 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .archive-list-row:hover .archive-row-main strong {
+    width: max-content;
+    text-overflow: clip;
+    animation: scroll-text-hover 4s linear infinite alternate;
+  }
+
+  @keyframes scroll-text-hover {
+    0%, 15% { transform: translateX(0); }
+    85%, 100% { transform: translateX(min(0px, calc(100cqw - 100% - 4px))); }
   }
 
   .archive-row-main small {

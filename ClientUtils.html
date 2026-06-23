@@ -191,7 +191,11 @@
       const close = () => dismiss(false);
       host.querySelector('#confirm-modal-close').onclick = close;
       host.querySelector('#confirm-modal-no').onclick = close;
-      host.querySelector('#confirm-modal-yes').onclick = () => dismiss(true);
+      host.querySelector('#confirm-modal-yes').onclick = function() {
+        this.disabled = true;
+        this.textContent = 'Memproses...';
+        dismiss(true);
+      };
       backdrop.onclick = (e) => { if (e.target === e.currentTarget) close(); };
     });
   }

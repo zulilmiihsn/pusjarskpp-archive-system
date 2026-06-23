@@ -112,36 +112,45 @@
 
 
   async function submitDeleteSub_(deleteModal, deleteSubmitBtn, currentDeleteSubId) {
+    if (deleteSubmitBtn) {
+      deleteSubmitBtn.disabled = true;
+      deleteSubmitBtn.textContent = 'Menonaktifkan...';
+    }
     hideElementAnimated(deleteModal);
     const card = document.querySelector('.tall-card[data-sub-id="' + currentDeleteSubId + '"]');
     if (card) card.style.display = 'none';
 
-    var deleteSubToast = showProcessToast('Menonaktifkan sub-kegiatan...', true);
     try {
       const result = await api('deleteSubActivity', {
         activityId: getActivity(state.selectedActivityId).activity_id,
         subActivityId: currentDeleteSubId,
         year: state.bootstrap.settings.currentYear
       });
-      if (deleteSubToast) removeToast(deleteSubToast);
       state.bootstrap = result.bootstrap;
       if (state.view === 'activity_detail' && state.selectedActivityId === getActivity(state.selectedActivityId)?.activity_id) {
         renderActivityDetail();
       }
       showToast('Sub-kegiatan dinonaktifkan dari menu aktif.');
     } catch (error) {
-      if (deleteSubToast) removeToast(deleteSubToast);
       showToast('Gagal menonaktifkan: ' + (errorMessage(error)));
       if (card) card.style.display = '';
+    } finally {
+      if (deleteSubmitBtn) {
+        deleteSubmitBtn.disabled = false;
+        deleteSubmitBtn.textContent = 'Ya, Nonaktifkan';
+      }
     }
   }
 
   async function submitTrashSub_(trashModal, trashSubmitBtn, currentTrashSubId) {
+    if (trashSubmitBtn) {
+      trashSubmitBtn.disabled = true;
+      trashSubmitBtn.textContent = 'Menghapus...';
+    }
     hideElementAnimated(trashModal);
     const card = document.querySelector('.tall-card[data-sub-id="' + currentTrashSubId + '"]');
     if (card) card.style.display = 'none';
 
-    var trashSubToast = showProcessToast('Memindahkan folder ke Tempat Sampah...', true);
     try {
       const result = await api('trashSubActivityFolder', {
         activityId: getActivity(state.selectedActivityId).activity_id,
@@ -155,9 +164,14 @@
       }
       showToast('Sub-kegiatan dihapus.');
     } catch (error) {
-      if (trashSubToast) removeToast(trashSubToast);
+      if (typeof trashSubToast !== 'undefined' && trashSubToast) removeToast(trashSubToast);
       showToast('Gagal memindahkan folder: ' + (errorMessage(error)));
       if (card) card.style.display = '';
+    } finally {
+      if (trashSubmitBtn) {
+        trashSubmitBtn.disabled = false;
+        trashSubmitBtn.textContent = 'Ya, Hapus';
+      }
     }
   }
 
