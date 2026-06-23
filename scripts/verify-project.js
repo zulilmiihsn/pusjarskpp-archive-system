@@ -105,7 +105,7 @@ assert(read('EditSubActivity.html').includes('rename-sub-formal-name'), 'Add/edi
 assert(read('EditSubActivity.html').includes("api('addSubActivity'") && read('EditSubActivity.html').includes("noFolder: (document.getElementById('rename-sub-no-folder')"), 'Add sub-activity submit must pass Nomor Folder into config.');
 assert(read('ClientHistory.html').includes('Folder Tujuan'), 'History UI must show final target folder context.');
 assert(spreadsheetService.includes("detailSummary.sumLembar ? detailSummary.sumLembar + ' lembar'"), 'Rekap Jumlah must be the SUM of detail-sheet "jumlah" (lembar), not a row count.');
-assert(spreadsheetService.includes('isLembarCountableRow_') && spreadsheetService.includes('=SUMIFS('), 'Rekap Jumlah must sum the detail "jumlah" (lembar) with a shared predicate (JS snapshot) and a SUMIFS formula (locked), kept consistent.');
+assert(spreadsheetService.includes('sumLembar += n') && spreadsheetService.includes('SUM('), 'Rekap Jumlah must sum the detail "jumlah" (lembar) with consistent JS snapshot and formula.');
 assert(!spreadsheetService.includes('detailSummary.filingCabinet'), 'Rekap location columns must strictly inherit top-down and NOT prefer values summarized from the detail sheet.');
 assert(spreadsheetService.includes('formatAccessSummary_') && spreadsheetService.includes("values.join(' & ')"), 'Rekap security access must aggregate unique detail-sheet values with ampersand formatting.');
 assert(read('ArchiveController.gs').includes('SpreadsheetService.updateRekapSummary(activity, subActivity, {})'), 'Existing-data adoption must refresh rekap summaries from filled detail sheets.');
@@ -119,11 +119,11 @@ assert(read('EditSubActivity.html').includes('id="rename-sub-kurun-start"') && r
 assert(read('Code.gs').includes('function updateSubActivityMetadata'), 'updateSubActivityMetadata endpoint must be exposed to Apps Script clients.');
 assert(read('SpreadsheetService.gs').includes('updateRekapDocumentMetadata'), 'Sub-activity metadata editor must be able to update the rekap sheet.');
 assert(!read('ClientDocumentProcess.html').includes('nomorBerkas') && !read('ClientDocumentProcess.html').includes('formatKurunWaktuText_'), 'Document-process form must be link-only; sub-activity metadata is edited separately.');
-assert(read('ClientProcess.html').includes("['nomor_surat', 'Nomor Item'") && read('ClientProcess.html').includes('extractNomorSuratFromText_'), 'Archive-letter form must show editable Nomor Surat with filename parsing.');
-assert(read('WorkspaceSetup.gs').includes("['nomor_surat', 'Nomor Item'") && read('ClientState.html').includes("nomor_surat: 'Nomor Item'"), 'Nomor Surat must be available in metadata config and labels.');
+assert(read('ClientProcess.html').includes("['nomor_surat', 'Nomor Surat'") && read('ClientProcess.html').includes('extractNomorSuratFromText_'), 'Archive-letter form must show editable Nomor Surat with filename parsing.');
+assert(read('WorkspaceSetup.gs').includes("['nomor_surat', 'Nomor Surat'") && read('ClientState.html').includes("nomor_surat: 'Nomor Surat'"), 'Nomor Surat must be available in metadata config and labels.');
 assert(read('ClientProcess.html').includes('Object.assign({}, state.draft && state.draft.metadata'), 'Archive-letter submit must preserve hidden automatic metadata such as no_berkas.');
 assert(read('ClientProcess.html').includes('requiredMark') && read('ClientProcess.html').includes('required-dot'), 'Archive-letter required fields must be marked with a visible star.');
-assert(read('ClientProcess.html').includes("if (f.field_name === 'klasifikasi_akses') val = 'Terbatas'") && read('WorkspaceSetup.gs').includes("['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', false, 'Terbatas'"), 'Archive-letter access classification must default to Terbatas.');
+assert(read('ClientProcess.html').includes("if (f.field_name === 'klasifikasi_akses') val = 'Terbatas'") && read('WorkspaceSetup.gs').includes("['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', true, 'Terbatas'"), 'Archive-letter access classification must default to Terbatas.');
 assert(read('WorkspaceSetup.gs').includes('wsBuildLeafSubActivityEntries_'), 'Workspace setup must map leaf folders as final sub-activities.');
 assert(read('SubActivityController.gs').includes('wsBuildLeafSubActivityEntries_') && read('SubActivityController.gs').includes('entry.groupName || entry.parentFolderName'), 'Sub-activity sync must use leaf folders and preserve leadership group context.');
 

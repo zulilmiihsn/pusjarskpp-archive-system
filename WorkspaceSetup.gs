@@ -886,7 +886,7 @@ function wsBuildMetadataRows_(year) {
     ['no_filing_cabinet', 'No Filing Cabinet', true, '', 'number'],
     ['no_laci', 'No Laci', true, '', 'number'],
     ['no_folder', 'No Folder', true, '', 'number'],
-    ['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', false, 'Terbatas', 'select'],
+    ['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', true, 'Terbatas', 'select'],
     ['ket', 'Ket.', false, '', 'text'],
     ['lokasi_simpan', 'Lokasi Simpan', true, '', 'text']
   ];

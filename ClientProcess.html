@@ -1285,7 +1285,7 @@
       ['dari', 'Dari', false, 'text', 8.2],
       ['no_filing_cabinet', 'No Filing Cabinet', true, 'text', 9],
       ['no_laci', 'No Laci', true, 'text', 10],
-      ['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', false, 'select', 12]
+      ['klasifikasi_akses', 'Klasifikasi Keamanan & Akses Arsip', true, 'select', 12]
     ].forEach(item => {
       if (byName[item[0]]) return;
       result.push({
@@ -1318,12 +1318,22 @@
   }
 
   const METADATA_TOOLTIPS = {
+    nomor_item_arsip: 'Nomor urut otomatis untuk item arsip di dalam folder ini.',
     nomor_surat: 'Nomor item dari dokumen. Terisi otomatis dari nama file jika terbaca, tetapi tetap bisa dikoreksi manual.',
     kode_klasifikasi: 'Kode arsip sesuai JRA, contoh: DL.01.01 untuk Diklat Kepemimpinan',
+    tanggal: 'Tanggal surat atau dokumen diterbitkan.',
+    uraian_informasi_item: 'Ringkasan isi atau perihal dari dokumen.',
+    kepada: 'Pihak tujuan surat (opsional, biarkan kosong jika tidak relevan).',
+    dari: 'Pihak pengirim surat (opsional, biarkan kosong jika tidak relevan).',
     tingkat_perkembangan: 'Wujud dokumen: Asli (dokumen asli/elektronik bertanda tangan) atau Salinan (turunan/fotokopi/cetak).',
     jumlah: 'Jumlah dokumen. Gunakan tombol + dan - atau ketik langsung.',
+    satuan: 'Satuan jumlah dokumen (Lembar, Berkas, dll).',
     no_filing_cabinet: 'Nomor lemari arsip fisik tempat dokumen disimpan, contoh: FC-01',
-    klasifikasi_akses: 'Terbuka: dapat diakses semua. Terbatas: hanya unit terkait. Rahasia: akses terbatas pimpinan.'
+    no_laci: 'Nomor laci di dalam filing cabinet.',
+    no_folder: 'Nomor folder/map di dalam laci.',
+    klasifikasi_akses: 'Terbuka: dapat diakses semua. Terbatas: hanya unit terkait. Rahasia: akses terbatas pimpinan.',
+    ket: 'Informasi tambahan yang relevan dengan arsip.',
+    lokasi_simpan: 'Detail lokasi penyimpanan fisik atau digital.'
   };
 
   function metadataField(field, value, hints) {
