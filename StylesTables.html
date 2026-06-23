@@ -688,6 +688,15 @@
     .tall-card { min-height: 280px; }
     .tall-card-add { min-height: 280px; }
     .tall-card-template-cat { min-height: 240px; }
+    .process-sticky-bar { 
+      flex-direction: column; 
+      align-items: stretch; 
+      width: 100%; 
+      border-radius: var(--radius-xl); 
+      padding: 16px 20px;
+    }
+    .process-sticky-bar .preview-section { justify-content: center; width: 100%; }
+    .process-sticky-bar .action-group { justify-content: center; width: 100%; }
   }
 
 /* ── RESPONSIVE BREAKPOINT: 768px (Tablet Portrait / Small Tablet) ── */
@@ -756,9 +765,10 @@
     .form-grid { grid-template-columns: 1fr; min-width: 0; }
 
     .dashboard-bottom-row { grid-template-columns: 1fr; gap: 16px; }
+    
+    .metadata-grid, .metadata-grid-3 { grid-template-columns: 1fr; }
+    .process-card .metadata-grid, .process-card .metadata-grid-3 { grid-template-columns: 1fr; }
 
-    .metadata-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .process-card .metadata-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .metadata-header { flex-direction: column; align-items: flex-start; gap: 4px; }
 
     .process-source-grid { grid-template-columns: 1fr; min-width: 0; }

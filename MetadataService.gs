@@ -13,20 +13,25 @@ const MetadataService = {
     normalized.uraian_informasi_item = parts.filter(Boolean).join(' / ');
     
     if (normalized.nomor_item_arsip) {
-      const parsedNum = Number(normalized.nomor_item_arsip);
-      if (!isNaN(parsedNum)) {
-        normalized.no_berkas = String(parsedNum);
-      } else {
-        normalized.no_berkas = String(normalized.nomor_item_arsip).trim();
-      }
       normalized.nomor_item_arsip = String(normalized.nomor_item_arsip).padStart(2, '0');
-    } else {
-      normalized.no_berkas = normalized.no_berkas || (subActivity && subActivity.sort_order ? String(subActivity.sort_order) : '');
     }
+    normalized.no_berkas = subActivity && subActivity.sort_order ? String(subActivity.sort_order) : '';
 
     normalized.no_laci = normalized.no_laci || '';
-    normalized.no_folder = normalized.no_folder || '';
+    // Paksa No Folder agar selalu sinkron dengan Nomor Item Arsip sesuai permintaan user
+    normalized.no_folder = normalized.nomor_item_arsip || '';
     normalized.no_filing_cabinet = normalized.no_filing_cabinet || '';
+    
+    // Inject hyperlink metadata supaya SpreadsheetService tahu ini link
+    if (activity) {
+      normalized._no_filing_cabinet_path = activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '';
+      normalized._no_filing_cabinet_url = activity.laci_folder_id ? 'https://drive.google.com/drive/folders/' + activity.laci_folder_id : '';
+    }
+    if (subActivity) {
+      normalized._no_laci_path = subActivity.sub_activity_name || '';
+      normalized._no_laci_url = subActivity.folder_id ? 'https://drive.google.com/drive/folders/' + subActivity.folder_id : '';
+    }
+
     normalized.satuan = normalized.satuan || 'Lembar';
     normalized.tingkat_perkembangan = normalized.tingkat_perkembangan || 'Asli';
     normalized.jumlah = metadata.jumlah !== undefined ? metadata.jumlah : 1;
@@ -203,17 +208,17 @@ function extractKlasifikasiAkses_(text) {
   const str = String(text || '');
   const upper = str.toUpperCase();
   // Contextual patterns (higher confidence)
-  const ctx = str.match(/(?:bersifat|klasifikasi\s*akses|tingkat\s*akses|sifat\s*dokumen)\s*[:.]?\s*(Rahasia|Terbatas|Biasa|Terbuka|Umum)/i);
+  const ctx = str.match(/(?:bersifat|klasifikasi\s*akses|tingkat\s*akses|sifat\s*dokumen)\s*[:.]?\s*(Rahasia|Terbatas|Terbuka|Umum)/i);
   if (ctx) {
     const val = ctx[1].toLowerCase();
     if (val === 'rahasia') return 'Rahasia';
     if (val === 'terbatas') return 'Terbatas';
-    return 'Biasa';
+    return 'Terbuka';
   }
   // Keyword matching
   if (upper.indexOf('RAHASIA') >= 0) return 'Rahasia';
   if (upper.indexOf('TERBATAS') >= 0) return 'Terbatas';
-  if (upper.indexOf('BIASA') >= 0 || upper.indexOf('TERBUKA') >= 0 || upper.indexOf('UMUM') >= 0) return 'Biasa';
+  if (upper.indexOf('TERBUKA') >= 0 || upper.indexOf('UMUM') >= 0) return 'Terbuka';
   return '';
 }
 
@@ -261,13 +266,24 @@ function buildFinalFileName_(metadata, sourceName) {
   const ext = extMatch ? extMatch[0].toLowerCase() : '.pdf';
   const item = pad2_(metadata.nomor_item_arsip || '01');
   const tingkat = metadata.tingkat_perkembangan || 'Asli';
-  const nomor = metadata.nomor_surat || '';
-  const uraian = sanitizeFilePart_(metadata.uraian_informasi_item || 'Dokumen Surat');
+  
+  const nomor = String(metadata.nomor_surat || '').trim();
+  const uraianStr = String(metadata.uraian_informasi_item || '').trim();
+  const kepada = String(metadata.kepada || '').trim();
+  const dari = String(metadata.dari || '').trim();
 
-  if (nomor) {
-    return item + '. (' + tingkat + ') No: ' + nomor + '_' + uraian + ext;
-  }
-  return item + '. (' + tingkat + ') ' + uraian + ext;
+  const parts = [];
+  if (nomor) parts.push(nomor);
+  if (uraianStr) parts.push(uraianStr);
+  if (kepada) parts.push('Kepada ' + kepada);
+  if (dari) parts.push('Dari ' + dari);
+
+  let assembled = parts.join('/');
+  if (!assembled) assembled = 'Dokumen Surat';
+
+  const safeUraian = sanitizeFilePart_(assembled);
+
+  return item + '. (' + tingkat + ') ' + safeUraian + ext;
 }
 
 // Pemetaan tingkat perkembangan dari skema LAMA (nama file arsip legacy) ke
@@ -285,12 +301,12 @@ function normalizeLegacyTingkat_(value) {
 function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   const meta = {
     nomor_item_arsip: '',
-    no_berkas: '',
+    no_berkas: defaultSubActivity && defaultSubActivity.sort_order ? String(defaultSubActivity.sort_order) : (defaultActivity && defaultActivity.folder_no ? String(defaultActivity.folder_no) : ''),
     tingkat_perkembangan: '',
     nomor_surat: '',
     uraian_informasi_item: '',
     lokasi_simpan: fileName,
-    kode_klasifikasi: typeof DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI !== 'undefined' ? DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI : 'PDP.07.1',
+    kode_klasifikasi: '',
     klasifikasi_akses: 'Terbatas',
     jumlah: 1,
     satuan: 'Lembar',
@@ -301,7 +317,7 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
     no_laci: defaultSubActivity ? (defaultSubActivity.sub_activity_name || '') : '',
     _no_laci_path: defaultSubActivity ? (defaultSubActivity.sub_activity_name || '') : '',
     _no_laci_url: (defaultSubActivity && defaultSubActivity.folder_id) ? 'https://drive.google.com/drive/folders/' + defaultSubActivity.folder_id : '',
-    no_folder: defaultSubActivity ? (defaultSubActivity.no_folder || defaultSubActivity.noFolder || '') : (defaultActivity ? (defaultActivity.folder_no || '') : '')
+    no_folder: '' // Akan diisi di bawah setelah nomor_item_arsip di-parse
   };
 
   const nameWithoutExt = fileName.replace(/\.[a-z0-9]+$/i, '').trim();
@@ -309,18 +325,18 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   const match = nameWithoutExt.match(/^(\d{1,4})\.\s*\(([^)]+)\)\s*(?:No:\s*([^]+?)_)?([^]+)$/);
   if (match) {
     meta.nomor_item_arsip = pad2_(match[1]);
-    meta.no_berkas = String(Number(match[1]));
     meta.tingkat_perkembangan = normalizeLegacyTingkat_(match[2].trim());
     if (match[3]) {
       meta.nomor_surat = match[3].trim();
     }
     meta.uraian_informasi_item = match[4].trim();
+    // Paksa No Folder sinkron dengan Nomor Item Arsip
+    meta.no_folder = meta.nomor_item_arsip;
   } else {
     meta.uraian_informasi_item = nameWithoutExt;
   }
   
   if (!meta.nomor_item_arsip) meta.nomor_item_arsip = '01';
-  if (!meta.no_berkas) meta.no_berkas = '1';
   if (!meta.tingkat_perkembangan) meta.tingkat_perkembangan = 'Asli';
   
   // Sinkronkan no_folder dengan nomor_item_arsip (seperti logic di form)

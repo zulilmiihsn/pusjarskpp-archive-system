@@ -122,13 +122,24 @@ function buildFinalFileName_(metadata, sourceName) {
   const ext = extMatch ? extMatch[0].toLowerCase() : '.pdf';
   const item = pad2_(metadata.nomor_item_arsip || '01');
   const tingkat = metadata.tingkat_perkembangan || 'Asli';
-  const nomor = metadata.nomor_surat || '';
-  const uraian = sanitizeFilePart_(metadata.uraian_informasi_berkas || 'Dokumen Surat');
+  
+  const nomor = String(metadata.nomor_surat || '').trim();
+  const uraianStr = String(metadata.uraian_informasi_item || '').trim();
+  const kepada = String(metadata.kepada || '').trim();
+  const dari = String(metadata.dari || '').trim();
 
-  if (nomor) {
-    return item + '. (' + tingkat + ') No: ' + nomor + '_' + uraian + ext;
-  }
-  return item + '. (' + tingkat + ') ' + uraian + ext;
+  const parts = [];
+  if (nomor) parts.push(nomor);
+  if (uraianStr) parts.push(uraianStr);
+  if (kepada) parts.push('Kepada ' + kepada);
+  if (dari) parts.push('Dari ' + dari);
+
+  let assembled = parts.join('/');
+  if (!assembled) assembled = 'Dokumen Surat';
+
+  const safeUraian = sanitizeFilePart_(assembled);
+
+  return item + '. (' + tingkat + ') ' + safeUraian + ext;
 }
 
 function sanitizeFilePart_(value) {
@@ -192,7 +203,7 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
     no_berkas: '',
     tingkat_perkembangan: '',
     nomor_surat: '',
-    uraian_informasi_berkas: '',
+    uraian_informasi_item: '',
     lokasi_simpan: fileName,
     kode_klasifikasi: typeof DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI !== 'undefined' ? DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI : 'PDP.07.1',
     klasifikasi_akses: 'Terbatas',
@@ -213,26 +224,23 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   const match = nameWithoutExt.match(/^(\d+)\.\s*\(([^)]+)\)\s*(?:No:\s*([^]+?)_)?([^]+)$/);
   if (match) {
     meta.nomor_item_arsip = pad2_(match[1]);
-    meta.no_berkas = String(Number(match[1]));
     meta.tingkat_perkembangan = normalizeLegacyTingkat_(match[2].trim());
     if (match[3]) {
       meta.nomor_surat = match[3].trim();
     }
-    meta.uraian_informasi_berkas = match[4].trim();
+    meta.uraian_informasi_item = match[4].trim();
   } else {
     // Try simple number prefix, e.g. "02. Surat Perintah" or "2. Surat Perintah"
     const simpleMatch = nameWithoutExt.match(/^(\d+)\.\s*(.+)$/);
     if (simpleMatch) {
       meta.nomor_item_arsip = pad2_(simpleMatch[1]);
-      meta.no_berkas = String(Number(simpleMatch[1]));
-      meta.uraian_informasi_berkas = simpleMatch[2].trim();
+      meta.uraian_informasi_item = simpleMatch[2].trim();
     } else {
-      meta.uraian_informasi_berkas = nameWithoutExt;
+      meta.uraian_informasi_item = nameWithoutExt;
     }
   }
   
   if (!meta.nomor_item_arsip) meta.nomor_item_arsip = '01';
-  if (!meta.no_berkas) meta.no_berkas = '1';
   if (!meta.tingkat_perkembangan) meta.tingkat_perkembangan = 'Asli';
   
   // Sinkronkan no_folder dengan nomor_item_arsip (seperti logic di form)

@@ -44,6 +44,10 @@
     updateLockUI_('kurunWaktu', _currentMetadataLocks.kurunWaktu !== false);
     updateLockUI_('akses', _currentMetadataLocks.akses !== false);
     updateLockUI_('jumlah', _currentMetadataLocks.jumlah !== false);
+    updateLockUI_('nomorBerkas', _currentMetadataLocks.nomorBerkas !== false);
+    updateLockUI_('filingCabinet', _currentMetadataLocks.filingCabinet !== false);
+    updateLockUI_('noLaci', _currentMetadataLocks.noLaci !== false);
+    updateLockUI_('noFolder', _currentMetadataLocks.noFolder !== false);
 
     setMetadataSectionLoading_(true);
     if (!isAddMode) {
@@ -85,21 +89,17 @@
       var aEl = document.getElementById('rename-sub-klasifikasi-akses');
       var ketEl = document.getElementById('rename-sub-keterangan');
       var jEl = document.getElementById('rename-sub-jumlah');
+      var nfEl = document.getElementById('rename-sub-no-folder');
+      
       if (nEl) nEl.value = meta.no_berkas || sub.sort_order || '';
-      if (kEl) kEl.value = meta.kode_klasifikasi || sub.default_kode_klasifikasi || 'PDP.07.1';
       var kurunParts = String(meta.kurun_waktu || '').trim().split(/\s+-\s+/);
       if (ksEl) ksEl.value = parseKurunDate_(kurunParts[0] || '');
       if (keEl) keEl.value = parseKurunDate_(kurunParts[1] || '');
-      if (cfEl) {
-        var cfVal = meta.no_filing_cabinet || '';
-        if (cfVal && !isNaN(cfVal)) cfVal = String(Number(cfVal)).padStart(2, '0');
-        cfEl.value = cfVal;
-      }
+      if (cfEl) cfEl.value = meta.no_filing_cabinet || '';
       if (lEl) lEl.value = meta.no_laci || (activity ? activity.laci_no : '') || '';
       if (aEl && meta.klasifikasi_akses) aEl.value = meta.klasifikasi_akses;
       if (ketEl) ketEl.value = meta.ket || '';
       if (jEl) jEl.value = meta.jumlah || '';
-      var nfEl = document.getElementById('rename-sub-no-folder');
       if (nfEl && !nfEl.value) nfEl.value = meta.no_folder || sub.no_folder || '';
     } catch (e) {
     } finally {
@@ -146,6 +146,18 @@
         } else if (field === 'jumlah') {
           var jEl = document.getElementById('rename-sub-jumlah');
           if (jEl && meta.jumlah) jEl.value = meta.jumlah;
+        } else if (field === 'nomorBerkas') {
+          var nbEl = document.getElementById('rename-sub-nomor-berkas');
+          if (nbEl) nbEl.value = meta.no_berkas || (_currentEditSub.sub ? _currentEditSub.sub.sort_order : '') || '';
+        } else if (field === 'filingCabinet') {
+          var cfEl = document.getElementById('rename-sub-no-filing-cabinet');
+          if (cfEl) cfEl.value = meta.no_filing_cabinet || '';
+        } else if (field === 'noLaci') {
+          var lEl = document.getElementById('rename-sub-no-laci');
+          if (lEl) lEl.value = meta.no_laci || '';
+        } else if (field === 'noFolder') {
+          var nfEl = document.getElementById('rename-sub-no-folder');
+          if (nfEl) nfEl.value = meta.no_folder || (_currentEditSub.sub ? _currentEditSub.sub.sort_order : '') || '';
         }
         removeToast(processToast);
       } catch (e) {
@@ -174,6 +186,18 @@
     } else if (field === 'jumlah') {
       var jEl = document.getElementById('rename-sub-jumlah');
       if (jEl) jEl.disabled = isLocked;
+    } else if (field === 'nomorBerkas') {
+      var nbEl = document.getElementById('rename-sub-nomor-berkas');
+      if (nbEl) nbEl.disabled = isLocked;
+    } else if (field === 'filingCabinet') {
+      var fcEl = document.getElementById('rename-sub-no-filing-cabinet');
+      if (fcEl) fcEl.disabled = isLocked;
+    } else if (field === 'noLaci') {
+      var nlEl = document.getElementById('rename-sub-no-laci');
+      if (nlEl) nlEl.disabled = isLocked;
+    } else if (field === 'noFolder') {
+      var nfEl = document.getElementById('rename-sub-no-folder');
+      if (nfEl) nfEl.disabled = isLocked;
     }
   }
 
@@ -216,7 +240,6 @@
         result = await api('addSubActivity', {
           activityId: activity.activity_id,
           subActivityName: newName,
-          defaultKodeKlasifikasi: document.getElementById('rename-sub-kode-klasifikasi').value.trim() || '',
           formalArchiveName: (document.getElementById('rename-sub-formal-name') || {}).value || '',
           targetSheetName: (document.getElementById('rename-sub-sheet-name') || {}).value || '',
           noFolder: (document.getElementById('rename-sub-no-folder') || {}).value || '',
@@ -244,7 +267,6 @@
           activityId: activity.activity_id,
           subActivityId: targetSubId,
           nomorBerkas: document.getElementById('rename-sub-nomor-berkas').value.trim(),
-          kodeKlasifikasi: document.getElementById('rename-sub-kode-klasifikasi').value.trim(),
           kurunWaktu: kurunWaktu,
           noFilingCabinet: document.getElementById('rename-sub-no-filing-cabinet').value.trim(),
           noLaci: document.getElementById('rename-sub-no-laci').value.trim(),
@@ -304,12 +326,11 @@
 
           <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
             <div class="form-field" style="margin:0;">
-              <label for="rename-sub-nomor-berkas">Nomor Berkas</label>
+              <label for="rename-sub-nomor-berkas">
+                <span>Nomor Berkas</span>
+                <button class="metadata-lock-btn" id="btn-lock-nomorBerkas" type="button" onclick="toggleLock_('nomorBerkas')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></button>
+              </label>
               <input type="text" id="rename-sub-nomor-berkas" placeholder="Otomatis" autocomplete="off">
-            </div>
-            <div class="form-field" style="margin:0;">
-              <label for="rename-sub-kode-klasifikasi">Kode Klasifikasi</label>
-              <input type="text" id="rename-sub-kode-klasifikasi" placeholder="Otomatis" autocomplete="off">
             </div>
             <div class="form-field" style="margin:0;">
               <label for="rename-sub-jumlah">
@@ -332,18 +353,27 @@
               <input type="date" id="rename-sub-kurun-end" autocomplete="off">
             </div>
           </div>
-          <div style="display:grid; grid-template-columns: 80px 1fr 1fr; gap:12px;" class="mt-12">
+          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;" class="mt-12">
             <div class="form-field" style="margin:0;">
-              <label for="rename-sub-no-filing-cabinet">No. FC</label>
-              <input type="text" id="rename-sub-no-filing-cabinet" inputmode="numeric" pattern="[0-9]*" placeholder="02" autocomplete="off" onchange="if(this.value && !isNaN(this.value)) this.value = String(Number(this.value)).padStart(2,'0')" onblur="if(this.value && !isNaN(this.value)) this.value = String(Number(this.value)).padStart(2,'0')" onkeydown="if(event.key==='ArrowUp'||event.key==='ArrowDown'){event.preventDefault();let v=parseInt(this.value||'0',10);if(isNaN(v))v=0;if(event.key==='ArrowUp')v++;if(event.key==='ArrowDown')v=Math.max(0,v-1);this.value=String(v).padStart(2,'0');}">
+              <label for="rename-sub-no-filing-cabinet">
+                <span>No. FC</span>
+                <button class="metadata-lock-btn" id="btn-lock-filingCabinet" type="button" onclick="toggleLock_('filingCabinet')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></button>
+              </label>
+              <input type="text" id="rename-sub-no-filing-cabinet" placeholder="Otomatis" autocomplete="off">
             </div>
             <div class="form-field" style="margin:0;">
-              <label for="rename-sub-no-laci">Nomor Laci</label>
-              <input type="number" id="rename-sub-no-laci" min="0" placeholder="Laci" autocomplete="off">
+              <label for="rename-sub-no-laci">
+                <span>Nomor Laci</span>
+                <button class="metadata-lock-btn" id="btn-lock-noLaci" type="button" onclick="toggleLock_('noLaci')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></button>
+              </label>
+              <input type="text" id="rename-sub-no-laci" placeholder="Otomatis" autocomplete="off">
             </div>
             <div class="form-field" style="margin:0;">
-              <label for="rename-sub-no-folder">Nomor Folder</label>
-              <input type="number" id="rename-sub-no-folder" min="0" placeholder="Folder" autocomplete="off">
+              <label for="rename-sub-no-folder">
+                <span>Nomor Folder</span>
+                <button class="metadata-lock-btn" id="btn-lock-noFolder" type="button" onclick="toggleLock_('noFolder')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></button>
+              </label>
+              <input type="text" id="rename-sub-no-folder" placeholder="Otomatis" autocomplete="off">
             </div>
           </div>
           <div class="form-field mt-12">

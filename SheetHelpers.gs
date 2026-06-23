@@ -240,7 +240,7 @@ function buildRekapSummary_(ss, activity, subActivity, metadata) {
 
   return {
     nomorBerkas: subActivity.sort_order || '',
-    kodeKlasifikasi: subActivity.default_kode_klasifikasi || '',
+    kodeKlasifikasi: subActivity.default_kode_klasifikasi || (typeof DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI !== 'undefined' ? DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI : ''),
     uraian: getSubActivityFormalName_(subActivity) || metadata.uraian_informasi_item || '',
     kurunWaktu: formatDateRange_(startDate, endDate),
     jumlah: detailSummary.sumLembar ? detailSummary.sumLembar + ' lembar' : '',
@@ -277,7 +277,7 @@ function writeRekapIdentity_(sheet, rowIndex, activity, subActivity) {
     : (activity && activity.folder_no) || '';
   const identity = {
     nomorBerkas: subActivity && subActivity.sort_order ? subActivity.sort_order : '',
-    kodeKlasifikasi: subActivity && subActivity.default_kode_klasifikasi ? subActivity.default_kode_klasifikasi : '',
+    kodeKlasifikasi: (subActivity && subActivity.default_kode_klasifikasi) || (typeof DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI !== 'undefined' ? DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI : ''),
     uraian: getSubActivityFormalName_(subActivity),
     filingCabinet: '02',
     noLaci: activity && activity.laci_no ? activity.laci_no : '',
@@ -570,16 +570,16 @@ function formatBasicDetailSheet_(sheet, activity, subActivity) {
   sheet.setFrozenRows(8);
   sheet.getRange('B2:N2').merge().setValue('Daftar Isi Berkas Arsip Aktip');
   sheet.getRange('B2:N2')
-    .setFontFamily('Arial')
+    .setFontFamily('Bookman Old Style')
     .setFontSize(10)
-    .setFontWeight('bold')
+    .setFontWeight('normal')
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle');
   sheet.getRange('B4').setValue('Unit pengolah : Latbang');
   sheet.getRange('B4')
-    .setFontFamily('Arial')
+    .setFontFamily('Bookman Old Style')
     .setFontSize(10)
-    .setFontWeight('bold');
+    .setFontWeight('normal');
 
   sheet.getRange('B6:B7').merge().setValue('No\nBerkas');
   sheet.getRange('C6:C7').merge().setValue('Nomor Item\nArsip');
@@ -601,8 +601,8 @@ function formatBasicDetailSheet_(sheet, activity, subActivity) {
   // Format umum untuk header (B6:N8)
   sheet.getRange('B6:N8')
     .setBackground('#b4c6e7')
-    .setFontWeight('bold')
-    .setFontFamily('Arial')
+    .setFontWeight('normal')
+    .setFontFamily('Bookman Old Style')
     .setHorizontalAlignment('center')
     .setVerticalAlignment('middle')
     .setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID)
@@ -615,18 +615,23 @@ function formatBasicDetailSheet_(sheet, activity, subActivity) {
   const dataRows = 24;
   sheet.getRange(DETAIL_DATA_START_ROW, DETAIL_FALLBACK_START_COL, dataRows, DETAIL_FIELD_ORDER.length)
     .setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID)
-    .setFontFamily('Arial')
+    .setFontFamily('Bookman Old Style')
     .setFontSize(10)
     .setVerticalAlignment('middle')
     .setWrap(true);
-  const numberRows = [];
-  for (let i = 1; i <= dataRows; i++) numberRows.push(['']);
+  const noBerkasRows = [];
+  const itemRows = [];
+  for (let i = 1; i <= dataRows; i++) {
+    noBerkasRows.push(['']);
+    itemRows.push(['']);
+  }
   sheet.getRange(DETAIL_DATA_START_ROW, DETAIL_FALLBACK_START_COL, dataRows, 1)
-    .setValues(numberRows)
+    .setValues(noBerkasRows)
     .setHorizontalAlignment('center');
   sheet.getRange(DETAIL_DATA_START_ROW, DETAIL_FALLBACK_START_COL + DETAIL_ITEM_NUMBER_OFFSET, dataRows, 1)
     .setNumberFormat('00')
-    .clearContent();
+    .setValues(itemRows)
+    .setHorizontalAlignment('center');
 
   sheet.setRowHeight(2, 22);
   sheet.setRowHeight(4, 22);
@@ -642,6 +647,7 @@ function formatBasicDetailSheet_(sheet, activity, subActivity) {
 
 function writeBasicDetailNotes_(sheet, startRow) {
   const notes = [
+    ['Keterangan Petunjuk Pengisian:'],
     ['Kolom (9), diisi dengan nomor laci pada Filing Cabinet;'],
     ['Kolom (10), diisi dengan nomor folder Arsip;'],
     ['Kolom (11), diisi dengan klasifikasi keamanan seperti terbuka, terbatas, dan rahasia.'],
@@ -649,9 +655,9 @@ function writeBasicDetailNotes_(sheet, startRow) {
   ];
   sheet.getRange(startRow, 3, notes.length, 1).setValues(notes);
   sheet.getRange(startRow, 3, notes.length, 1)
-    .setFontFamily('Arial')
+    .setFontFamily('Bookman Old Style')
     .setFontSize(10)
-    .setFontWeight('bold');
+    .setFontWeight('normal');
 }
 
 function findWritableDetailRow_(sheet) {
@@ -727,9 +733,9 @@ function getDetailColumnMap_(sheet, width) {
     tanggal: ['tgl', 'tanggal'],
     tingkat_perkembangan: ['tingkat perkembangan', 'tingkat pengembangan'],
     jumlah: ['jumlah'],
-    no_filing_cabinet: ['no filing cabinet'],
-    no_laci: ['no laci'],
-    no_folder: ['no folder'],
+    no_filing_cabinet: ['no filing cabinet', 'no. filing cabinet', 'no fc', 'no. fc'],
+    no_laci: ['no laci', 'no. laci'],
+    no_folder: ['no folder', 'no. folder'],
     klasifikasi_akses: ['klasifikasi keamanan akses arsip', 'keamanan akses arsip', 'klasifikasi akses'],
     lokasi_simpan: ['ket lokasi simpan', 'lokasi simpan'],
     jumlah_satuan: ['satuan']
@@ -886,7 +892,7 @@ function buildKurunWaktuFormula_(detailSheet) {
   const colLetter = getDetailColumnLetter_(detailSheet, 'tanggal', 'F');
   const rangeRef = ref + '!' + colLetter + '9:' + colLetter;
   const s = formulaSep_(detailSheet.getParent());
-  return "=IF(COUNTA(" + rangeRef + ")>0" + s + " TEXT(MIN(" + rangeRef + ")" + s + " \"d mmmm yyyy\") & \" - \" & TEXT(MAX(" + rangeRef + ")" + s + " \"d mmmm yyyy\")" + s + " \"\")";
+  return "=IF(COUNT(" + rangeRef + ")>0" + s + " TEXT(MIN(" + rangeRef + ")" + s + " \"d mmmm yyyy\") & \" - \" & TEXT(MAX(" + rangeRef + ")" + s + " \"d mmmm yyyy\")" + s + " \"\")";
 }
 
 // Jumlah = SUM kolom "jumlah" (lembar) tiap dokumen, bukan hitungan baris.
@@ -894,7 +900,8 @@ function buildJumlahFormula_(detailSheet) {
   const ref = detailSheetFormulaRef_(detailSheet);
   const jumlahLetter = getDetailColumnLetter_(detailSheet, 'jumlah', 'H');
   const sumRange = ref + '!' + jumlahLetter + '9:' + jumlahLetter;
-  return "=SUM(" + sumRange + ") & \" lembar\"";
+  const s = formulaSep_(detailSheet.getParent());
+  return "=IF(COUNT(" + sumRange + ")>0" + s + " SUM(" + sumRange + ") & \" lembar\"" + s + " \"\")";
 }
 
 function buildAksesFormula_(detailSheet) {
@@ -942,7 +949,7 @@ function locateDetailRowByUrl_(sheet, url) {
   return 0;
 }
 
-function sortDetailSheetByNoBerkas_(sheet) {
+function sortDetailSheetByNomorItemArsip_(sheet) {
   try {
     const noteRow = findNoteRow_(sheet) || sheet.getLastRow() + 1;
     const lastDataRow = noteRow - 1;
@@ -951,12 +958,16 @@ function sortDetailSheetByNoBerkas_(sheet) {
     const lastCol = Math.max(sheet.getLastColumn(), startCol + DETAIL_FIELD_ORDER.length - 1);
     const numRows = lastDataRow - DETAIL_DATA_START_ROW + 1;
     const numCols = lastCol - startCol + 1;
-    coerceColumnNumeric_(sheet, DETAIL_DATA_START_ROW, startCol, numRows); // No Berkas
+    const itemCol = startCol + DETAIL_ITEM_NUMBER_OFFSET;
+    coerceColumnNumeric_(sheet, DETAIL_DATA_START_ROW, itemCol, numRows); // Nomor Item Arsip
+    const colMap = getDetailColumnMap_(sheet, lastCol);
+    if (colMap['jumlah']) coerceColumnNumeric_(sheet, DETAIL_DATA_START_ROW, colMap['jumlah'], numRows);
+
     const range = sheet.getRange(DETAIL_DATA_START_ROW, startCol, numRows, numCols);
     // Use native Sheets sort to preserve formulas and formatting
-    range.sort({column: startCol, ascending: true});
-    sheet.getRange(DETAIL_DATA_START_ROW, startCol + DETAIL_ITEM_NUMBER_OFFSET, numRows, 1).setNumberFormat('00');
+    range.sort({column: itemCol, ascending: true});
+    sheet.getRange(DETAIL_DATA_START_ROW, itemCol, numRows, 1).setNumberFormat('00');
   } catch (e) {
-    console.warn('sortDetailSheetByNoBerkas_: ' + e.message);
+    console.warn('sortDetailSheetByNomorItemArsip_: ' + e.message);
   }
 }

@@ -100,7 +100,7 @@ const WORKSPACE_ACTIVITIES = [
   }
 ];
 
-const WORKSPACE_DETAIL_HEADERS = ARCHIVE_FIELD_LABELS;
+
 
 const WORKSPACE_REKAP_HEADERS = [
   'Nomor Berkas',
@@ -557,6 +557,18 @@ function cleanupOldRekapTriggers() {
       ScriptApp.deleteTrigger(triggers[i]);
     }
   }
+}
+
+function cleanupOcrTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  let deleted = 0;
+  for (let i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'processOcrQueue') {
+      ScriptApp.deleteTrigger(triggers[i]);
+      deleted++;
+    }
+  }
+  console.log('Deleted ' + deleted + ' old processOcrQueue triggers.');
 }
 
 function installTriggersForExistingSpreadsheets() {
@@ -1065,10 +1077,10 @@ function wsStyleDetailSheet_(sheet) {
     .setFontSize(11)
     .setVerticalAlignment('middle')
     .setWrap(true);
-  const numberRows = [];
-  for (let i = 1; i <= dataRows; i++) numberRows.push([i]);
-  sheet.getRange(9, startCol, dataRows, 1)
-    .setValues(numberRows)
+  const itemRows = [];
+  for (let i = 1; i <= dataRows; i++) itemRows.push([i]);
+  sheet.getRange(9, startCol + 1, dataRows, 1)
+    .setValues(itemRows)
     .setHorizontalAlignment('center');
 
   sheet.setRowHeight(2, 22);

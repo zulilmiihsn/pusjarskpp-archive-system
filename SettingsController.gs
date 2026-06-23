@@ -580,14 +580,12 @@ const SettingsController = {
     const yearsHeaders = yearsValues[0].map(normalizeHeader_);
     const yearCol = yearsHeaders.indexOf('year');
     
-    let yearRowIndex = -1;
     let spreadsheetYearFolderId = '';
     let persuratanYearFolderId = '';
 
     if (yearCol !== -1) {
       for (let i = 1; i < yearsValues.length; i++) {
         if (Number(yearsValues[i][yearCol]) === year) {
-          yearRowIndex = i + 1;
           const spreadsheetFolderCol = yearsHeaders.indexOf('spreadsheet_year_folder_id');
           const persuratanFolderCol = yearsHeaders.indexOf('persuratan_year_folder_id');
           if (spreadsheetFolderCol !== -1) spreadsheetYearFolderId = yearsValues[i][spreadsheetFolderCol];
@@ -673,7 +671,6 @@ const SettingsController = {
                   deleteCount++;
                 }
               }
-              console.log('Deleted ' + deleteCount + ' rows from ' + sheetConfig.name);
             }
           }
         }

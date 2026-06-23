@@ -86,7 +86,6 @@ const SpreadsheetService = {
       });
       return String(maxNum + 1).padStart(2, '0');
     } catch (e) {
-      Logger.log('Error calculating next item number: ' + e);
       return '01';
     }
   },
@@ -102,8 +101,29 @@ const SpreadsheetService = {
     for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
       const fieldName = DETAIL_FIELD_ORDER[c];
       const val = rowValues[c] || '';
+      const isJumlah = fieldName === 'jumlah';
+      const isItem = fieldName === 'nomor_item_arsip';
+      const isNumericField = isJumlah || isItem;
+      const numericVal = Number(val);
+      let userEnteredValue;
+      let numberFormat = undefined;
+      
+      if (fieldName === 'tanggal' && val) {
+        const d = parseDateCell_(val);
+        if (d) {
+          userEnteredValue = { formulaValue: '=DATE(' + d.getFullYear() + ',' + (d.getMonth() + 1) + ',' + d.getDate() + ')' };
+          numberFormat = { type: 'DATE', pattern: 'd mmmm yyyy' };
+        } else {
+          userEnteredValue = { stringValue: String(val) };
+        }
+      } else if (isNumericField && !isNaN(numericVal) && String(val).trim() !== '') {
+        userEnteredValue = { numberValue: numericVal };
+      } else {
+        userEnteredValue = { stringValue: String(val) };
+      }
+
       const cellData = {
-        userEnteredValue: { stringValue: String(val) },
+        userEnteredValue: userEnteredValue,
         userEnteredFormat: {
           wrapStrategy: 'WRAP',
           verticalAlignment: 'MIDDLE',
@@ -116,11 +136,11 @@ const SpreadsheetService = {
         }
       };
 
-      if (fieldName === 'item_number') {
-         cellData.userEnteredFormat.numberFormat = { type: 'TEXT' };
-         if (val && String(val).length < 2) {
-           cellData.userEnteredValue.stringValue = ('00' + val).slice(-2);
-         }
+      if (numberFormat) {
+         cellData.userEnteredFormat.numberFormat = numberFormat;
+      }
+      if (isItem) {
+         cellData.userEnteredFormat.numberFormat = { type: 'NUMBER', pattern: '00' };
       }
 
       if (fieldName === 'lokasi_simpan' && metadata._lokasi_simpan_url) {
@@ -178,7 +198,7 @@ const SpreadsheetService = {
       .setBorder(true, true, true, true, true, true)
       .setWrap(true)
       .setVerticalAlignment('middle');
-    sortDetailSheetByNoBerkas_(sheet);
+    sortDetailSheetByNomorItemArsip_(sheet);
 
     // Sort mengubah urutan baris; cari ulang posisi baris via URL file agar
     // spreadsheet_row_number yang dicatat tidak basi (edit/hapus bisa salah baris).
@@ -240,9 +260,29 @@ const SpreadsheetService = {
       for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
         const fieldName = DETAIL_FIELD_ORDER[c];
         const val = rowVals[c] || '';
+        const isJumlah = fieldName === 'jumlah';
+        const isItem = fieldName === 'nomor_item_arsip';
+        const isNumericField = isJumlah || isItem;
+        const numericVal = Number(val);
+        let userEnteredValue;
+        let numberFormat = undefined;
         
+        if (fieldName === 'tanggal' && val) {
+          const d = parseDateCell_(val);
+          if (d) {
+            userEnteredValue = { formulaValue: '=DATE(' + d.getFullYear() + ',' + (d.getMonth() + 1) + ',' + d.getDate() + ')' };
+            numberFormat = { type: 'DATE', pattern: 'd mmmm yyyy' };
+          } else {
+            userEnteredValue = { stringValue: String(val) };
+          }
+        } else if (isNumericField && !isNaN(numericVal) && String(val).trim() !== '') {
+          userEnteredValue = { numberValue: numericVal };
+        } else {
+          userEnteredValue = { stringValue: String(val) };
+        }
+
         const cellData = {
-          userEnteredValue: { stringValue: String(val) },
+          userEnteredValue: userEnteredValue,
           userEnteredFormat: {
             wrapStrategy: 'WRAP',
             verticalAlignment: 'MIDDLE',
@@ -255,11 +295,11 @@ const SpreadsheetService = {
           }
         };
 
-        if (fieldName === 'item_number') {
-           cellData.userEnteredFormat.numberFormat = { type: 'TEXT' };
-           if (val && String(val).length < 2) {
-             cellData.userEnteredValue.stringValue = ('00' + val).slice(-2);
-           }
+        if (numberFormat) {
+           cellData.userEnteredFormat.numberFormat = numberFormat;
+        }
+        if (isItem) {
+           cellData.userEnteredFormat.numberFormat = { type: 'NUMBER', pattern: '00' };
         }
 
         if (fieldName === 'lokasi_simpan' && meta._lokasi_simpan_url) {
@@ -296,7 +336,7 @@ const SpreadsheetService = {
     });
 
     Sheets.Spreadsheets.batchUpdate({ requests: requests }, ss.getId());
-    sortDetailSheetByNoBerkas_(sheet);
+    sortDetailSheetByNomorItemArsip_(sheet);
 
     return metadataList.map(function(meta, i) {
       let finalRow = rowIndex + i;
@@ -365,8 +405,12 @@ const SpreadsheetService = {
     for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
       const fieldName = DETAIL_FIELD_ORDER[c];
       const val = rowValues[c] || '';
+      const isJumlah = fieldName === 'jumlah';
+      const isItem = fieldName === 'nomor_item_arsip';
+      const isNumericField = isJumlah || isItem;
+      const numericVal = Number(val);
       const cellData = {
-        userEnteredValue: { stringValue: String(val) },
+        userEnteredValue: (isNumericField && !isNaN(numericVal) && String(val).trim() !== '') ? { numberValue: numericVal } : { stringValue: String(val) },
         userEnteredFormat: {
           wrapStrategy: 'WRAP',
           verticalAlignment: 'MIDDLE',
@@ -379,11 +423,8 @@ const SpreadsheetService = {
         }
       };
 
-      if (fieldName === 'item_number') {
-         cellData.userEnteredFormat.numberFormat = { type: 'TEXT' };
-         if (val && String(val).length < 2) {
-           cellData.userEnteredValue.stringValue = ('00' + val).slice(-2);
-         }
+      if (isItem) {
+         cellData.userEnteredFormat.numberFormat = { type: 'NUMBER', pattern: '00' };
       }
 
       if (fieldName === 'lokasi_simpan' && metadata._lokasi_simpan_url) {
@@ -418,7 +459,7 @@ const SpreadsheetService = {
     };
 
     Sheets.Spreadsheets.batchUpdate({ requests: [request] }, ss.getId());
-    sortDetailSheetByNoBerkas_(sheet);
+    sortDetailSheetByNomorItemArsip_(sheet);
 
     // Sort mengubah urutan baris; cari ulang posisi baris via URL file agar
     // spreadsheet_row_number yang dicatat tidak basi (edit/hapus bisa salah baris).
@@ -461,7 +502,7 @@ const SpreadsheetService = {
       ? summarizeDetailSheet_(sheet, subActivity)
       : { count: 0, startDate: null, endDate: null, akses: '' };
 
-    let rekapKode = '', rekapFC = '', rekapLaci = '', rekapFolder = '', rekapAkses = '';
+    let rekapFC = '', rekapLaci = '', rekapFolder = '', rekapAkses = '';
     let rekapNomorBerkas = '', rekapKurunWaktu = '', rekapJumlah = '', rekapKet = '';
     let rekapSheet, rowIndex, docCols = [];
     try {
@@ -489,9 +530,9 @@ const SpreadsheetService = {
           const allCols = docColNums.concat([kodeCol, fcCol, laciCol, folderCol, aksesCol, nomorBerkasCol, kurunWaktuCol, jumlahCol, ketCol]).filter(Boolean);
           const maxCol = Math.max.apply(null, allCols);
           const rowValues = rekapSheet.getRange(rowIndex, 1, 1, maxCol).getDisplayValues()[0];
+          
           const cell = function (col) { return col ? String(rowValues[col - 1] || '').trim() : ''; };
 
-          rekapKode        = cell(kodeCol);
           rekapFC          = cell(fcCol);
           rekapLaci        = cell(laciCol);
           rekapFolder      = cell(folderCol);
@@ -513,9 +554,15 @@ const SpreadsheetService = {
       kode_klasifikasi: '',
       kurun_waktu: (showJsComputed ? '' : rekapKurunWaktu) || formatDateRange_(summary.startDate, summary.endDate),
       jumlah: (showJsComputed ? '' : rekapJumlah) || ((summary.sumLembar || 0) + ' lembar'),
-      no_filing_cabinet: (showJsComputed ? '' : rekapFC) || (activity && activity.laci_folder_id) || '',
-      no_laci: (showJsComputed ? '' : rekapLaci) || (subActivity && subActivity.parent_folder_name) || '',
-      no_folder: showJsComputed ? '' : nextItemNum,
+      no_filing_cabinet: (showJsComputed ? '' : rekapFC) || (activity && activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '') || '',
+      _no_filing_cabinet_path: activity && activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '',
+      _no_filing_cabinet_url: (activity && activity.laci_folder_id) ? 'https://drive.google.com/drive/folders/' + activity.laci_folder_id : '',
+      
+      no_laci: (showJsComputed ? '' : rekapLaci) || (subActivity && subActivity.sub_activity_name) || '',
+      _no_laci_path: (subActivity && subActivity.sub_activity_name) || '',
+      _no_laci_url: (subActivity && subActivity.folder_id) ? 'https://drive.google.com/drive/folders/' + subActivity.folder_id : '',
+      
+      no_folder: (showJsComputed ? '' : rekapFolder) || (subActivity && subActivity.no_folder) || String(nextItemNum).padStart(2, '0'),
       klasifikasi_akses: (showJsComputed ? '' : rekapAkses) || summary.akses || 'Terbatas',
       ket: rekapKet || '',
       next_item_number: nextItemNum
@@ -543,7 +590,7 @@ const SpreadsheetService = {
     return meta;
   },
 
-  listExistingItemUraianPairs: function (activity, subActivity) {
+  listExistingItemNumbers: function (activity, subActivity) {
     const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = findExistingDetailSheet_(ss, subActivity);
     if (!sheet) return [];
@@ -554,21 +601,17 @@ const SpreadsheetService = {
     const width = Math.max(sheet.getLastColumn(), DETAIL_FALLBACK_START_COL + DETAIL_FIELD_ORDER.length);
     const headerColumns = getDetailColumnMap_(sheet, width);
     const itemCol = headerColumns.nomor_item_arsip || (DETAIL_FALLBACK_START_COL + 1);
-    const uraianCol = headerColumns.uraian_informasi_item || (DETAIL_FALLBACK_START_COL + 3);
 
     const rowCount = noteRow - DETAIL_DATA_START_ROW;
     const itemValues = sheet.getRange(DETAIL_DATA_START_ROW, itemCol, rowCount, 1).getDisplayValues();
-    const uraianValues = sheet.getRange(DETAIL_DATA_START_ROW, uraianCol, rowCount, 1).getDisplayValues();
 
     const pairs = [];
     for (let i = 0; i < rowCount; i++) {
       const item = String(itemValues[i][0] || '').trim();
-      const uraian = String(uraianValues[i][0] || '').trim();
-      if (!item && !uraian) continue;
+      if (!item) continue;
       pairs.push({
         rowNumber: DETAIL_DATA_START_ROW + i,
-        nomor_item_arsip: item,
-        uraian_informasi_item: uraian
+        nomor_item_arsip: item
       });
     }
     return pairs;
@@ -655,7 +698,7 @@ const SpreadsheetService = {
 
     const row = [
       sanitizeCellValue_(nomorBerkas),
-      sanitizeCellValue_(subActivity.default_kode_klasifikasi || ''),
+      sanitizeCellValue_(''),
       sanitizeCellValue_(getSubActivityFormalName_(subActivity) || ''),
       '',
       '',
@@ -694,6 +737,10 @@ const SpreadsheetService = {
 
     const detailSheet = ensureDetailSheet_(ss, activity, subActivity);
     const headerMap = getRekapHeaderMap_(sheet);
+
+    if (locks.nomorBerkas !== false) {
+      setRekapStaticCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, subActivity.sort_order || '');
+    }
 
     if (locks.kurunWaktu !== false) {
       setRekapFormulaCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.kurunWaktu, buildKurunWaktuFormula_(detailSheet));
@@ -945,7 +992,11 @@ const SpreadsheetService = {
     const summary = summarizeDetailSheet_(detailSheet, subActivity);
     const computedJumlah = summary.sumLembar ? summary.sumLembar + ' lembar' : '';
 
-    setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, metadata.nomorBerkas, true);
+    if (locks.nomorBerkas === false && metadata.nomorBerkas !== undefined) {
+      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, metadata.nomorBerkas, true);
+    } else if (locks.nomorBerkas !== false) {
+      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, subActivity.sort_order || '', true);
+    }
     setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.kodeKlasifikasi, metadata.kodeKlasifikasi, true);
 
     if (locks.kurunWaktu === false) {
@@ -960,9 +1011,33 @@ const SpreadsheetService = {
       setRekapFormulaCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.jumlah, buildJumlahFormula_(detailSheet));
     }
 
-    setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.filingCabinet, metadata.noFilingCabinet, true);
-    setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noLaci, metadata.noLaci, true);
-    setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noFolder, metadata.noFolder, true);
+    if (locks.filingCabinet === false && metadata.noFilingCabinet !== undefined) {
+      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.filingCabinet, metadata.noFilingCabinet, true);
+    } else if (locks.filingCabinet !== false) {
+      const rawFcText = activity.laci_no + '. Laci ' + activity.activity_name;
+      const fcText = rawFcText.replace(/"/g, '""');
+      const fcFormula = activity.laci_folder_id 
+          ? '=HYPERLINK("https://drive.google.com/drive/folders/' + activity.laci_folder_id + '", "' + fcText + '")' 
+          : sanitizeCellValue_(rawFcText);
+      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.filingCabinet, fcFormula, true);
+    }
+
+    if (locks.noLaci === false && metadata.noLaci !== undefined) {
+      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noLaci, metadata.noLaci, true);
+    } else if (locks.noLaci !== false) {
+      const rawLaciText = subActivity.sub_activity_name || '';
+      const laciText = rawLaciText.replace(/"/g, '""');
+      const laciFormula = subActivity.folder_id
+          ? '=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '", "' + laciText + '")'
+          : sanitizeCellValue_(rawLaciText);
+      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noLaci, laciFormula, true);
+    }
+
+    if (locks.noFolder === false && metadata.noFolder !== undefined) {
+      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noFolder, metadata.noFolder, true);
+    } else if (locks.noFolder !== false) {
+      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noFolder, subActivity.sort_order || '', true);
+    }
 
     if (locks.akses === false) {
       setRekapStaticCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.akses, metadata.klasifikasiAkses || summary.akses);

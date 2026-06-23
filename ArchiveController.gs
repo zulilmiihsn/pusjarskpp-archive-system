@@ -116,7 +116,7 @@ const ArchiveController = {
     });
     const draft = MetadataService.createDraft(enrichedPayload, activity, subActivity, fields);
     const locationDefaults = SpreadsheetService.getDetailMetadataDefaults(activity, subActivity);
-    ['no_filing_cabinet', 'no_laci', 'no_folder', 'klasifikasi_akses'].forEach(function (key) {
+    ['no_filing_cabinet', 'no_laci', 'no_folder', 'klasifikasi_akses', '_no_filing_cabinet_path', '_no_filing_cabinet_url', '_no_laci_path', '_no_laci_url'].forEach(function (key) {
       if (locationDefaults[key]) draft.metadata[key] = locationDefaults[key];
     });
 
@@ -319,21 +319,15 @@ const ArchiveController = {
   },
 
   _validateUniqueMetadata: function(payload, activity, subActivity, currentRowNumber) {
-    const existingPairs = SpreadsheetService.listExistingItemUraianPairs(activity, subActivity);
+    const existingPairs = SpreadsheetService.listExistingItemNumbers(activity, subActivity);
     const rawIncomingItem = String(payload.metadata.nomor_item_arsip || '').trim();
     const incomingItemNumber = rawIncomingItem ? rawIncomingItem.replace(/^0+/, '').padStart(2, '0') : '';
-    const incomingUraian = String(payload.metadata.uraian_informasi_item || '').trim().toLowerCase();
 
     existingPairs.forEach(function(pair) {
       if (currentRowNumber && pair.rowNumber === currentRowNumber) return;
 
       const existingItem = String(pair.nomor_item_arsip || '').trim();
       const existingItemNumber = existingItem ? existingItem.replace(/^0+/, '').padStart(2, '0') : '';
-      const existingUraian = String(pair.uraian_informasi_item || '').trim().toLowerCase();
-
-      if (incomingUraian && existingUraian === incomingUraian) {
-        throw new Error('Uraian informasi item "' + payload.metadata.uraian_informasi_item + '" sudah ada. Harap gunakan uraian yang berbeda.');
-      }
 
       if (incomingItemNumber && existingItemNumber === incomingItemNumber) {
         throw new Error('Nomor Item Arsip "' + rawIncomingItem + '" sudah digunakan. Biarkan kosong agar sistem mengisi otomatis angka selanjutnya.');
@@ -349,7 +343,6 @@ const ArchiveController = {
       if (!metadata.nomor_item_arsip) {
         const nextNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
         metadata.nomor_item_arsip = String(nextNum).padStart(2, '0');
-        metadata.no_berkas = String(nextNum);
         metadata.lokasi_simpan = MetadataService.buildFinalFileName(metadata, sourceFile.getName());
       }
       const targetFolderId = payload.targetFolderId || subActivity.folder_id;
@@ -549,16 +542,6 @@ const ArchiveController = {
         const normalizedExisting = existingItem ? existingItem.replace(/^0+/, '').padStart(2, '0') : '';
         if (normalizedExisting === normalizedItem) {
           errors.push({ field: 'nomor_item_arsip', message: 'Nomor Item Arsip "' + incomingItem + '" sudah digunakan.' });
-        }
-      });
-    }
-
-    const incomingUraian = String(payload.uraian_informasi_item || '').trim().toLowerCase();
-    if (incomingUraian) {
-      existingData.rows.forEach(function (row) {
-        const existingUraian = String(row.metadata.uraian_informasi_item || '').trim().toLowerCase();
-        if (existingUraian === incomingUraian) {
-          errors.push({ field: 'uraian_informasi_item', message: 'Uraian informasi item "' + payload.uraian_informasi_item + '" sudah ada.' });
         }
       });
     }

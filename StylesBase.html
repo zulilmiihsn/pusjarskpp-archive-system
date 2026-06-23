@@ -159,7 +159,7 @@
   .app-shell {
     display: grid;
     grid-template-columns: 248px minmax(0, 1fr);
-    min-height: 100dvh;
+    height: 100dvh;
     overflow: hidden;
   }
 
@@ -783,7 +783,7 @@
     min-width: 0;
   }
 
-  .form-field        { display: grid; gap: 5px; min-width: 0; }
+  .form-field        { display: grid; gap: 5px; min-width: 0; align-content: start; }
   .form-field.full   { grid-column: 1 / -1; }
 
   .form-field.has-error input,
@@ -813,6 +813,7 @@
     color: var(--text);
     letter-spacing: 0.005em;
     line-height: 1.25;
+    min-height: 20px;
   }
 
   input, select, textarea {

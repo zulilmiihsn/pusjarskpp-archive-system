@@ -148,13 +148,14 @@ test('buildFinalFileName_ - with nomor_surat', () => {
   const metadata = {
     nomor_item_arsip: '2',
     tingkat_perkembangan: 'Asli',
-    nomor_surat: 'B-123/2026',
-    uraian_informasi_berkas: 'Undangan Rapat'
+    nomor_item_arsip: '15',
+    tingkat_perkembangan: 'Asli',
+    uraian_informasi_item: 'Undangan Rapat/Kepada Sekretaris Daerah/Dari Panitia Pusat'
   };
   const sourceName = 'original.pdf';
   assert.strictEqual(
-    buildFinalFileName_(metadata, sourceName),
-    '02. (Asli) No: B-123/2026_Undangan Rapat.pdf'
+    buildFinalFileName_(metadata, null),
+    '15. (Asli) Undangan Rapat/Kepada Sekretaris Daerah/Dari Panitia Pusat.pdf'
   );
 });
 
@@ -162,7 +163,7 @@ test('buildFinalFileName_ - without nomor_surat', () => {
   const metadata = {
     nomor_item_arsip: '15',
     tingkat_perkembangan: 'Copy',
-    uraian_informasi_berkas: 'Laporan Bulanan'
+    uraian_informasi_item: 'Laporan Bulanan'
   };
   const sourceName = 'original.pdf';
   assert.strictEqual(
@@ -257,7 +258,7 @@ test('buildFinalFileName_ - handles 0 as nomor_item_arsip', () => {
   const metadata = {
     nomor_item_arsip: '0',
     tingkat_perkembangan: 'Asli',
-    uraian_informasi_berkas: 'Test'
+    uraian_informasi_item: 'Test'
   };
   assert.strictEqual(buildFinalFileName_(metadata, 'file.pdf'), '00. (Asli) Test.pdf');
 });
@@ -266,7 +267,7 @@ test('buildFinalFileName_ - no source extension defaults to pdf', () => {
   const metadata = {
     nomor_item_arsip: '1',
     tingkat_perkembangan: 'Copy',
-    uraian_informasi_berkas: 'Doc'
+    uraian_informasi_item: 'Doc'
   };
   assert.strictEqual(buildFinalFileName_(metadata, 'file'), '01. (Copy) Doc.pdf');
 });
@@ -332,46 +333,41 @@ test('normalizeSheetName_ - colons and brackets removed', () => {
 test('parseExistingFileName_ - standard compliant format with No', () => {
   const result = parseExistingFileName_('02. (Asli) No: B-123/2026_Undangan Rapat.pdf');
   assert.strictEqual(result.nomor_item_arsip, '02');
-  assert.strictEqual(result.no_berkas, '2');
   assert.strictEqual(result.tingkat_perkembangan, 'Salinan'); // legacy Asli -> Salinan
   assert.strictEqual(result.nomor_surat, 'B-123/2026');
-  assert.strictEqual(result.uraian_informasi_berkas, 'Undangan Rapat');
+  assert.strictEqual(result.uraian_informasi_item, 'Undangan Rapat');
 });
 
 test('parseExistingFileName_ - standard compliant format without No', () => {
   const result = parseExistingFileName_('15. (Copy) Laporan Bulanan.docx');
   assert.strictEqual(result.nomor_item_arsip, '15');
-  assert.strictEqual(result.no_berkas, '15');
   assert.strictEqual(result.tingkat_perkembangan, 'Salinan'); // legacy Copy -> Salinan
   assert.strictEqual(result.nomor_surat, '');
-  assert.strictEqual(result.uraian_informasi_berkas, 'Laporan Bulanan');
+  assert.strictEqual(result.uraian_informasi_item, 'Laporan Bulanan');
 });
 
 test('parseExistingFileName_ - simple number prefix format without parenthesis', () => {
   const result = parseExistingFileName_('03. Surat Tugas Panitia.pdf');
   assert.strictEqual(result.nomor_item_arsip, '03');
-  assert.strictEqual(result.no_berkas, '3');
   assert.strictEqual(result.tingkat_perkembangan, 'Asli'); // default fallback
   assert.strictEqual(result.nomor_surat, '');
-  assert.strictEqual(result.uraian_informasi_berkas, 'Surat Tugas Panitia');
+  assert.strictEqual(result.uraian_informasi_item, 'Surat Tugas Panitia');
 });
 
 test('parseExistingFileName_ - simple number prefix format single digit', () => {
   const result = parseExistingFileName_('5. Kuitansi Pembayaran.docx');
   assert.strictEqual(result.nomor_item_arsip, '05');
-  assert.strictEqual(result.no_berkas, '5');
   assert.strictEqual(result.tingkat_perkembangan, 'Asli');
   assert.strictEqual(result.nomor_surat, '');
-  assert.strictEqual(result.uraian_informasi_berkas, 'Kuitansi Pembayaran');
+  assert.strictEqual(result.uraian_informasi_item, 'Kuitansi Pembayaran');
 });
 
 test('parseExistingFileName_ - non-numbered format fallback', () => {
   const result = parseExistingFileName_('Dokumen Kegiatan Diklat.pdf');
   assert.strictEqual(result.nomor_item_arsip, '01');
-  assert.strictEqual(result.no_berkas, '1');
   assert.strictEqual(result.tingkat_perkembangan, 'Asli');
   assert.strictEqual(result.nomor_surat, '');
-  assert.strictEqual(result.uraian_informasi_berkas, 'Dokumen Kegiatan Diklat');
+  assert.strictEqual(result.uraian_informasi_item, 'Dokumen Kegiatan Diklat');
 });
 
 test('parseExistingFileName_ - legacy Srikandi menjadi Asli', () => {

@@ -460,7 +460,7 @@
         _parseDone = true;
         var fields = result.fields || {};
         var filledCount = autoFillParseFields_(fields);
-        applyDirectionRules_(result.documentDirection);
+        filledCount += applyDirectionRules_(result.documentDirection, fields);
         if (filledCount > 0) {
           result._filledCount = filledCount;
           _parseResults = result;
@@ -524,14 +524,33 @@
     return filledCount;
   }
 
-  // Surat MASUK: kode klasifikasi harus kosong. Bersihkan field-nya bila terdeteksi masuk.
-  function applyDirectionRules_(direction) {
-    if (direction !== 'masuk') return;
+  // Surat MASUK: kode klasifikasi kosong. Surat KELUAR: Fallback ke inheritance jika parser gagal.
+  function applyDirectionRules_(direction, fields) {
     var target = findFormInput_('kode_klasifikasi');
-    // Hanya kosongkan bila nilainya hasil autofill — JANGAN hapus yang user ketik manual.
-    if (target && target.input.value && target.input.classList.contains('auto-parse-filled')) {
-      setFieldValue_(target.input, target.key, '', false);
+    if (!target) return 0;
+    var extraFilled = 0;
+
+    if (direction === 'keluar') {
+      // Jika surat keluar tapi bot gagal menemukan kodenya
+      if (!fields || !fields.kode_klasifikasi || !fields.kode_klasifikasi.value) {
+        // Fallback ke inheritance (default_value dari pengaturan sub kegiatan)
+        // Hanya isi jika user belum ngetik manual
+        if (!target.input.value || target.input.classList.contains('auto-parse-filled')) {
+          var kodeFieldConfig = (state.draft && state.draft.fields) ? state.draft.fields.find(function(f) { return f.field_name === 'kode_klasifikasi'; }) : null;
+          var defaultValue = kodeFieldConfig ? kodeFieldConfig.default_value : '';
+          if (defaultValue) {
+            setFieldValue_(target.input, target.key, defaultValue, true);
+            extraFilled++;
+          }
+        }
+      }
+    } else {
+      // Surat MASUK: pastikan field kosong bila sebelumnya diisi otomatis bot
+      if (target.input.value && target.input.classList.contains('auto-parse-filled')) {
+        setFieldValue_(target.input, target.key, '', false);
+      }
     }
+    return extraFilled;
   }
 
   function refreshFilePreview_() {
@@ -1060,6 +1079,15 @@
     const requestId = ++_metadataDefaultsRequestId;
     const activityId = state.draft.activity.activity_id;
     const subActivityId = state.draft.subActivity.sub_activity_id;
+    
+    const numInput = document.querySelector(`[data-field="nomor_item_arsip"]`);
+    const numSpinner = document.getElementById('spinner-nomor_item_arsip');
+    const btnRefresh = document.getElementById('btn-refresh-nomor_item_arsip');
+    if (numInput) numInput.disabled = true;
+    if (numSpinner) numSpinner.style.display = 'inline-block';
+    if (btnRefresh) btnRefresh.style.pointerEvents = 'none';
+    if (btnRefresh) btnRefresh.style.opacity = '0.5';
+
     try {
       const result = await api('getArchiveMetadataDefaults', {
         year: state.draft.year || (state.bootstrap.settings && state.bootstrap.settings.currentYear) || '',
@@ -1103,6 +1131,7 @@
           }
         }
       }
+      
       if (changed) {
         state.draft.metadata.lokasi_simpan = getCategoryLocation(state.draft);
         const locInput = document.querySelector('[data-field="lokasi_simpan"]');
@@ -1113,6 +1142,13 @@
       }
     } catch (error) {
       console.warn('Gagal memuat default lokasi arsip: ' + (error.message || error));
+    } finally {
+      if (requestId === _metadataDefaultsRequestId) {
+        if (numInput) numInput.disabled = false;
+        if (numSpinner) numSpinner.style.display = 'none';
+        if (btnRefresh) btnRefresh.style.pointerEvents = 'auto';
+        if (btnRefresh) btnRefresh.style.opacity = '1';
+      }
     }
   }
 
@@ -1160,22 +1196,24 @@
 
     let section3Html = '';
     if (section3Fields.length) {
-      const groupedNames = new Set(['tingkat_perkembangan', 'jumlah', 'satuan']);
+      const groupedNames = new Set(['klasifikasi_akses', 'tingkat_perkembangan', 'jumlah', 'satuan']);
       const groupedFields = section3Fields.filter(f => groupedNames.has(f.field_name));
       const otherFields = section3Fields.filter(f => !groupedNames.has(f.field_name));
 
       let inner = otherFields.map(f => metadataField(f, metadata[f.field_name], hints)).join('');
 
       if (groupedFields.length >= 2) {
-        const wrapClass = groupedFields.length === 3 ? 'lokasi-triple-row' : 'jumlah-satuan-row';
-        inner += '<div class="' + wrapClass + '">'
+        const hasKlasifikasi = groupedFields.some(f => f.field_name === 'klasifikasi_akses');
+        const wrapClass = hasKlasifikasi ? 'form-grid grid-2' : (groupedFields.length === 3 ? 'lokasi-triple-row' : 'jumlah-satuan-row');
+        const wrapStyle = hasKlasifikasi ? 'grid-column: 1 / -1; padding-top: 8px;' : '';
+        inner += '<div class="' + wrapClass + '" style="' + wrapStyle + '">'
           + groupedFields.map(f => metadataField(f, metadata[f.field_name], hints)).join('')
           + '</div>';
       } else {
         inner += groupedFields.map(f => metadataField(f, metadata[f.field_name], hints)).join('');
       }
 
-      section3Html = card('3', 'Detail Lokasi Fisik', 'Penyimpanan berkas', inner);
+      section3Html = card('3', 'Detail Lokasi Fisik', 'Penyimpanan berkas', inner, 'metadata-grid-3');
     }
 
     const extraHtml = extraFields.length
@@ -1276,7 +1314,7 @@
     tingkat_perkembangan: 'Wujud dokumen: Asli (dokumen asli/elektronik bertanda tangan) atau Salinan (turunan/fotokopi/cetak).',
     jumlah: 'Jumlah dokumen. Gunakan tombol + dan - atau ketik langsung.',
     no_filing_cabinet: 'Nomor lemari arsip fisik tempat dokumen disimpan, contoh: FC-01',
-    klasifikasi_akses: 'Biasa: dapat diakses semua. Terbatas: hanya unit terkait. Rahasia: akses terbatas pimpinan.'
+    klasifikasi_akses: 'Terbuka: dapat diakses semua. Terbatas: hanya unit terkait. Rahasia: akses terbatas pimpinan.'
   };
 
   function metadataField(field, value, hints) {
@@ -1298,14 +1336,27 @@
       state.draft && state.draft.activity ? state.draft.activity.activity_id : '',
       key
     );
-    const hintHtml = (hint && key !== 'uraian_informasi_item' && key !== 'kode_klasifikasi') ? '<div class="field-hint">' + esc(hint) + '</div>' : '';
+    const hintHtml = ''; // User requested to remove hints below input fields
     const safeKey = esc(key);
     const safeCur = esc(current);
     const safeHint = esc(hint || label);
 
     const requiredMark = isRequired ? '<span class="required-dot" aria-hidden="true">*</span>' : '';
-    let labelHtml = '<label for="meta-' + safeKey + '"><span>' + esc(label) + requiredMark + '</span>'
+    let labelHtml = '<label for="meta-' + safeKey + '" style="display:flex; align-items:center;"><span>' + esc(label) + requiredMark + '</span>'
       + (METADATA_TOOLTIPS[key] ? '<span class="tooltip-trigger" title="">?<span class="tooltip-text">' + esc(METADATA_TOOLTIPS[key]) + '</span></span>' : '');
+
+    if (key === 'nomor_item_arsip') {
+      labelHtml += `
+        <svg id="spinner-${safeKey}" class="spinner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none; margin-left:8px; width:14px; height:14px; animation: spin 1s linear infinite;"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+        <button id="btn-refresh-${safeKey}" type="button" class="metadata-lock-btn" style="margin-left:auto;" onclick="window.refreshNomorItemArsip && window.refreshNomorItemArsip()" title="Refresh Nomor Item Arsip (Ambil nilai max terbaru)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+        </button>
+      `;
+    }
 
     if (key === 'no_filing_cabinet' || key === 'no_laci' || key === 'no_folder') {
       labelHtml += `
@@ -1460,7 +1511,7 @@
         });
       }
 
-      if (input.dataset.field === 'nomor_item_arsip' || input.dataset.field === 'uraian_informasi_item') {
+      if (input.dataset.field === 'nomor_item_arsip') {
         input.addEventListener('blur', function () {
           validateFieldOnBlur_(input.dataset.field, input.value);
         });
@@ -1754,13 +1805,19 @@
 
     clearFieldError_(fieldName);
 
+    var input = document.querySelector('[data-field="' + fieldName + '"]');
+    var spinner = document.getElementById('spinner-' + fieldName);
+    if (input) input.disabled = true;
+    if (spinner) spinner.style.display = 'inline-block';
+
     api('validateArchiveFields', {
       year: state.draft.year,
       activityId: state.draft.activity.activity_id,
       subActivityId: state.draft.subActivity.sub_activity_id,
-      nomor_item_arsip: fieldName === 'nomor_item_arsip' ? val : '',
-      uraian_informasi_item: fieldName === 'uraian_informasi_item' ? val : ''
+      nomor_item_arsip: fieldName === 'nomor_item_arsip' ? val : ''
     }).then(function (result) {
+      if (input) input.disabled = false;
+      if (spinner) spinner.style.display = 'none';
       if (!state.draft) return;
       if (!result || result.valid) {
         clearFieldError_(fieldName);
@@ -1769,6 +1826,8 @@
         if (match) showFieldError_(fieldName, match.message);
       }
     }).catch(function () {
+      if (input) input.disabled = false;
+      if (spinner) spinner.style.display = 'none';
       // silent — network errors jangan ganggu UX
     });
   }
@@ -1950,4 +2009,9 @@
     });
   }
 
+  window.refreshNomorItemArsip = function() {
+    if (!state.draft || state.editMode) return;
+    state.draft.metadata.nomor_item_arsip = '';
+    applyArchiveMetadataDefaults_();
+  };
 </script>
