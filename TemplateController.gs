@@ -1,7 +1,6 @@
 'use strict';
 
 const TemplateController = {
-  getTemplates: function (payload) { return SettingsController.getTemplates(payload); },
   getTemplatesData: function (payload) { return SettingsController.getTemplatesData(payload); },
   uploadTemplate: function (payload) {
     const actor = requireAuth_(payload);
@@ -21,7 +20,6 @@ const TemplateController = {
     auditAction_(actor, 'TEMPLATE_DELETED', { year: payload.year, folderId: payload.fileId, message: 'Menghapus template' });
     return r;
   },
-  getTemplateCategories: function () { return SettingsController.getTemplateCategories(); },
   saveTemplateCategory: function (payload) {
     const actor = requireAuth_(payload || {});
     const r = SettingsController.saveTemplateCategory(payload);

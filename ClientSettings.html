@@ -677,71 +677,79 @@
         data-parent-folder-name="${esc(sub.parent_folder_name || '')}"
         data-parent-folder-path="${esc(sub.parent_folder_path || '')}"
         data-spreadsheet-file-id="${esc(sub.spreadsheet_file_id || activity.spreadsheet_file_id || '')}"
-        style="border:1px solid var(--border); border-left:3px solid ${statusColor}; border-radius:var(--radius-md); background:var(--surface); overflow:hidden; transition:box-shadow 150ms ease;">
+        style="border: 1px solid var(--border); border-left: 4px solid ${statusColor}; border-radius: var(--radius-md); background: var(--surface); overflow: hidden; transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-xs); margin-bottom: 4px;">
 
         <!-- Header -->
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; padding:8px 12px; border-bottom:1px solid var(--border);">
-          <div style="min-width:0;">
-            <div style="font-size:13px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${esc(sub.sub_activity_name || '-')}</div>
-            ${sub.folder_path ? '<div style="font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="' + esc(sub.folder_path) + '"><svg style="display:inline;vertical-align:-2px;margin-right:3px;" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> ' + esc(sub.folder_path) + '</div>' : ''}
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-soft);">
+          <div style="min-width: 0;">
+            <div style="font-size: 13.5px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em;">${esc(sub.sub_activity_name || '-')}</div>
+            ${sub.folder_path ? '<div style="font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;" title="' + esc(sub.folder_path) + '"><svg style="display: inline-block; vertical-align: -2px; margin-right: 4px; opacity: 0.7;" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>' + esc(sub.folder_path) + '</div>' : ''}
           </div>
-          <span style="flex-shrink:0; display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:600; color:${statusColor}; background:${statusColor}18; border:1px solid ${statusColor}40; border-radius:20px; padding:2px 8px; white-space:nowrap;">
-            <span style="width:5px;height:5px;border-radius:50%;background:${statusColor};display:inline-block;"></span>
+          <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusColor}10; border: 1px solid ${statusColor}30; border-radius: 99px; padding: 3px 10px; white-space: nowrap;">
+            <span style="width: 6px; height: 6px; border-radius: 99px; background: ${statusColor}; display: inline-block;"></span>
             ${esc(statusLabel)}
           </span>
         </div>
 
         <!-- Mapping fields -->
-        <div style="padding:10px 12px; display:grid; grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) 70px; gap:10px; align-items:end;">
-          <div>
-            <label style="font-size:10px;font-weight:500;color:var(--muted);display:block;margin-bottom:3px;">Nama Formal Rangkuman</label>
+        <div style="padding: 16px; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 80px; gap: 16px; align-items: end;">
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11px; font-weight: 700; color: var(--muted); display: block;">Nama Formal Rangkuman</label>
             <input class="mapping-input" data-field="formalArchiveName"
               value="${esc(sub.formal_archive_name || '')}"
               placeholder="${esc(sub.effective_formal_archive_name || sub.sub_activity_name || 'otomatis')}"
-              style="font-size:12px; padding:5px 8px;">
+              style="font-size: 13px; padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); transition: border-color 140ms ease, box-shadow 140ms ease; width: 100%;">
           </div>
-          <div>
-            <label style="font-size:10px;font-weight:500;color:var(--muted);display:block;margin-bottom:3px;">Lembar Rincian</label>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11px; font-weight: 700; color: var(--muted); display: block;">Lembar Rincian</label>
             <input class="mapping-input" data-field="targetSheetName"
               value="${esc(sub.target_sheet_name || '')}"
               placeholder="${esc(sub.effective_target_sheet_name || sub.sub_activity_name || 'otomatis')}"
-              style="font-size:12px; padding:5px 8px;">
+              style="font-size: 13px; padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); transition: border-color 140ms ease, box-shadow 140ms ease; width: 100%;">
           </div>
-          <div>
-            <label style="font-size:10px;font-weight:500;color:var(--muted);display:block;margin-bottom:3px;">No. Folder</label>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <label style="font-size: 11px; font-weight: 700; color: var(--muted); display: block; text-align: center;">No. Folder</label>
             <input class="mapping-input" data-field="noFolder"
               value="${esc(sub.no_folder || '')}"
               placeholder="auto"
-              style="font-size:12px; padding:5px 8px; text-align:center;">
+              style="font-size: 13px; padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); text-align: center; transition: border-color 140ms ease, box-shadow 140ms ease; width: 100%;">
           </div>
         </div>
 
         <!-- Advanced + Save -->
-        <div style="padding:10px 12px; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; border-top: 1px solid var(--line);">
-          <details style="margin:0; flex: 1;">
-            <summary style="cursor:pointer; font-size:11.5px; font-weight: 600; color:var(--muted); user-select:none; list-style:none; display:inline-flex; align-items:center; gap:6px; padding-top: 4px; transition: color 0.2s;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-              Penyesuaian Manual (Tingkat Lanjut)
-            </summary>
-            <div style="margin-top:12px; padding: 14px; border-radius: var(--radius-md); background: var(--bg); border: 1px dashed var(--border); display: flex; align-items: flex-start; gap: 16px;">
-              <div style="flex-shrink: 0; width: 140px;">
-                <label style="font-size:11px; font-weight:600; color:var(--text); display:block; margin-bottom:6px;">Target Baris di Excel</label>
-                <input class="mapping-input" data-field="rekapRowNumber"
-                  value="${esc(sub.rekap_row_number || '')}"
-                  placeholder="otomatis"
-                  style="font-size:13px; padding:8px 12px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+        <div style="padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 14px; border-top: 1px solid var(--line);">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+            <details style="margin: 0; flex: 1;">
+              <summary style="cursor: pointer; font-size: 12px; font-weight: 700; color: var(--accent); user-select: none; list-style: none; display: inline-flex; align-items: center; gap: 6px; transition: color 150ms ease;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                Penyesuaian Manual (Tingkat Lanjut)
+              </summary>
+              <div style="margin-top: 12px; padding: 16px; border-radius: var(--radius-md); background: var(--accent-light); border: 1px solid var(--accent-border); display: flex; align-items: flex-start; gap: 16px;">
+                <div style="flex-shrink: 0; width: 130px;">
+                  <label style="font-size: 11px; font-weight: 700; color: var(--text); display: block; margin-bottom: 6px;">Target Baris di Excel</label>
+                  <input class="mapping-input" data-field="rekapRowNumber"
+                    value="${esc(sub.rekap_row_number || '')}"
+                    placeholder="otomatis"
+                    style="font-size: 12px; padding: 6px 10px; width: 100%; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); text-align: center;">
+                </div>
+                <div style="flex: 1; padding-top: 2px;">
+                  <p style="font-size: 12px; color: var(--text); margin: 0 0 4px 0; line-height: 1.4; font-weight: 600; display: flex; align-items: center; gap: 6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                    Pelacakan Baris Otomatis
+                  </p>
+                  <p style="font-size: 11.5px; color: var(--muted); margin: 0 0 4px 0; line-height: 1.5;">
+                    Biarkan kosong agar sistem otomatis melacak posisi baris datanya di Google Sheets.
+                  </p>
+                  <p style="font-size: 11px; color: var(--subtle); margin: 0; line-height: 1.5; font-style: italic;">
+                    Jika sistem mencatat data ke baris yang salah, Anda bisa mengetik manual nomor barisnya di sini (misal: <strong>12</strong>) untuk memaksa aplikasi mengunci ke baris tersebut.
+                  </p>
+                </div>
               </div>
-              <div style="flex: 1; padding-top: 2px;">
-                <p style="font-size:12px; color:var(--text); margin:0 0 6px 0; line-height:1.5; font-weight: 500;">
-                  Biarkan kosong agar sistem otomatis melacak posisi baris datanya.
-                </p>
-                <p style="font-size:12px; color:var(--muted); margin:0; line-height:1.6;">
-                  Jika sistem mencatat data ke baris yang salah, Anda bisa mengetik manual nomor barisnya di sini (misal: <strong>12</strong>) untuk memaksa aplikasi mengunci ke baris tersebut.
-                </p>
-              </div>
-            </div>
-          </details>
-          <button class="btn btn-sm btn-primary" data-save-sub-mapping style="flex-shrink:0; margin-top: 2px;">Simpan Pemetaan</button>
+            </details>
+            <button class="btn btn-sm btn-primary" data-save-sub-mapping style="flex-shrink: 0; padding: 8px 16px; font-weight: 700; font-size: 12.5px;">
+              Simpan Pemetaan
+            </button>
+          </div>
         </div>
       </div>
     `;

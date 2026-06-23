@@ -56,9 +56,7 @@ const AccountController = {
   login: function (payload) { return AuthService.login(payload); },
   logout: function (payload) { const r = AuthService.logout(payload); bumpVersion(); return r; },
   getCurrentUser: function (payload) { return AuthService.getCurrentUser(payload); },
-  saveDefaultAdmin: function (payload) { requireAdmin_(payload); const r = AuthService.saveDefaultAdmin(); bumpVersion(); return r; },
-  getUserEmail: function () { return AuthService.getUserEmail(); },
-  getHistory: function (payload) { 
+  getHistory: function (payload) {
     payload = payload || {};
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
     const all = CacheHelper.getConfig(year).history || [];

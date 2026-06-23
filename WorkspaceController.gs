@@ -2,7 +2,6 @@
 
 const WorkspaceController = {
   getBootstrap: function () { return SettingsController.getBootstrap(); },
-  getSettings: function () { return SettingsController.getSettings(); },
   getSystemVersion: function () { return getVersion(); },
 
   saveSettings: function (payload) {
@@ -35,21 +34,6 @@ const WorkspaceController = {
     const r = SettingsController.ensureArchiveMaintenanceTrigger();
     try { r.docTypesTrigger = SettingsController.ensureDocumentTypesSyncTrigger(); } catch (e) { r.docTypesTrigger = { installed: false, error: e.message }; }
     auditAction_(actor, 'TRIGGER_INSTALLED', { message: 'Memasang trigger maintenance harian + sinkron tipe dokumen' });
-    return r;
-  },
-  syncDocumentTypes: function (payload) {
-    payload = payload || {};
-    const actor = requireAdmin_(payload);
-    const r = SettingsController.syncDocumentTypeColumns(payload.year);
-    auditAction_(actor, 'DOCTYPES_SYNCED', { year: r.year, message: 'Sinkron kolom tipe dokumen: ' + r.spreadsheetsSynced + ' spreadsheet' });
-    return r;
-  },
-  updateActivityMapping: function (payload) {
-    payload = payload || {};
-    const actor = requireAdmin_(payload);
-    const r = SettingsController.updateActivityMapping(payload);
-    bumpVersion();
-    auditAction_(actor, 'ACTIVITY_MAPPING_UPDATED', { year: payload.year, activityId: payload.activityId, folderId: payload.targetFolderId, message: 'Memperbarui mapping kegiatan' });
     return r;
   },
   updateSubActivityMapping: function (payload) {

@@ -90,43 +90,6 @@ const ArchiveController = {
     return DriveService.uploadToInbox(payload);
   },
 
-  createDraft: function (payload) {
-    payload = payload || {};
-    requireAuth_(payload);
-    const ctx = _resolveArchiveContext_(payload);
-    const config = ctx.config, activity = ctx.activity, subActivity = ctx.subActivity;
-
-    const file = DriveService.getFileFromInput(payload);
-    const fields = config.fields.filter(function (field) { return field.activity_id === payload.activityId && isTrue_(field.is_visible_in_form); });
-    const nextItem = SpreadsheetService.getNextItemNumber(activity, subActivity);
-    
-    let fileLastUpdatedStr = '';
-    try {
-      const lastUpdated = file.getLastUpdated();
-      fileLastUpdatedStr = Utilities.formatDate(lastUpdated, Session.getScriptTimeZone(), 'yyyy-MM-dd');
-    } catch (e) {
-      console.warn('Gagal membaca lastUpdated berkas saat createDraft: ' + e.message);
-    }
-
-    const enrichedPayload = Object.assign({}, payload, {
-      sourceFileName: file.getName(),
-      nomorItemArsip: payload.nomorItemArsip || nextItem,
-      noBerkas: payload.noBerkas || subActivity.sort_order || 1,
-      fileLastUpdatedStr: fileLastUpdatedStr
-    });
-    const draft = MetadataService.createDraft(enrichedPayload, activity, subActivity, fields);
-    const locationDefaults = SpreadsheetService.getDetailMetadataDefaults(activity, subActivity);
-    ['no_filing_cabinet', 'no_laci', 'no_folder', 'klasifikasi_akses', '_no_filing_cabinet_path', '_no_filing_cabinet_url', '_no_laci_path', '_no_laci_url'].forEach(function (key) {
-      if (locationDefaults[key]) draft.metadata[key] = locationDefaults[key];
-    });
-
-    return {
-      year: ctx.year, activity: activity, subActivity: subActivity, sourceFile: DriveService.fileToDto(file),
-      fields: fields, metadata: draft.metadata, confidence: draft.confidence,
-      notes: draft.notes, finalFileName: draft.metadata.lokasi_simpan
-    };
-  },
-
   getArchiveMetadata: function (payload) {
     payload = payload || {};
     requireAuth_(payload);
@@ -662,66 +625,6 @@ const ArchiveController = {
     }, 30000);
   },
 
-  listInboxFiles: function (payload) {
-    payload = payload || {};
-    requireAuth_(payload);
-    const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
-
-    const settings = ConfigService.getSettings();
-    const config = CacheHelper.getConfig(year);
-    const yearConfig = ConfigService.getYearConfig(config, year);
-    const rootFolder = DriveApp.getFolderById(yearConfig.root_folder_id);
-    const systemFolder = DriveService.resolveSystemFolder(settings, rootFolder);
-
-    const inboxId = yearConfig.inbox_folder_id
-      ? cleanId_(yearConfig.inbox_folder_id)
-      : DriveService.getOrCreateChildFolder(systemFolder, 'Inbox Dokumen Masuk').getId();
-
-    const list = [];
-
-    function traverse(folderId) {
-      let pageToken = null;
-      do {
-        let result;
-        try {
-          result = Drive.Files.list({
-            q: "'" + folderId + "' in parents and trashed = false",
-            fields: "nextPageToken, files(id, name, webViewLink, mimeType, size, createdTime)",
-            pageSize: 1000,
-            pageToken: pageToken,
-            supportsAllDrives: true,
-            includeItemsFromAllDrives: true
-          });
-        } catch (e) {
-          break;
-        }
-
-        const items = result.files || [];
-        for (let i = 0; i < items.length; i++) {
-          const item = items[i];
-          if (item.mimeType === 'application/vnd.google-apps.folder') {
-            traverse(item.id);
-          } else {
-            list.push({
-              id: item.id, 
-              name: item.name, 
-              url: item.webViewLink,
-              downloadUrl: DriveService.getDownloadUrl(item.id, item.mimeType),
-              mimeType: item.mimeType, 
-              size: item.size || 0,
-              created: new Date(item.createdTime).getTime()
-            });
-          }
-        }
-        pageToken = result.nextPageToken;
-      } while (pageToken);
-    }
-
-    traverse(inboxId);
-    list.sort(function (a, b) { return b.created - a.created; });
-    return list;
-  },
-
   parseDocumentContent: function (payload) {
     payload = payload || {};
     requireAuth_(payload);
@@ -1010,12 +913,6 @@ const ArchiveController = {
       folderId: payload.fileId, message: 'Memperbarui tautan dokumen: ' + (payload.categoryName || '-')
     });
     return result;
-  },
-  getFinalFileName: function (payload) {
-    payload = payload || {};
-    Validator.requireString(payload.metadata, 'Metadata JSON');
-    Validator.requireString(payload.sourceName, 'Nama file sumber');
-    return MetadataService.buildFinalFileName(JSON.parse(payload.metadata), payload.sourceName);
   },
   syncExistingPhysicalFiles: function (payload) {
     payload = payload || {};

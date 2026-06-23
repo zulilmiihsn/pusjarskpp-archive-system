@@ -245,15 +245,6 @@ const AuthService = {
     } catch (e) { console.error('audit ADMIN_INITIALIZED gagal: ' + e.message); }
     return { created: true, defaultPassword: password, sessionId: sessionId };
   },
-
-  getUserEmail: function () {
-    try {
-      return Session.getActiveUser().getEmail() || '';
-    } catch (error) {
-      console.error('Session.getActiveUser().getEmail() failed: ' + error.message);
-      return '';
-    }
-  }
 };
 
 /**

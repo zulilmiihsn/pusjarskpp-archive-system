@@ -83,10 +83,6 @@ function getBootstrap() {
   return wrapApi(() => WorkspaceController.getBootstrap());
 }
 
-function getSettings() {
-  return wrapApi(() => WorkspaceController.getSettings());
-}
-
 /**
  * Lazy-load aset dekoratif berat (background gedung & ornamen) di luar payload
  * HTML awal. Dipanggil client hanya saat toggle background aktif.
@@ -102,10 +98,6 @@ function saveSettings(payload) {
 
 function installMaintenanceTrigger(payload) {
   return wrapApi(() => WorkspaceController.installMaintenanceTrigger(payload || {}));
-}
-
-function createDraft(payload) {
-  return wrapApi(() => ArchiveController.createDraft(payload));
 }
 
 function getArchiveMetadataDefaults(payload) {
@@ -126,10 +118,6 @@ function deleteDraft(payload) {
 
 function finalizeArchive(payload) {
   return wrapApi(() => ArchiveController.finalizeArchive(payload));
-}
-
-function deleteArchive(payload) {
-  return wrapApi(() => ArchiveController.deleteArchive(payload || {}));
 }
 
 function validateArchiveFields(payload) {
@@ -176,10 +164,6 @@ function parseDocumentContent(payload) {
   return wrapApi(() => ArchiveController.parseDocumentContent(payload));
 }
 
-function listInboxFiles(payload) {
-  return wrapApi(() => ArchiveController.listInboxFiles(payload));
-}
-
 function addSubActivity(payload) {
   return wrapApi(() => SubActivityController.addSubActivity(payload));
 }
@@ -192,20 +176,12 @@ function getHistory(payload) {
   return wrapApi(() => AccountController.getHistory(payload || {}));
 }
 
-function getTemplates(payload) {
-  return wrapApi(() => TemplateController.getTemplates(payload || {}));
-}
-
 function uploadTemplate(payload) {
   return wrapApi(() => TemplateController.uploadTemplate(payload || {}));
 }
 
 function deleteTemplate(payload) {
   return wrapApi(() => TemplateController.deleteTemplate(payload || {}));
-}
-
-function getTemplateCategories(payload) {
-  return wrapApi(() => TemplateController.getTemplateCategories(payload || {}));
 }
 
 function saveTemplateCategory(payload) {
@@ -234,10 +210,6 @@ function initializeWorkspace(payload) {
 
 function deleteYear(payload) {
   return wrapApi(() => WorkspaceController.deleteYear(payload || {}));
-}
-
-function updateActivityMapping(payload) {
-  return wrapApi(() => WorkspaceController.updateActivityMapping(payload || {}));
 }
 
 function updateSubActivityMapping(payload) {
@@ -321,11 +293,6 @@ function runArchiveMaintenance() {
   } catch (error) {
     console.error('runArchiveMaintenance: cleanup gagal: ' + error.message);
   }
-}
-
-/** Endpoint manual (admin) untuk paksa sinkron kolom tipe dokumen. */
-function syncDocumentTypes(payload) {
-  return wrapApi(() => WorkspaceController.syncDocumentTypes(payload || {}));
 }
 
 /**
@@ -443,10 +410,6 @@ function getCurrentUser(payload) {
   return wrapApi(() => AccountController.getCurrentUser(payload || {}));
 }
 
-function saveDefaultAdmin(payload) {
-  return wrapApi(() => AccountController.saveDefaultAdmin(payload || {}));
-}
-
 function resetWorkspace(payload) {
   return wrapApi(() => WorkspaceController.resetWorkspace(payload || {}));
 }
@@ -475,10 +438,6 @@ function getArchiveLogByFileId(payload) {
   return wrapApi(() => ArchiveController.getArchiveLogByFileId(payload || {}));
 }
 
-function getFinalFileName(payload) {
-  return wrapApi(() => ArchiveController.getFinalFileName(payload || {}));
-}
-
 function createParentFolder(payload) {
   return wrapApi(() => SubActivityController.createParentFolder(payload || {}));
 }
@@ -489,9 +448,5 @@ function convertSubActivityToParent(payload) {
 
 function syncExistingPhysicalFiles(payload) {
   return wrapApi(() => ArchiveController.syncExistingPhysicalFiles(payload || {}));
-}
-
-function getUserEmail() {
-  return wrapApi(() => AccountController.getUserEmail());
 }
 

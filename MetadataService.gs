@@ -40,65 +40,6 @@ const MetadataService = {
     return normalized;
   },
 
-  createDraft: function (payload, activity, subActivity, fields) {
-    const sourceName = payload.sourceFileName || '';
-    const rawText = payload.rawText || sourceName;
-    const text = [sourceName, rawText].join('\n');
-    const nomorSurat = extractNomorSurat_(text);
-    const tanggal = extractDate_(text) || payload.fileLastUpdatedStr || '';
-    const tingkat = extractTingkatPerkembangan_(sourceName) || 'Asli';
-    const kode = extractKodeKlasifikasi_(text) || '';
-    const uraian = extractUraian_(text, sourceName, activity, subActivity);
-
-    const itemVal = String(payload.nomorItemArsip || payload.noBerkas || '').replace(/^0+/, '');
-    
-    const base = {
-      no_berkas: itemVal,
-      nomor_item_arsip: itemVal ? itemVal.padStart(2, '0') : '',
-      kode_klasifikasi: kode,
-      // Komponen uraian: perihal terisi hasil ekstraksi; kepada/dari diisi user.
-      perihal: uraian,
-      kepada: '',
-      dari: '',
-      uraian_informasi_item: uraian,
-      tanggal: tanggal,
-      tingkat_perkembangan: tingkat,
-      jumlah: 1,
-      satuan: 'Lembar',
-      no_filing_cabinet: payload.noFilingCabinet || '',
-      no_laci: payload.noLaci || '',
-      no_folder: payload.noFolder || '',
-      klasifikasi_akses: 'Terbatas',
-      ket: '',
-      lokasi_simpan: ''
-    };
-
-    fields.forEach(field => {
-      if ((base[field.field_name] === '' || base[field.field_name] === undefined) && field.default_value !== '') {
-        base[field.field_name] = field.default_value;
-      }
-    });
-
-    base.nomor_surat = nomorSurat;
-    // Uraian = nomor surat/perihal/kepada/dari (bagian kosong dilewati).
-    base.uraian_informasi_item = assembleUraian_(base) || uraian;
-    base.lokasi_simpan = buildFinalFileName_(base, sourceName);
-
-    return {
-      metadata: base,
-      confidence: {
-        nomor_surat: nomorSurat ? 'medium' : 'low',
-        tanggal: tanggal ? 'medium' : 'low',
-        kode_klasifikasi: kode ? 'medium' : 'low',
-        uraian: uraian ? 'medium' : 'low'
-      },
-      notes: [
-        'Draft ini hasil bantuan parsing sederhana dari nama file/teks tempel.',
-        'User tetap wajib review sebelum file disimpan dan spreadsheet diisi.'
-      ]
-    };
-  },
-
   buildFinalFileName: buildFinalFileName_
 };
 
@@ -249,16 +190,6 @@ function cleanUraian_(value) {
     .replace(/^_+|_+$/g, '')
     .trim()
     .slice(0, MAX_URAIAN_LENGTH);
-}
-
-// Rakit kolom Uraian dari komponen: nomor surat/perihal/kepada/dari.
-// Bagian kosong dilewati supaya tak ada garis miring dobel.
-function assembleUraian_(metadata) {
-  metadata = metadata || {};
-  return ['nomor_surat', 'perihal', 'kepada', 'dari']
-    .map(function (k) { return String(metadata[k] || '').trim(); })
-    .filter(Boolean)
-    .join('/');
 }
 
 function buildFinalFileName_(metadata, sourceName) {

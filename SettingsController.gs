@@ -116,8 +116,6 @@ const SettingsController = {
     };
   },
 
-  getSettings: function () { return ConfigService.getSettings(); },
-
   saveSettings: function (payload) {
     const settings = ConfigService.saveSettings(payload || {});
     if (settings.configSpreadsheetId) {
@@ -348,22 +346,6 @@ const SettingsController = {
     return totals;
   },
 
-  updateActivityMapping: function (payload) {
-    payload = payload || {};
-    const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
-    Validator.requireString(payload.activityId, 'Activity ID');
-    Validator.requireId(payload.targetFolderId, 'Target Folder ID');
-    Validator.requireId(payload.spreadsheetFileId, 'Spreadsheet File ID');
-
-    const updated = ConfigRepository.updateActivityMapping({
-      year: year, activityId: payload.activityId,
-      laciFolderId: payload.laciFolderId, targetFolderId: payload.targetFolderId,
-      spreadsheetFileId: payload.spreadsheetFileId
-    });
-    CacheHelper.invalidate(year);
-    return { activity: updated, bootstrap: this.getBootstrap() };
-  },
-
   updateSubActivityMapping: function (payload) {
     payload = payload || {};
     const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
@@ -419,18 +401,6 @@ const SettingsController = {
   },
 
   listDriveFolders: function (payload) { return DriveService.listFolders(payload || {}); },
-
-  getHistory: function (payload) {
-    payload = payload || {};
-    const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
-    return CacheHelper.getConfig(year).history;
-  },
-
-  getTemplates: function (payload) {
-    payload = payload || {};
-    const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
-    return DriveService.listTemplates(year);
-  },
 
   getTemplatesData: function (payload) {
     payload = payload || {};
