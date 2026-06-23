@@ -886,7 +886,8 @@
         try {
           const res = await api('cleanupTrashedSubActivities');
           showToast(res.message);
-          await loadSettings();
+          state.bootstrap = await api('getBootstrap', {});
+          render();
         } catch (e) {
           showToast(errorMessage(e));
           btnRunCleanup.disabled = false;

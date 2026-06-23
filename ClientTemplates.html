@@ -545,10 +545,6 @@
       });
     });
 
-    document.getElementById('tpl-manage-cats')?.addEventListener('click', function () {
-      openCategoryManager();
-    });
-
     document.querySelectorAll('[data-template-cat-id]').forEach(function (card) {
       card.addEventListener('click', function (event) {
         if (event && event.target && event.target.closest && event.target.closest('.dropdown-container')) return;
@@ -586,7 +582,7 @@
           button.disabled = true;
           const pt = showProcessToast('Menghapus kategori "' + name + '"...');
           
-          const row = button.closest('.tc-card');
+          const row = button.closest('.tall-card-template-cat');
           if (row) row.style.display = 'none';
 
           api('deleteTemplateCategory', { categoryId: id })
@@ -935,10 +931,8 @@
       const pt = showProcessToast(categoryId ? 'Menyimpan perubahan...' : 'Menambahkan kategori...');
       
       if (categoryId) {
-        const titleEl = document.querySelector(`.tc-card[data-category-id="${categoryId}"] .tc-card-title`);
+        const titleEl = document.querySelector(`.tall-card-template-cat[data-template-cat-id="${categoryId}"] .tall-card-title`);
         if (titleEl) titleEl.textContent = name;
-        const colorEl = document.querySelector(`.tc-card[data-category-id="${categoryId}"] .tc-card-color`);
-        if (colorEl) colorEl.style.backgroundColor = color;
       }
 
       submit.disabled = true;

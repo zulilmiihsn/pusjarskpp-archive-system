@@ -273,22 +273,35 @@
       
       const container = document.getElementById('add-parent-folder-subs-list');
       if (container) {
+        // Change parent background from var(--bg) to var(--surface-soft) in the modal's container element
+        const subsListWrapper = document.getElementById('add-parent-folder-subs-list');
+        if (subsListWrapper) {
+          subsListWrapper.style.maxHeight = '240px';
+          subsListWrapper.style.background = 'var(--surface-soft)';
+          subsListWrapper.style.borderRadius = 'var(--radius-md)';
+          subsListWrapper.style.border = '1px solid var(--border)';
+          subsListWrapper.style.padding = '14px';
+        }
+        
         container.innerHTML = `
           <style>
-            .folder-cb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+            .folder-cb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-top: 8px; }
             .premium-cb-card {
-              display: flex; align-items: center; gap: 12px; padding: 12px 16px; 
-              border-radius: var(--radius-md); border: 2px solid transparent; 
-              background: var(--bg-alt); cursor: pointer; position: relative;
-              transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+              display: flex; align-items: center; gap: 10px; padding: 10px 14px; 
+              border-radius: var(--radius); border: 1px solid var(--border); 
+              background: var(--surface); cursor: pointer; position: relative;
+              box-shadow: var(--shadow-xs);
+              transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
             }
-            .premium-cb-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); background: var(--bg); border-color: var(--border); }
+            .premium-cb-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); background: var(--surface-soft); border-color: var(--subtle); }
             .premium-cb-card:active { transform: scale(0.98); }
             .premium-cb-card input[type="checkbox"] {
-              width: 20px; height: 20px; margin: 0; accent-color: var(--primary); cursor: pointer;
+              width: 18px; height: 18px; margin: 0; accent-color: ${colorTheme}; cursor: pointer;
             }
-            .premium-cb-card.checked { border-color: var(--primary); background: var(--primary-light, rgba(59, 130, 246, 0.05)); }
-            .premium-cb-label { font-size: 14px; font-weight: 500; color: var(--text); flex: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; line-height: 1.4; }
+            .premium-cb-card.checked { border-color: ${colorTheme}; background: ${colorTheme}08; }
+            .premium-cb-icon { width: 14px; height: 14px; color: var(--subtle); opacity: 0.7; flex-shrink: 0; }
+            .premium-cb-card.checked .premium-cb-icon { color: ${colorTheme}; opacity: 1; }
+            .premium-cb-label { font-size: 12.5px; font-weight: 600; color: var(--text); flex: 1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; line-height: 1.35; }
           </style>
           <div class="folder-cb-grid"></div>
         `;
@@ -297,7 +310,7 @@
         
         if (rootSubs.length === 0) {
           container.innerHTML = `
-            <div style="text-align:center; padding: 32px 24px; background: var(--bg-alt); border-radius: var(--radius-md); border: 1px dashed var(--border);">
+            <div style="text-align:center; padding: 32px 24px; background: var(--surface); border-radius: var(--radius-md); border: 1px dashed var(--border);">
               <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px;">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
               </svg>
@@ -309,6 +322,7 @@
             lbl.className = 'premium-cb-card';
             lbl.innerHTML = `
               <input type="checkbox" name="sub-to-move" value="${esc(s.sub_activity_id)}">
+              <svg class="premium-cb-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
               <span class="premium-cb-label" title="${esc(s.sub_activity_name)}">${esc(s.sub_activity_name)}</span>
             `;
             const cb = lbl.querySelector('input');

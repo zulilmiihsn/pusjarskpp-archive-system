@@ -118,24 +118,6 @@
     bindDocumentProcessForm();
   }
 
-  function docProcessContextHtml(activity, sub) {
-    if (!activity) return '';
-    const breadcrumb = [activity.activity_name, sub ? sub.sub_activity_name : ''].filter(Boolean);
-    const target = sub ? sub.sub_activity_name : 'Pilih sub-kegiatan';
-    return `
-      <div>
-        <div class="small muted">Lokasi dokumen</div>
-        <div class="breadcrumb-line">${breadcrumb.map(i => '<span>' + esc(i) + '</span>').join('<span class="breadcrumb-sep">/</span>')}</div>
-        <strong>${esc(target)}</strong>
-        ${sub ? `
-          <div class="small muted mt-8">
-            Tautan dokumen pendukung disimpan sebagai pintasan di folder Dokumen, lalu dicatat ke kolom rangkuman sub-kegiatan ini.
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }
-
   function bindDocumentProcessForm() {
     const actSel = document.getElementById('doc-activity-id');
     const subSel = document.getElementById('doc-sub-activity-id');
@@ -229,8 +211,6 @@
       if (!changed) return;
       const activity = (data.activities || []).find(a => a.activity_id === actSel.value);
       const sub = activity ? (activity.subActivities || []).find(s => s.sub_activity_id === newSubValue) : null;
-      const ctx = document.getElementById('doc-target-context');
-      if (ctx) ctx.innerHTML = docProcessContextHtml(activity, sub);
       checkDocSubmit();
       setDocLinkInputsDisabled_(true);
       loadDocumentProcessDefaults_(activity, sub);
