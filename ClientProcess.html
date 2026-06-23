@@ -175,9 +175,10 @@
     let startByte = 0;
     let chunkIndex = 0;
 
-    while (startByte < totalSize) {
-      const endByte = Math.min(startByte + RESUMABLE_CHUNK_BYTES, totalSize);
-      const chunk = file.slice(startByte, endByte);
+    try {
+      while (startByte < totalSize) {
+        const endByte = Math.min(startByte + RESUMABLE_CHUNK_BYTES, totalSize);
+        const chunk = file.slice(startByte, endByte);
 
       const chunkBase64 = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -197,6 +198,7 @@
       });
 
       if (result.done) {
+        if (uploadToast && uploadToast.hide) uploadToast.hide();
         return result;
       }
 
@@ -205,9 +207,16 @@
 
       const pct = Math.round(startByte / totalSize * 100);
       if (chunkIndex % 2 === 0 || pct < 100) {
-        showProcessToast('Mengunggah... ' + pct + '%');
+        uploadToast = showProcessToast('Mengunggah... ' + pct + '%');
       }
     }
+    
+    if (uploadToast && uploadToast.hide) uploadToast.hide();
+  } catch(e) {
+    if (uploadToast && uploadToast.hide) uploadToast.hide();
+    throw e;
+  }
+}
 
     throw new Error('Upload gagal: data tidak lengkap.');
   }
@@ -227,7 +236,7 @@
         return;
       }
 
-      showProcessToast('Mengunggah berkas dokumen...');
+      var uploadToast = showProcessToast('Mengunggah berkas dokumen...');
       const reader = new FileReader();
       reader.onload = async () => {
         try {
@@ -236,10 +245,17 @@
             mimeType: file.type || '',
             dataUrl: reader.result
           });
+          uploadToast.hide();
           resolve(result.id);
-        } catch (e) { reject(e); }
+        } catch (e) { 
+          uploadToast.hide();
+          reject(e); 
+        }
       };
-      reader.onerror = reject;
+      reader.onerror = (e) => {
+        uploadToast.hide();
+        reject(e);
+      };
       reader.readAsDataURL(file);
     });
   }
