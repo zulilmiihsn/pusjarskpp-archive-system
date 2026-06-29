@@ -195,10 +195,14 @@ const ParseEngine = (function () {
     structure.header.end = headerEnd;
     structure.header.lines = lines.slice(0, headerEnd);
 
-    // Body is between header and signature
+    // Body is between header and signature. Bila blok tanda tangan TAK terdeteksi,
+    // signature.start tetap 0 (default) — jangan pakai itu sebagai batas, sebab body
+    // akan kolaps jadi kosong (slice(headerEnd, 0)). Saat tak ada tanda tangan,
+    // body membentang sampai akhir dokumen.
+    const bodyEnd = structure.signature.lines.length ? structure.signature.start : totalLines;
     structure.body.start = headerEnd;
-    structure.body.end = structure.signature.start;
-    structure.body.lines = lines.slice(headerEnd, structure.signature.start);
+    structure.body.end = bodyEnd;
+    structure.body.lines = lines.slice(headerEnd, bodyEnd);
 
     // Footer is last 10% (tembusan, etc.)
     const footerStart = Math.max(structure.signature.start, Math.floor(totalLines * 0.9));
@@ -345,27 +349,37 @@ const ParseEngine = (function () {
     const candidates = [];
     const headerText = structure.header.lines.join('\n');
     const sigText = structure.signature.lines.join('\n');
+    const bodyText = structure.body.lines.join('\n');
 
     // STRICT keyword-anchored patterns only
     const patterns = [
       // "Tanggal DD MMMM YYYY" or "Ditetapkan pada DD MMMM YYYY"
       { re: new RegExp('(?:Tanggal|Ditetapkan|Ditandatangani|Berangka)[\\s:.,]+(?:[^\\n]{0,20}?)(\\d{1,2})\\s+(' + MONTH_ALL + ')\\s+(20[12]\\d)', 'i'), score: 0.95 },
       // Bare date with City prefix like "Samarinda,      // Standard ID format
-      { re: new RegExp('(?:[A-Za-z\\s]+,\\s*)?(\\d{1,2})\\s+(' + MONTH_ALL + ')\\s+(20[12]\\d)', 'i'), score: 0.85 },
+      { re: new RegExp('(?:[A-Za-z\\s]+,\\s*)?(\\d{1,2})\\s+(' + MONTH_ALL + ')\\s+(20[12]\\d)', 'i'), score: 0.85, bareDate: true },
       // Contextual ISO format
-      { re: /(?:Tanggal|Ditetapkan|Ditandatangani)\s*[:.,]?\s*(?:[^\n]{0,10}?)(20[12]\d)[\-\/.](\d{1,2})[\-\/.](\d{1,2})/i, score: 0.9 }
+      { re: /(?:Tanggal|Ditetapkan|Ditandatangani)\s*[:.,]?\s*(?:[^\n]{0,10}?)(20[12]\d)[\-\/.](\d{1,2})[\-\/.](\d{1,2})/i, score: 0.9 },
+      // Dateline kota di AWAL BARIS: "Samarinda, 13 Desember 2025". Diizinkan di body
+      // (bukan bareDate) karena pola "Kota, tanggal" di awal baris hampir pasti dateline
+      // surat, bukan tanggal yang sekadar disebut di tengah kalimat isi.
+      { re: new RegExp('(?:^|\\n)[ \\t]*[A-Za-z][A-Za-z. ]{1,24},[ \\t]*(\\d{1,2})\\s+(' + MONTH_ALL + ')\\s+(20[12]\\d)', 'i'), score: 0.8 }
     ];
 
-    // Only search in header and signature
+    // Header & signature: zona utama (dateline surat). Body: cadangan dengan bonus
+    // lebih rendah & HANYA pola berkata-kunci (mis. "pada tanggal 17 Maret 2026"),
+    // supaya tanggal yang jelas tertulis di badan surat tetap terbaca tanpa ikut
+    // menyomot tanggal acak yang disebut di dalam isi (pola bareDate dilewati di body).
     const searchZones = [
       { text: headerText, bonus: 1.8 },
-      { text: sigText, bonus: 1.0 }
+      { text: sigText, bonus: 1.0 },
+      { text: bodyText, bonus: 0.8, keywordOnly: true }
     ];
 
     for (let z = 0; z < searchZones.length; z++) {
       const zone = searchZones[z];
       for (let i = 0; i < patterns.length; i++) {
         const p = patterns[i];
+        if (zone.keywordOnly && p.bareDate) continue;
         const match = zone.text.match(p.re);
         if (match) {
           let dateVal = null;
@@ -670,7 +684,7 @@ const ParseEngine = (function () {
 
     // Pass 2.6: Deteksi arah surat (masuk/keluar) dari KOP header
     const headerTextForDir = structure.header.lines.join('\n');
-    const direction = detectDirection_(headerTextForDir, text);
+    let direction = detectDirection_(headerTextForDir, text);
 
     // Pass 3: Classify document type
     const docType = classifyDocumentType_(topText, fileName);
@@ -679,20 +693,19 @@ const ParseEngine = (function () {
     const nomorSurat = extractNomorSuratScored_(optimizedText, structure, fileName);
     let kodeKlasifikasi = extractKodeKlasifikasiScored_(optimizedText, structure);
 
-    // Pass 4b: Extract kode from nomor if embedded and split them
+    // Pass 4b: Untuk surat KELUAR, kode klasifikasi tertanam di dalam Nomor Surat
+    // sebagai segmen yang diawali "PDP" (kode klasifikasi khusus surat keluar kantor
+    // ini). Contoh: 273/P.3/PDP.07.1
+    //   -> Nomor Surat tetap FULL (273/P.3/PDP.07.1)
+    //   -> Kode Klasifikasi disalin cukup segmen PDP-nya (PDP.07.1)
+    // Nomor Surat TIDAK dipotong. Keberadaan segmen PDP itu sendiri = penanda pasti
+    // surat keluar (surat masuk dari kantor lain tak akan memakai kode PDP), jadi
+    // arah surat dipaksa 'keluar' agar kolom kode klasifikasi ikut terisi.
     if (nomorSurat && nomorSurat.value) {
-      const kodeMatch = nomorSurat.value.match(/(?:^|[A-Z]{1,3}[\/-]|[\/-])([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?|\d{3}\.\d{1,3}(?:\.\d{1,3})*)(?:[\/-]|$)/i);
-      if (kodeMatch) {
-        if (!kodeKlasifikasi || kodeKlasifikasi.score < 0.95) {
-          kodeKlasifikasi = { value: kodeMatch[1].toUpperCase(), score: 0.95, confidence: 'high', source: 'extracted_from_nomor', candidateCount: 1 };
-        }
-        // Strip kode klasifikasi from nomor surat
-        const escapedKode = kodeMatch[1].replace(/\./g, '\\.');
-        nomorSurat.value = nomorSurat.value.replace(new RegExp(escapedKode, 'i'), '')
-          .replace(/[\/-][\/-]+/g, '/')
-          .replace(/([A-Z]{1,3}-)\//i, '$1')
-          .replace(/^[\\/-]|[\\/-]$/g, '');
-        if (/^[A-Z]{1,3}[\/-]?$/i.test(nomorSurat.value)) nomorSurat.value = '';
+      const pdpMatch = nomorSurat.value.match(/\b(PDP\.\d{1,3}(?:\.\d{1,3})*)\b/i);
+      if (pdpMatch) {
+        kodeKlasifikasi = { value: pdpMatch[1].toUpperCase(), score: 0.98, confidence: 'high', source: 'pdp_from_nomor', candidateCount: 1 };
+        direction = 'keluar';
       }
     }
 

@@ -119,6 +119,42 @@ test('ParseEngine.analyze - surat KELUAR boleh mengisi kode_klasifikasi', () => 
   assert.ok(r.fields.kode_klasifikasi && r.fields.kode_klasifikasi.value, 'kode_klasifikasi harus terisi untuk surat keluar');
 });
 
+test('ParseEngine.analyze - segmen PDP di nomor: nomor tetap FULL, kode = segmen PDP', () => {
+  const txt = 'Dinas X\nNomor: 273/P.3/PDP.07.1\nPerihal: Surat pemanggilan\n\nIsi surat...';
+  const r = ParseEngine.analyze(txt, 'surat.pdf', {});
+  assert.strictEqual(r.documentDirection, 'keluar', 'segmen PDP harus memaksa arah keluar');
+  assert.strictEqual(r.fields.nomor_surat.value, '273/P.3/PDP.07.1', 'Nomor Surat harus tetap full, tidak dipotong');
+  assert.ok(r.fields.kode_klasifikasi, 'kode_klasifikasi harus terisi');
+  assert.strictEqual(r.fields.kode_klasifikasi.value, 'PDP.07.1', 'kode_klasifikasi hanya segmen PDP');
+});
+
+test('ParseEngine.analyze - tanggal dateline header terbaca', () => {
+  const txt = 'LAN RI Kalimantan Timur\nNomor: 273/P.3/PDP.07.1\nSamarinda, 13 Desember 2025\nPerihal: Undangan\n\nIsi\n\nKepala\nBudi';
+  const r = ParseEngine.analyze(txt, 'surat.pdf', {});
+  assert.ok(r.fields.tanggal, 'tanggal harus terisi');
+  assert.strictEqual(r.fields.tanggal.value, '2025-12-13');
+});
+
+test('ParseEngine.analyze - tanggal berkata-kunci di body terbaca', () => {
+  const txt = 'Dinas X\nNomor: 100/AB.02/2025\nPerihal: Rapat\n\nPada tanggal 17 Maret 2026 akan diadakan rapat.\n\nHormat kami,\nKepala';
+  const r = ParseEngine.analyze(txt, 'surat.pdf', {});
+  assert.ok(r.fields.tanggal, 'tanggal di body (berkata-kunci) harus terbaca');
+  assert.strictEqual(r.fields.tanggal.value, '2026-03-17');
+});
+
+test('ParseEngine.analyze - dateline kota di body walau tanpa blok tanda tangan', () => {
+  const txt = 'Pemkot\nNomor: 5/X/2026\nPerihal: Edaran\nYth. Bapak\nSamarinda, 1 April 2026\n\nIsi surat panjang sekali di sini ya.';
+  const r = ParseEngine.analyze(txt, 'surat.pdf', {});
+  assert.ok(r.fields.tanggal, 'dateline kota harus terbaca walau body tak punya tanda tangan');
+  assert.strictEqual(r.fields.tanggal.value, '2026-04-01');
+});
+
+test('ParseEngine.analyze - tanggal acak di isi TIDAK disomot', () => {
+  const txt = 'Dinas\nNomor: 9/IX/2026\nPerihal: Lap\nYth Bapak\n\nKegiatan berlangsung 20 Januari 2026 hingga selesai dengan lancar.';
+  const r = ParseEngine.analyze(txt, 'surat.pdf', {});
+  assert.ok(!r.fields.tanggal, 'tanggal yang sekadar disebut di tengah kalimat isi tidak boleh diambil');
+});
+
 // --- Ekstraksi isi dokumen via konversi (OCR/convert) untuk autofill ---
 
 function fakeFile(id, sizeBytes) {
@@ -146,6 +182,35 @@ test('extractTextViaConversion_ - file terlalu besar dilewati (jaga kuota)', () 
   const out = extractTextViaConversion_(fakeFile('file-3', 30 * 1024 * 1024), 'application/pdf');
   assert.strictEqual(out.method, 'skipped_too_large');
   assert.strictEqual(out.text, '');
+});
+
+// --- Hitung halaman PDF (jumlah lembar) ---
+
+test('countPagesFromPdfChunk_ - ambil /Count milik /Pages, bukan outline', () => {
+  // Outline /Count 99 muncul DULUAN; page-tree /Count 12 yang benar.
+  const pdf = '/Type /Outlines /Count 99 /First 5 0 R\n<< /Type /Pages /Kids [3 0 R] /Count 12 >>';
+  assert.strictEqual(countPagesFromPdfChunk_(pdf, true), 12);
+});
+
+test('countPagesFromPdfChunk_ - urutan key /Count sebelum /Type /Pages', () => {
+  const pdf = '<< /Count 7 /Kids [1 0 R] /Type /Pages >>';
+  assert.strictEqual(countPagesFromPdfChunk_(pdf, true), 7);
+});
+
+test('countPagesFromPdfChunk_ - PDF merge: ambil count terbesar (root), bukan sub-tree', () => {
+  const pdf = '<< /Type /Pages /Count 10 >> ... << /Type /Pages /Count 50 /Kids [..] >>';
+  assert.strictEqual(countPagesFromPdfChunk_(pdf, true), 50);
+});
+
+test('countPagesFromPdfChunk_ - fallback hitung /Type /Page hanya bila isi penuh', () => {
+  const pdf = '/Type /Page x /Type /Page y /Type /Page z';
+  assert.strictEqual(countPagesFromPdfChunk_(pdf, true), 3, 'isi penuh: boleh hitung /Type /Page');
+  assert.strictEqual(countPagesFromPdfChunk_(pdf, false), 0, 'potongan: jangan hitung /Type /Page (undercount)');
+});
+
+test('countPagesFromPdfChunk_ - /Pages tak ketemu, fallback ke /Count apa pun', () => {
+  const pdf = 'no page tree here /Count 4 somewhere';
+  assert.strictEqual(countPagesFromPdfChunk_(pdf, false), 4);
 });
 
 console.log(`\nIntegration Tests Finished: ${passed} passed, ${failed} failed.`);

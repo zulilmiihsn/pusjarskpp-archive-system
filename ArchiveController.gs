@@ -1160,28 +1160,106 @@ function _resolveArchiveContext_(payload) {
   return { year: year, config: config, activity: activity, subActivity: subActivity };
 }
 
+/** Ambang baca-penuh untuk hitung halaman; di atas ini pakai byte-range agar tak OOM. */
+const PDF_PAGECOUNT_FULL_READ_MAX_BYTES = 25 * 1024 * 1024; // 25MB
+
 function extractPdfPageCount_(file) {
   try {
-    // Lewati file besar: getDataAsString memuat SELURUH blob ke memori. Hitungan halaman
-    // hanya pelengkap; caller menangani 0. (>10MB boros memori & waktu.)
-    if (file.getSize && file.getSize() > 10 * 1024 * 1024) return 0;
-    const blob = file.getBlob();
-    const pdfText = blob.getDataAsString('ISO-8859-1');
-    
-    // Try to find /Count [number]
-    const countMatch = pdfText.match(/\/Count\s+(\d+)/);
-    if (countMatch && countMatch[1]) {
-      const count = parseInt(countMatch[1], 10);
-      if (count > 0 && count < 1000) return count;
+    const size = (file.getSize && file.getSize()) || 0;
+
+    // File kecil/menengah: baca penuh. Akurat — bisa pakai fallback hitung /Type /Page.
+    if (!size || size <= PDF_PAGECOUNT_FULL_READ_MAX_BYTES) {
+      const pdfText = file.getBlob().getDataAsString('ISO-8859-1');
+      return countPagesFromPdfChunk_(pdfText, true);
     }
-    
-    // Fallback: count /Type /Page
-    const pageMatch = pdfText.match(/\/Type\s*\/Page\b/g);
-    if (pageMatch && pageMatch.length > 0) {
-      return pageMatch.length;
+
+    // File besar (mis. surat scan/SRIKANDI ratusan MB): JANGAN muat seluruh blob —
+    // getDataAsString akan OOM / timeout. Ambil hanya potongan awal & akhir via
+    // byte-range. /Count di root /Pages (total halaman dalam satu angka) hampir
+    // selalu tertangkap di sini tanpa membaca semua byte.
+    const CHUNK = 3 * 1024 * 1024; // 3MB per potongan
+    const head = fetchDriveBytesRange_(file.getId(), 0, CHUNK - 1);
+    let count = countPagesFromPdfChunk_(head, false);
+    if (count > 0) return count;
+
+    const tailStart = Math.max(0, size - CHUNK);
+    if (tailStart > 0) {
+      const tail = fetchDriveBytesRange_(file.getId(), tailStart, size - 1);
+      count = countPagesFromPdfChunk_(tail, false);
+      if (count > 0) return count;
     }
   } catch (e) {
     console.warn('extractPdfPageCount_ failed: ' + e.message);
   }
   return 0;
+}
+
+/**
+ * Hitung jumlah halaman dari sepotong teks mentah PDF.
+ * @param {string} pdfText  Isi PDF (ISO-8859-1) — penuh atau sebagian.
+ * @param {boolean} allowPageTypeCount  true hanya bila pdfText = SELURUH file,
+ *   karena hitung /Type /Page perlu seluruh isi (kalau sebagian → undercount).
+ * @return {number} jumlah halaman, atau 0 bila tak terdeteksi.
+ */
+function countPagesFromPdfChunk_(pdfText, allowPageTypeCount) {
+  if (!pdfText) return 0;
+
+  // Anchor ke dict page-tree: ambil /Count yang menempel pada /Type /Pages, supaya
+  // tidak tertukar dengan /Count milik outline/bookmark. Urutan key bisa
+  // "/Type /Pages ... /Count" atau "/Count ... /Type /Pages", jadi cek dua arah dalam
+  // jendela pendek. Ambil nilai TERBESAR: root page-tree memuat total halaman, selalu
+  // >= count tiap sub-tree (mis. pada PDF hasil merge/incremental update).
+  let best = 0;
+  // Jendela [^<>] = tidak boleh menyeberangi batas dictionary PDF (<< >>), supaya
+  // /Count dan /Type /Pages yang ter-anchor benar-benar berada di dict yang sama —
+  // mencegah /Count milik outline tersangkut ke /Pages di dict tetangga.
+  const W = 250;
+  const patterns = [
+    new RegExp('/Type\\s*/Pages\\b[^<>]{0,' + W + '}?/Count\\s+(\\d+)', 'g'),
+    new RegExp('/Count\\s+(\\d+)[^<>]{0,' + W + '}?/Type\\s*/Pages\\b', 'g')
+  ];
+  for (let p = 0; p < patterns.length; p++) {
+    let m;
+    while ((m = patterns[p].exec(pdfText))) {
+      const n = parseInt(m[1], 10);
+      if (n > 0 && n < 5000 && n > best) best = n;
+    }
+  }
+  if (best > 0) return best;
+
+  // Cadangan: /Count pertama mana pun. Bisa keliru ke outline, tapi lebih baik dari 0.
+  const anyCount = pdfText.match(/\/Count\s+(\d+)/);
+  if (anyCount && anyCount[1]) {
+    const n = parseInt(anyCount[1], 10);
+    if (n > 0 && n < 5000) return n;
+  }
+
+  // Cadangan terakhir: hitung object /Type /Page — hanya valid bila punya seluruh isi.
+  if (allowPageTypeCount) {
+    const pageMatch = pdfText.match(/\/Type\s*\/Page\b/g);
+    if (pageMatch && pageMatch.length > 0) return pageMatch.length;
+  }
+  return 0;
+}
+
+/**
+ * Unduh sebagian byte file Drive via Range header (tanpa memuat seluruh blob).
+ * Pakai endpoint alt=media + token OAuth (cukup scope Drive yang sudah ada).
+ * @return {string} potongan byte sebagai string ISO-8859-1, atau '' bila gagal.
+ */
+function fetchDriveBytesRange_(fileId, start, end) {
+  try {
+    const token = ScriptApp.getOAuthToken();
+    const url = 'https://www.googleapis.com/drive/v3/files/' + cleanId_(fileId) +
+      '?alt=media&supportsAllDrives=true';
+    const resp = UrlFetchApp.fetch(url, {
+      headers: { Authorization: 'Bearer ' + token, Range: 'bytes=' + start + '-' + end },
+      muteHttpExceptions: true
+    });
+    const code = resp.getResponseCode();
+    if (code === 200 || code === 206) return resp.getBlob().getDataAsString('ISO-8859-1');
+  } catch (e) {
+    console.warn('fetchDriveBytesRange_ failed: ' + e.message);
+  }
+  return '';
 }
