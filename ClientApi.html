@@ -189,25 +189,23 @@
       activePersistentToast = null;
     }
 
-    var currentStep = 1;
-
     var toast = document.createElement('div');
     toast.className = 'toast toast-stepped visible';
     toast.style.display = 'block';
 
-    // Step counter + label row
+    // Persentase + label row
     var headerRow = document.createElement('div');
     headerRow.className = 'toast-stepped-header';
 
-    var stepCounter = document.createElement('span');
-    stepCounter.className = 'toast-step-counter';
-    stepCounter.textContent = currentStep + '/' + totalSteps;
+    var pctCounter = document.createElement('span');
+    pctCounter.className = 'toast-step-counter';
+    pctCounter.textContent = '0%';
 
     var stepLabel = document.createElement('span');
     stepLabel.className = 'toast-step-label';
     stepLabel.textContent = initialLabel;
 
-    headerRow.appendChild(stepCounter);
+    headerRow.appendChild(pctCounter);
     headerRow.appendChild(stepLabel);
 
     // Progress bar
@@ -216,7 +214,7 @@
 
     var progressFill = document.createElement('div');
     progressFill.className = 'toast-progress-fill';
-    progressFill.style.width = (currentStep / totalSteps * 100) + '%';
+    progressFill.style.width = '0%';
 
     progressTrack.appendChild(progressFill);
 
@@ -227,31 +225,74 @@
     activePersistentToast = toast;
     container.appendChild(toast);
 
+    // --- Simulasi progress persen yang merayap halus ---
+    // Tiap langkah punya batas lunak (langkah ke-n menuju ~n/steps), tapi disisakan
+    // sedikit ruang biar complete() yang menutup ke 100%. Bar terus bergerak (tidak
+    // lompat kaku per-step) dan melambat saat mendekati batas tiap langkah.
+    var steps = Math.max(1, totalSteps || 1);
+    var stepIndex = 1;
+    var displayPct = 0;
+    var done = false;
+    // Langkah awal naik cepat sampai ~70%; langkah TERAKHIR (tulis spreadsheet,
+    // bagian yang lama) merayap pelan dari situ menuju ~99% supaya tidak kesan macet.
+    function capFor(idx) {
+      if (idx >= steps) return 99;
+      return Math.round((idx / steps) * 70);
+    }
+    var capPct = capFor(stepIndex);
+
+    function render() {
+      progressFill.style.width = displayPct.toFixed(1) + '%';
+      pctCounter.textContent = Math.round(displayPct) + '%';
+    }
+
+    var timer = window.setInterval(function () {
+      if (done || displayPct >= capPct) return;
+      var isFinal = stepIndex >= steps;
+      var factor = isFinal ? 0.018 : 0.08; // langkah terakhir merayap lebih pelan
+      var floor = isFinal ? 0.08 : 0.25;
+      var delta = (capPct - displayPct) * factor;
+      if (delta < floor) delta = floor; // tetap merayap, jangan macet
+      displayPct += delta;
+      if (displayPct > capPct) displayPct = capPct;
+      render();
+    }, 80);
+
+    function stopTimer() { if (timer) { window.clearInterval(timer); timer = null; } }
+
+    render();
+
     return {
       toast: toast,
       advance: function (label) {
-        currentStep++;
-        if (currentStep > totalSteps) currentStep = totalSteps;
-        stepCounter.textContent = currentStep + '/' + totalSteps;
-        stepLabel.textContent = label;
-        progressFill.style.width = (currentStep / totalSteps * 100) + '%';
+        stepIndex++;
+        if (stepIndex > steps) stepIndex = steps;
+        capPct = capFor(stepIndex);
+        if (label) stepLabel.textContent = label;
       },
       complete: function (successMsg) {
+        done = true;
+        stopTimer();
+        displayPct = 100;
         progressFill.style.width = '100%';
         progressFill.classList.add('toast-progress-complete');
+        pctCounter.textContent = '100%';
         stepLabel.textContent = successMsg || 'Selesai';
-        stepCounter.textContent = totalSteps + '/' + totalSteps;
         window.setTimeout(function () {
           removeToast(toast);
           if (successMsg) showToast(successMsg, false);
         }, 600);
       },
       error: function (errorMsg) {
+        done = true;
+        stopTimer();
         progressFill.classList.add('toast-progress-error');
         removeToast(toast);
         if (errorMsg) showToast(errorMsg, false);
       },
       hide: function () {
+        done = true;
+        stopTimer();
         removeToast(toast);
       }
     };

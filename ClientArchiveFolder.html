@@ -82,7 +82,7 @@
         </div>
         ${!isGuest() ? `
         <div class="flex items-center gap-8 flex-wrap" style="margin-top:0;">
-          <button class="btn btn-primary" id="archive-add-document">
+          <button class="btn btn-primary" id="archive-add-file">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="mr-4" aria-hidden="true">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
@@ -598,6 +598,49 @@
     if (!container) return;
     container.innerHTML = archiveFolderContentHtml(result, context);
     bindArchiveFolderContent(result, context);
+    bindArchiveResizer_();
+  }
+
+  /* Geser pembatas lebar antara kolom Item dan Dokumen. Lebar kolom kiri
+     disetel dalam px, kolom kanan ambil sisa (minmax(0,1fr)). Rasio disimpan
+     ke localStorage supaya bertahan antar buka folder. */
+  function bindArchiveResizer_() {
+    const grid = document.getElementById('archive-folder-grid');
+    const resizer = document.getElementById('archive-resizer');
+    if (!grid || !resizer || resizer.dataset.bound === '1') return;
+    resizer.dataset.bound = '1';
+
+    const RESIZER_W = 12;
+    const MIN_LEFT = 240;
+    const MIN_RIGHT = 300;
+    let startX = 0, startLeft = 0, gridW = 0;
+
+    function onMove(e) {
+      let left = startLeft + (e.clientX - startX);
+      const maxLeft = gridW - RESIZER_W - MIN_RIGHT;
+      if (left < MIN_LEFT) left = MIN_LEFT;
+      if (left > maxLeft) left = Math.max(MIN_LEFT, maxLeft);
+      grid.style.gridTemplateColumns = left + 'px ' + RESIZER_W + 'px minmax(0, 1fr)';
+    }
+    function onUp() {
+      resizer.classList.remove('is-resizing');
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      try { localStorage.setItem('portal_arsip_split_ratio', grid.style.gridTemplateColumns); } catch (err) {}
+    }
+    resizer.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      startX = e.clientX;
+      startLeft = grid.children[0].getBoundingClientRect().width;
+      gridW = grid.getBoundingClientRect().width;
+      resizer.classList.add('is-resizing');
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
+    });
   }
 
   function archiveChildFolderRow(folder, context) {

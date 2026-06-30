@@ -112,7 +112,7 @@ const ParseEngine = (function () {
 
   // Kamus Singkatan (Alias) untuk instansi & jabatan
   const INSTITUTION_ALIASES = [
-    { re: /\bpusat\s+pembelajaran\s+dan\s+strat[a-z]*egi\s+kebijakan\s+(?:pengembangan\s+kompetensi|pelayanan\s+publik)?\b/ig, replace: 'Pusjar SKPP' },
+    { re: /\bpusat\s+pembelajaran\s+dan\s+strategi\s+kebijakan\s+(?:pengembangan\s+kompetensi|pelayanan\s+publik)?\b/ig, replace: 'Pusjar SKPP' },
     { re: /\blembaga\s+administrasi\s+negara(?:\s+republik\s+indonesia)?\b/ig, replace: 'LAN RI' },
     { re: /\bkajian\s+manajemen\s+pemerintahan\b/ig, replace: 'KMP' },
     { re: /\bkajian\s+hukum\s+administrasi\s+negara\b/ig, replace: 'KHAN' },
@@ -521,8 +521,8 @@ const ParseEngine = (function () {
       candidates.push({ value: line, score: (isUpper ? 0.6 : 0.55) - (i * 0.05), source: 'kop_line_' + i, zone: 0 });
     }
 
-    // Look for "Dari:" pattern (search in full text, not just header, because Yth might end header early)
-    const dari = text.match(/(?:Dari|Pengirim|Asal)\s*[:.]?\s*(.+?)(?=\s+(?:Hal|Perihal|Tanggal|Yth|Nomor|Sifat|Lampiran)\b|\n|$)/i);
+    // Look for "Dari:" pattern
+    const dari = headerText.match(/(?:Dari|Pengirim|Asal)\s*[:.]?\s*(.+)/i);
     if (dari && dari[1]) {
       candidates.push({ value: cleanValue_(dari[1]), score: 0.85, source: 'dari_pattern', zone: 0 });
     }
@@ -812,7 +812,7 @@ const ParseEngine = (function () {
       fields.uraian_informasi_item = { value: uraianFallback, score: 0.4, confidence: 'low', source: 'filename_fallback' };
     }
     if (klasifikasiAkses) fields.klasifikasi_akses = klasifikasiAkses;
-    if (direction === 'keluar') {
+    if (docType === 'surat_keluar') {
       fields.dari = { value: 'Pusjar SKPP LAN RI', score: 0.99, confidence: 'high', source: 'hardcoded_surat_keluar' };
     } else if (dari) {
       if (dari.value) dari.value = applyAliases_(dari.value);

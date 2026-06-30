@@ -809,8 +809,8 @@ const ArchiveController = {
     requireWithinWorkspace_(payload.fileId, psYear);
 
     // Cache hasil parse per fileId: buka file yang sama lagi = instan, tak konversi ulang.
-    const parseCacheKey = 'parsecache_v21_' + cleanId_(payload.fileId);
-    const parseLockKey = 'parselock_v21_' + cleanId_(payload.fileId);
+    const parseCacheKey = 'parsecache_v18_' + cleanId_(payload.fileId);
+    const parseLockKey = 'parselock_v18_' + cleanId_(payload.fileId);
     try {
       const cachedParse = CacheService.getScriptCache().get(parseCacheKey);
       if (cachedParse) { const r = JSON.parse(cachedParse); r.cached = true; return r; }
