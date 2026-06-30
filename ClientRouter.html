@@ -197,6 +197,8 @@
           button.addEventListener('click', () => {
             if (button.id === 'nav-process') {
               state.draft = null;
+              state.draftPrompted = false;
+              state.selectedFile = null;
               state.preselectedTargetFolderId = null;
               if (typeof clearProcessStateFromLocal === 'function') {
                 clearProcessStateFromLocal();
@@ -630,7 +632,33 @@
             type: 'dokumen',
             label: name,
             sublabel: getActivityName(item.activity_id) || 'Arsip',
-            go: function() { setView('history'); }
+            go: async function() {
+              const isDraft = String(item.status || '').toUpperCase() === 'DRAFT';
+              if (isDraft) {
+                if (item.metadata_json) {
+                   state.draft = JSON.parse(item.metadata_json);
+                   try {
+                     const histYear = (state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.currentYear) || 'default_year';
+                     localStorage.setItem('portal_arsip_' + histYear + '_process_state_general', JSON.stringify({ draft: state.draft, inputState: {} }));
+                   } catch(e) {}
+                   setView('process');
+                   if (typeof showProcessToast === 'function') showProcessToast('Melanjutkan draf...');
+                } else {
+                   if (typeof showToast === 'function') showToast('Data draf kosong.');
+                }
+              } else {
+                if (typeof showProcessToast === 'function') showProcessToast('Mengambil data metadata...');
+                try {
+                  const draftObj = await api('getArchiveMetadata', { archiveId: item.archive_id, year: item.year, logData: item });
+                  state.draft = draftObj;
+                  state.editMode = true;
+                  setView('process');
+                  if (typeof showProcessToast === 'function') showProcessToast('Memasuki mode edit metadata...');
+                } catch (e) {
+                  if (typeof showToast === 'function') showToast('Gagal memuat metadata: ' + (e.message || e));
+                }
+              }
+            }
           });
         }
       });

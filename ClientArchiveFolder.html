@@ -200,8 +200,12 @@
       });
     }
 
-    document.getElementById('archive-add-document')?.addEventListener('click', () => {
+    document.getElementById('archive-add-file')?.addEventListener('click', () => {
       state.draft = null;
+      state.draftPrompted = false;
+      state.selectedFile = null;
+      state.editMode = false;
+      state.editReturnFolder = null;
       setView('process', {
         preselectedActivityId: context.activity.activity_id,
         preselectedSubActivityId: context.subActivity.sub_activity_id,
@@ -508,10 +512,12 @@
     const dokumen = split.dokumen;
     const hasMore = !!result.nextPageToken;
     const suffix = hasMore ? '+' : '';
+    const savedGrid = localStorage.getItem('portal_arsip_split_ratio') || '';
+    const styleAttr = savedGrid ? ` style="grid-template-columns: ${savedGrid};"` : '';
     return `
       <div id="archive-folders-region">${archiveFoldersSectionHtml(folders, context, suffix)}</div>
 
-      <div class="archive-folder-grid">
+      <div class="archive-folder-grid" id="archive-folder-grid"${styleAttr}>
         <div>
           <div class="section-header">
             <div>
@@ -520,6 +526,8 @@
           </div>
           <div id="archive-surat-body">${archiveSuratBodyHtml(surat)}</div>
         </div>
+
+        <div class="archive-folder-resizer" id="archive-resizer" title="Geser untuk mengatur lebar"></div>
 
         <div>
           <div class="section-header">
@@ -860,6 +868,7 @@
           if (!log) {
             showToast('Item belum tercatat di log. Mengalihkan ke form pendataan arsip...');
             state.draft = null;
+            state.draftPrompted = false;
             state.selectedFile = {
               id: fileId,
               name: fileName,

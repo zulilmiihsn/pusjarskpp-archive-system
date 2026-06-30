@@ -115,6 +115,7 @@
         // Auto-scroll marquee logic
         previewEl.classList.remove('is-marquee');
         previewEl.style.removeProperty('--scroll-amount');
+        previewEl.style.removeProperty('--scroll-duration');
         
         // Request animation frame gives DOM time to render the new innerText width
         requestAnimationFrame(function() {
@@ -122,6 +123,11 @@
           if (parent && previewEl.scrollWidth > parent.clientWidth) {
             var scrollAmount = previewEl.scrollWidth - parent.clientWidth + 16; // Add padding buffer
             previewEl.style.setProperty('--scroll-amount', '-' + scrollAmount + 'px');
+            
+            // Hitung durasi berdasarkan panjang geser (speed: ~35px per detik, min 5 detik)
+            var duration = Math.max(5, scrollAmount / 35);
+            previewEl.style.setProperty('--scroll-duration', duration.toFixed(1) + 's');
+            
             previewEl.classList.add('is-marquee');
           }
         });
@@ -264,9 +270,11 @@
       var src = 'https:\/\/drive.google.com/file/d/' + esc(f.id) + '/preview';
       return '<div class="file-preview-body" style="position:relative;">'
         + '<iframe class="file-preview-iframe" id="drive-preview-iframe" src="' + src + '" allow="autoplay"></iframe>'
-        + '<button type="button" class="btn btn-sm btn-outline" style="position:absolute; bottom:10px; right:10px; background:white; z-index:10; box-shadow:0 2px 5px rgba(0,0,0,0.2);" onclick="var iframe=document.getElementById(\'drive-preview-iframe\'); if(iframe){ iframe.src = iframe.src; }">'
+        + '<div style="position:absolute; bottom:10px; right:10px; z-index:10; display:flex; gap:8px;">'
+        + '<button type="button" class="btn btn-sm btn-outline" style="background:white; box-shadow:0 2px 5px rgba(0,0,0,0.2);" onclick="var iframe=document.getElementById(\'drive-preview-iframe\'); if(iframe){ iframe.src = iframe.src; }">'
         + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle;margin-right:4px;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>'
-        + 'Muat Ulang Pratinjau</button>'
+        + 'Muat Ulang</button>'
+        + '</div>'
         + '</div>';
     }
 
@@ -449,57 +457,60 @@
       btn.innerHTML = '<span class="modern-spinner" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-right:4px;"><span class="modern-spinner-ring"></span></span> Menganalisis...';
     }
     _isParsing = true;
-    api('parseDocumentContent', { fileId: state.draft.sourceFile.id }, { timeoutMs: 30000 })
-      .then(function (result) {
-        _isParsing = false;
-        if (!state.draft || !state.draft.sourceFile || state.draft.sourceFile.id !== parseFileId) return;
-        if (result.skipped) {
-          showToast(result.skipReason || 'Tipe file tidak didukung untuk parsing otomatis.');
-          _parseResults = null;
+    
+    var doParse = function(promise) {
+      promise
+        .then(function (result) {
+          _isParsing = false;
+          if (!result) throw new Error("Prefetch failed"); 
+          if (!state.draft || !state.draft.sourceFile || state.draft.sourceFile.id !== parseFileId) return;
+          if (result.skipped) {
+            showToast(result.skipReason || 'Tipe file tidak didukung untuk parsing otomatis.');
+            _parseResults = null;
+            _parseDone = true;
+            refreshFilePreview_();
+            return;
+          }
           _parseDone = true;
+          var fields = result.fields || {};
+          var filledCount = autoFillParseFields_(fields);
+          filledCount += applyDirectionRules_(result.documentDirection, fields);
+          if (filledCount > 0) {
+            result._filledCount = filledCount;
+            _parseResults = result;
+            var arahLabel = result.documentDirection === 'keluar' ? ' (terdeteksi surat keluar)' : ' (terdeteksi surat masuk)';
+            showToast(filledCount + ' kolom terisi otomatis' + arahLabel + '.');
+          } else {
+            _parseResults = null;
+          }
           refreshFilePreview_();
-          return;
-        }
-        _parseDone = true;
-        var fields = result.fields || {};
-        var filledCount = autoFillParseFields_(fields);
-        filledCount += applyDirectionRules_(result.documentDirection, fields);
-        if (filledCount > 0) {
-          result._filledCount = filledCount;
-          _parseResults = result;
-          var arahLabel = result.documentDirection === 'keluar' ? ' (terdeteksi surat keluar)' : ' (terdeteksi surat masuk)';
-          showToast(filledCount + ' kolom terisi otomatis' + arahLabel + '.');
-        } else {
+        })
+        .catch(function (error) {
+          if (error && error.message === "Prefetch failed") {
+             // Fallback to manual trigger if prefetch failed
+             window._prefetchPromise = null;
+             doParse(api('parseDocumentContent', { fileId: parseFileId }, { timeoutMs: 30000 }));
+             return;
+          }
+          _isParsing = false;
+          if (!state.draft || !state.draft.sourceFile || state.draft.sourceFile.id !== parseFileId) return;
+          _parseDone = true;
           _parseResults = null;
-        }
-        refreshFilePreview_();
-      })
-      .catch(function (error) {
-        _isParsing = false;
-        if (!state.draft || !state.draft.sourceFile || state.draft.sourceFile.id !== parseFileId) return;
-        _parseDone = true;
-        _parseResults = null;
-        showToast('Gagal menganalisis dokumen. Isi form secara manual.');
-        refreshFilePreview_();
-      });
+          showToast('Gagal menganalisis dokumen. Isi form secara manual.');
+          refreshFilePreview_();
+        });
+    };
+
+    var parseAction = (window._prefetchPromise && window._prefetchFileId === parseFileId) 
+      ? window._prefetchPromise 
+      : api('parseDocumentContent', { fileId: parseFileId }, { timeoutMs: 30000 });
+      
+    doParse(parseAction);
   }
 
-  // Alias: key dari parser -> kemungkinan nama field di form (urut prioritas).
-  // Parser memakai pengirim/penerima/uraian_informasi_item, tapi form bisa memakai
-  // dari/kepada/perihal. Cari input yang benar-benar ada lalu tulis ke key itu.
-  var PARSE_FIELD_ALIASES = {
-    penerima: ['penerima', 'kepada'],
-    pengirim: ['pengirim', 'dari'],
-    uraian_informasi_item: ['uraian_informasi_item', 'perihal', 'uraian']
-  };
-
   function findFormInput_(key) {
-    var candidates = PARSE_FIELD_ALIASES[key] || [key];
-    for (var i = 0; i < candidates.length; i++) {
-      var c = candidates[i];
-      var input = document.querySelector('[data-field="' + c + '"]') || document.querySelector('[name="' + c + '"]');
-      if (input) return { input: input, key: c };
-    }
+    var input = document.querySelector('[data-field="' + key + '"]') || document.querySelector('[name="' + key + '"]');
+    if (input) return { input: input, key: key };
     return null;
   }
 
@@ -513,13 +524,16 @@
 
   function autoFillParseFields_(fields) {
     var filledCount = 0;
+    var today = new Date().toISOString().slice(0, 10);
     Object.keys(fields).forEach(function (key) {
       var f = fields[key];
       if (!f || !f.value) return;
       var target = findFormInput_(key);
       if (!target) return;
-      // Jangan timpa nilai yang sudah diketik user (input punya isi & bukan hasil autofill).
-      if (target.input.value && !target.input.classList.contains('auto-parse-filled')) return;
+      var isDefaultTanggal = (target.key === 'tanggal' && target.input.value === today);
+      var isDefaultJumlah = (target.key === 'jumlah' && target.input.value === '1');
+      var isDefaultTingkat = (target.key === 'tingkat_perkembangan' && target.input.value === 'Asli');
+      if (target.input.value && !target.input.classList.contains('auto-parse-filled') && !isDefaultTanggal && !isDefaultJumlah && !isDefaultTingkat) return;
       setFieldValue_(target.input, target.key, f.value, true);
       filledCount++;
     });
@@ -590,6 +604,9 @@
     if (state.draft && (!Array.isArray(state.draft.fields) || state.draft.fields.length === 0)) {
       if (state.draft.sourceFile && !state.selectedFile) state.selectedFile = state.draft.sourceFile;
       state.draft = null;
+    } else if (state.draft && Array.isArray(state.draft.fields)) {
+      const actId = state.draft.activity ? state.draft.activity.activity_id : '';
+      state.draft.fields = ensureProcessRequiredFields_(state.draft.fields, actId);
     }
 
     if (!state.draft) {
@@ -900,6 +917,13 @@
       if (state.draft && state.draft.sourceFile && state.draft.sourceFile._uploadToken === token) {
         state.draft.sourceFile.id = id;
         saveProcessStateToLocal();
+        
+        // --- PREFETCHING MAGICS (Pemanasan Memori AI) ---
+        window._prefetchFileId = id;
+        window._prefetchPromise = api('parseDocumentContent', { fileId: id }, { timeoutMs: 30000 })
+          .then(function(res) { return res; })
+          .catch(function(err) { return null; });
+        // ------------------------------------------------
         
         var container = document.getElementById('dropzone-content');
         if (container) {
@@ -1705,24 +1729,79 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   
-  async function submitArchivePayload_(snap, metadata, sourceFileId) {
-    var payload = {
+  // ── Stepped finalize: arsip baru (3 langkah) ──────────────────────────
+  async function submitArchivePayloadStepped_(snap, metadata, sourceFileId, progressToast) {
+    var basePayload = {
       year: snap.year,
       activityId: snap.activityId,
       subActivityId: snap.subActivityId,
-      metadata: metadata
+      metadata: metadata,
+      sourceFileId: sourceFileId
     };
-    if (snap.editMode) {
-      payload.archiveId = snap.archiveId;
-      return api('editMetadata', payload);
-    }
-    payload.sourceFileId = sourceFileId;
-    payload.targetFolderId = snap.targetFolderId;
-    return api('finalizeArchive', payload);
+
+    // Step 1: Validasi
+    var step1 = await api('archiveStep_validate', basePayload);
+
+    // Step 2: Copy file
+    progressToast.advance('Menyalin berkas ke folder...');
+    var step2 = await api('archiveStep_copyFile', {
+      sourceFileId: step1.sourceFileId,
+      targetFolderId: snap.targetFolderId,
+      finalFileName: step1.metadata.lokasi_simpan,
+      year: snap.year
+    });
+
+    // Step 3: Tulis spreadsheet + log
+    progressToast.advance('Menulis data ke spreadsheet...');
+    var result = await api('archiveStep_writeAndLog', {
+      year: snap.year,
+      activityId: snap.activityId,
+      subActivityId: snap.subActivityId,
+      archiveId: step1.archiveId,
+      finalFileId: step2.finalFileId,
+      sourceFileId: step1.sourceFileId,
+      targetFolderId: snap.targetFolderId,
+      metadata: step1.metadata,
+      autoItemNumber: step1.autoItemNumber,
+      createdBy: step1.createdBy
+    });
+
+    return result;
+  }
+
+  // ── Stepped finalize: edit metadata (2 langkah) ──────────────────────
+  async function submitEditPayloadStepped_(snap, metadata, progressToast) {
+    var basePayload = {
+      year: snap.year,
+      activityId: snap.activityId,
+      subActivityId: snap.subActivityId,
+      metadata: metadata,
+      sourceFileId: snap.draftCopy && snap.draftCopy.sourceFile ? snap.draftCopy.sourceFile.id : ''
+    };
+
+    // Step 1: Validasi (reuse existing validateArchiveFields for edit)
+    await api('validateArchiveFields', {
+      year: snap.year,
+      activityId: snap.activityId,
+      subActivityId: snap.subActivityId,
+      nomor_item_arsip: metadata.nomor_item_arsip || ''
+    });
+
+    // Step 2: Simpan perubahan
+    progressToast.advance('Menyimpan perubahan...');
+    basePayload.archiveId = snap.archiveId;
+    var result = await api('editMetadata', basePayload);
+    return result;
   }
   
   function handleFinalizeError_(snap, loadingToast, error) {
-    if (loadingToast) removeToast(loadingToast);
+    if (loadingToast) {
+      if (typeof loadingToast.error === 'function') {
+        loadingToast.error();
+      } else {
+        removeToast(loadingToast);
+      }
+    }
     var errMsg = errorMessage(error);
     var toastEl = showToast(errMsg + ' \u2014 Klik Untuk pulihkan', true);
     if (!toastEl) return;
@@ -1777,9 +1856,19 @@
       await new Promise(function (r) { return window.setTimeout(r, 800); });
       resetFormAfterSubmit_(snap);
   
-      var loadingToast = showProcessToast(snap.editMode ? 'Menyimpan perubahan...' : 'Menyimpan arsip...', true);
+      // ── Stepped progress toast ──
+      var isEdit = snap.editMode;
+      var totalSteps = isEdit ? 2 : 3;
+      var progressToast = showSteppedProcessToast(totalSteps, 'Memvalidasi data...');
+
       try {
-        var result = await submitArchivePayload_(snap, metadata, sourceFileId);
+        var result;
+        if (isEdit) {
+          result = await submitEditPayloadStepped_(snap, metadata, progressToast);
+        } else {
+          result = await submitArchivePayloadStepped_(snap, metadata, sourceFileId, progressToast);
+        }
+
         try { localStorage.removeItem(snap.restoreKey); } catch (e) {}
         // Optimistic: suntik item baru ke folder arsip supaya langsung tampil saat
         // kembali, tanpa menunggu Drive.Files.list terindeks (eventual consistency).
@@ -1792,10 +1881,9 @@
           window._optimisticAddedFiles[snap.targetFolderId] = bucket;
           invalidateViewCache('archive_folder');
         }
-        if (loadingToast) removeToast(loadingToast);
-        showToast(result.warning || 'Selesai: ' + (result.finalFile ? result.finalFile.name : ''));
+        if (progressToast) progressToast.complete(result.warning || 'Selesai: ' + (result.finalFile ? result.finalFile.name : ''));
       } catch (error) {
-        handleFinalizeError_(snap, loadingToast, error);
+        handleFinalizeError_(snap, progressToast, error);
       }
     } catch (error) {
       showToast(errorMessage(error));

@@ -149,10 +149,19 @@ test('ParseEngine.analyze - dateline kota di body walau tanpa blok tanda tangan'
   assert.strictEqual(r.fields.tanggal.value, '2026-04-01');
 });
 
-test('ParseEngine.analyze - tanggal acak di isi TIDAK disomot', () => {
-  const txt = 'Dinas\nNomor: 9/IX/2026\nPerihal: Lap\nYth Bapak\n\nKegiatan berlangsung 20 Januari 2026 hingga selesai dengan lancar.';
+test('ParseEngine.analyze - dateline header menang atas tanggal lain di isi', () => {
+  const txt = 'Pemkot\nNomor: 9/IX/2026\nSamarinda, 5 Februari 2026\nPerihal: Lap\nYth Bapak\n\nKegiatan berlangsung 20 Januari 2026 hingga selesai dengan lancar.';
   const r = ParseEngine.analyze(txt, 'surat.pdf', {});
-  assert.ok(!r.fields.tanggal, 'tanggal yang sekadar disebut di tengah kalimat isi tidak boleh diambil');
+  assert.ok(r.fields.tanggal, 'tanggal harus terisi');
+  assert.strictEqual(r.fields.tanggal.value, '2026-02-05', 'dateline (5 Feb) harus menang, bukan tanggal di isi (20 Jan)');
+});
+
+test('ParseEngine.analyze - tanggal polos di body (tanda tangan gambar) tetap terbaca', () => {
+  // Tak ada blok tanda tangan teks; dateline polos jatuh ke body.
+  const txt = 'Dinas X\nNomor: 100/AB.02/2025\nPerihal: Undangan\nYth. Bapak\n\nIsi undangan rapat di sini.\n\n13 Desember 2025';
+  const r = ParseEngine.analyze(txt, 'surat.pdf', {});
+  assert.ok(r.fields.tanggal, 'tanggal polos di body harus terbaca');
+  assert.strictEqual(r.fields.tanggal.value, '2025-12-13');
 });
 
 // --- Ekstraksi isi dokumen via konversi (OCR/convert) untuk autofill ---

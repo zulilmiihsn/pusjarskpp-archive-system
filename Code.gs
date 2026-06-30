@@ -120,6 +120,18 @@ function finalizeArchive(payload) {
   return wrapApi(() => ArchiveController.finalizeArchive(payload));
 }
 
+function archiveStep_validate(payload) {
+  return wrapApi(() => ArchiveController.archiveStep_validate(payload || {}));
+}
+
+function archiveStep_copyFile(payload) {
+  return wrapApi(() => ArchiveController.archiveStep_copyFile(payload || {}));
+}
+
+function archiveStep_writeAndLog(payload) {
+  return wrapApi(() => ArchiveController.archiveStep_writeAndLog(payload || {}));
+}
+
 function validateArchiveFields(payload) {
   return wrapApi(() => ArchiveController.validateArchiveFields(payload || {}));
 }

@@ -5,12 +5,7 @@ const MetadataService = {
     const normalized = Object.assign({}, metadata);
     
     const uraian = String(normalized.uraian_informasi_item || '').trim();
-    const parts = [uraian];
-    if (normalized.kepada && uraian.indexOf(normalized.kepada) === -1) parts.push(normalized.kepada);
-    if (normalized.dari && uraian.indexOf(normalized.dari) === -1) parts.push(normalized.dari);
-    
-    // overwrite uraian_informasi_item so SpreadsheetService and buildFinalFileName uses it directly
-    normalized.uraian_informasi_item = parts.filter(Boolean).join(' / ');
+    normalized.uraian_informasi_item = uraian;
     
     if (normalized.nomor_item_arsip) {
       normalized.nomor_item_arsip = String(normalized.nomor_item_arsip).padStart(2, '0');
@@ -203,13 +198,15 @@ function buildFinalFileName_(metadata, sourceName) {
   const kepada = String(metadata.kepada || '').trim();
   const dari = String(metadata.dari || '').trim();
 
-  const parts = [];
-  if (nomor) parts.push(nomor);
-  if (uraianStr) parts.push(uraianStr);
-  if (kepada) parts.push('Kepada ' + kepada);
-  if (dari) parts.push('Dari ' + dari);
+  const baseParts = [];
+  if (nomor) baseParts.push(nomor);
+  if (uraianStr) baseParts.push(uraianStr);
 
-  let assembled = parts.join('/');
+  let assembled = baseParts.join(' / ');
+
+  if (kepada) assembled += (assembled ? '_' : '') + 'Kepada ' + kepada;
+  if (dari) assembled += (assembled ? '_' : '') + 'Dari ' + dari;
+
   if (!assembled) assembled = 'Dokumen Surat';
 
   const safeUraian = sanitizeFilePart_(assembled);

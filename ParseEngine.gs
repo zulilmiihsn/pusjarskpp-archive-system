@@ -24,14 +24,14 @@ const ParseEngine = (function () {
 
   const INDONESIAN_MONTHS = {
     januari: '01', feb: '02', februari: '02', mar: '03', maret: '03',
-    apr: '04', april: '04', mei: '05', jun: '06', juni: '06',
-    jul: '07', juli: '07', agu: '08', agustus: '08', agst: '08',
-    sep: '09', sept: '09', september: '09', okt: '10', oktober: '10',
-    nov: '11', november: '11', des: '12', desember: '12'
+    apr: '04', april: '04', mei: '05', may: '05', mel: '05', me1: '05', jun: '06', juni: '06',
+    jul: '07', juli: '07', agu: '08', agustus: '08', agst: '08', aug: '08', august: '08',
+    sep: '09', sept: '09', september: '09', okt: '10', oktober: '10', oct: '10', october: '10',
+    nov: '11', november: '11', des: '12', desember: '12', dec: '12', december: '12'
   };
 
-  const MONTH_FULL = 'Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember';
-  const MONTH_ABBR = 'Jan|Feb|Mar|Apr|Mei|Jun|Jul|Agu|Agst|Sep|Sept|Okt|Nov|Des';
+  const MONTH_FULL = 'Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember|January|February|March|August|October|December';
+  const MONTH_ABBR = 'Jan|Feb|Mar|Apr|Mei|May|Mel|Me1|Jun|Jul|Agu|Agst|Aug|Sep|Sept|Okt|Oct|Nov|Des|Dec';
   const MONTH_ALL = MONTH_FULL + '|' + MONTH_ABBR;
 
   // Common OCR character confusions
@@ -71,7 +71,7 @@ const ParseEngine = (function () {
     'Surat Tugas': ['surat tugas', 'menugaskan', 'ditugaskan', 'bertugas', 'pelaksanaan tugas'],
     'Surat Edaran': ['surat edaran', 'edaran', 'untuk diketahui', 'untuk menjadi perhatian'],
     'Surat Perintah': ['surat perintah', 'memerintahkan', 'diperintahkan'],
-    'Nota Dinas': ['nota dinas', 'memo dinas', 'catatan dinas'],
+    'Nota Dinas': ['nota dinas'],
     'Berita Acara': ['berita acara', 'pada hari ini', 'bertanda tangan di bawah ini'],
     'Laporan': ['laporan', 'hasil laporan', 'laporan kegiatan', 'laporan bulanan', 'laporan tahunan'],
     'Surat Keterangan': ['surat keterangan', 'menerangkan bahwa', 'dengan ini menerangkan'],
@@ -109,6 +109,36 @@ const ParseEngine = (function () {
 
   // Uraian section-boundary keywords (where Perihal value stops)
   const URAIAN_STOP = '\\b(?:Ke(?:pada)?|Lampiran|Yth|Nomor|Tanggal|Perihal|Hal|Lamp|Isi|Dengan)\\b';
+
+  // Kamus Singkatan (Alias) untuk instansi & jabatan
+  const INSTITUTION_ALIASES = [
+    { re: /\bpusat\s+pembelajaran\s+dan\s+strategi\s+kebijakan\s+(?:pengembangan\s+kompetensi|pelayanan\s+publik)?\b/ig, replace: 'Pusjar SKPP' },
+    { re: /\blembaga\s+administrasi\s+negara(?:\s+republik\s+indonesia)?\b/ig, replace: 'LAN RI' },
+    { re: /\bkajian\s+manajemen\s+pemerintahan\b/ig, replace: 'KMP' },
+    { re: /\bkajian\s+hukum\s+administrasi\s+negara\b/ig, replace: 'KHAN' },
+    { re: /\bpengembangan\s+kompetensi\s+dan\s+pemetaan\s+(?:asn|aparatur\s+sipil\s+negara)\b/ig, replace: 'PKASN' },
+    { re: /\bpusat\s+inovasi\s+administrasi\s+negara\b/ig, replace: 'PIAN' },
+    { re: /\bpusat\s+pembinaan\s+analis\s+kebijakan\b/ig, replace: 'Pusbin AK' },
+    { re: /\bpusat\s+data\s+dan\s+informasi\b/ig, replace: 'Pusdatin' },
+    { re: /\bpusat\s+kajian\s+dan\s+pendidikan\s+dan\s+pelatihan\s+aparatur\b/ig, replace: 'PKP2A' },
+    { re: /\bsekolah\s+tinggi\s+ilmu\s+administrasi\b/ig, replace: 'STIA' },
+    { re: /\bpusat\s+pelatihan\s+dasar\s+dan\s+core\s+values\s+asn\b/ig, replace: 'Puslatsar' },
+    { re: /\bsekretaris\s+jenderal\b/ig, replace: 'Sekjen' },
+    { re: /\bsekretaris\s+daerah\b/ig, replace: 'Sekda' },
+    { re: /\bpemerintah\s+provinsi\b/ig, replace: 'Pemprov' },
+    { re: /\bpemerintah\s+kabupaten\b/ig, replace: 'Pemkab' },
+    { re: /\bpemerintah\s+kota\b/ig, replace: 'Pemkot' },
+    { re: /\bkementerian\s+pendayagunaan\s+aparatur\s+negara\s+dan\s+reformasi\s+birokrasi\b/ig, replace: 'KemenPAN-RB' },
+    { re: /\bbadan\s+kepegawaian\s+negara\b/ig, replace: 'BKN' }
+  ];
+
+  function applyAliases_(text) {
+    let result = String(text || '');
+    for (let i = 0; i < INSTITUTION_ALIASES.length; i++) {
+      result = result.replace(INSTITUTION_ALIASES[i].re, INSTITUTION_ALIASES[i].replace);
+    }
+    return result;
+  }
 
   // ═══════════════════════════════════════════════════════════════
   //  TEXT PREPROCESSOR
@@ -365,14 +395,16 @@ const ParseEngine = (function () {
       { re: new RegExp('(?:^|\\n)[ \\t]*[A-Za-z][A-Za-z. ]{1,24},[ \\t]*(\\d{1,2})\\s+(' + MONTH_ALL + ')\\s+(20[12]\\d)', 'i'), score: 0.8 }
     ];
 
-    // Header & signature: zona utama (dateline surat). Body: cadangan dengan bonus
-    // lebih rendah & HANYA pola berkata-kunci (mis. "pada tanggal 17 Maret 2026"),
-    // supaya tanggal yang jelas tertulis di badan surat tetap terbaca tanpa ikut
-    // menyomot tanggal acak yang disebut di dalam isi (pola bareDate dilewati di body).
+    // Header & signature = zona utama dateline surat (bonus tinggi). Body = cadangan
+    // bonus rendah supaya dateline asli selalu menang, TAPI tetap menerima tanggal
+    // polos: pada surat yang tanda tangannya berupa GAMBAR (tak terdeteksi sebagai
+    // blok signature), dateline jatuh ke body sebagai tanggal polos. match() ambil
+    // kemunculan PERTAMA + getPositionBonus_ memihak posisi teratas, jadi dateline di
+    // atas tetap diutamakan ketimbang tanggal yang disebut jauh di dalam isi.
     const searchZones = [
       { text: headerText, bonus: 1.8 },
       { text: sigText, bonus: 1.0 },
-      { text: bodyText, bonus: 0.8, keywordOnly: true }
+      { text: bodyText, bonus: 0.8 }
     ];
 
     for (let z = 0; z < searchZones.length; z++) {
@@ -384,10 +416,12 @@ const ParseEngine = (function () {
         if (match) {
           let dateVal = null;
           if (match[1] && match[2] && match[3]) {
-            const m = resolveMonth_(match[2]);
-            if (m) dateVal = [match[3], m, pad2_(match[1])].join('-');
-          } else if (match[4] && match[5] && match[6]) {
-            dateVal = [match[4], pad2_(match[5]), pad2_(match[6])].join('-');
+            if (match[1].length === 4) {
+              dateVal = [match[1], pad2_(match[2]), pad2_(match[3])].join('-');
+            } else {
+              const m = resolveMonth_(match[2]);
+              if (m) dateVal = [match[3], m, pad2_(match[1])].join('-');
+            }
           }
           if (dateVal) {
             const indexInFullText = text.indexOf(match[0]);
@@ -451,23 +485,40 @@ const ParseEngine = (function () {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  SCORED EXTRACTOR: PENGIRIM (Sender)
+  //  SCORED EXTRACTOR: DARI (Sender)
   // ═══════════════════════════════════════════════════════════════
 
-  function extractPengirim_(text, structure) {
+  function extractDari_(text, structure) {
     const candidates = [];
     const headerText = structure.header.lines.join('\n');
     const sigText = structure.signature.lines.join('\n');
 
+    // Khusus Surat Keluar: Jika KOP mengandung instansi internal, jadikan Pengirim standar
+    if (LANRI_KALTIM_RE.test(headerText)) {
+      candidates.push({ value: 'Pusjar SKPP LAN RI', score: 0.95, source: 'internal_kop_rule', zone: 0 });
+    }
+
     // Look in header for institution name (KOP SURAT)
-    // Typically the first 2-5 lines contain the institution
+    // Scan up to 10 lines to bypass OCR garbage at the top
     const headerLines = structure.header.lines;
-    for (let i = 0; i < Math.min(headerLines.length, 5); i++) {
+    for (let i = 0; i < Math.min(headerLines.length, 10); i++) {
       const line = headerLines[i].trim();
-      // Institution lines are usually uppercase and > 5 chars
-      if (line.length > 5 && line === line.toUpperCase() && !/^(NOMOR|NO\.|PERIHAL|HAL|LAMPIRAN|TANGGAL)/i.test(line)) {
-        candidates.push({ value: line, score: 0.6 - (i * 0.1), source: 'kop_line_' + i, zone: 0 });
-      }
+      
+      // Syarat KOP:
+      // 1. Cukup panjang (min 10 karakter)
+      if (line.length < 10) continue;
+      // 2. Bukan field metadata surat
+      if (/^(NOMOR|NO\.|PERIHAL|HAL|LAMPIRAN|TANGGAL|YTH|KEPADA|SIFAT)/i.test(line)) continue;
+      // 3. Bukan nomor seri / telp (kumpulan angka/simbol)
+      if (/[\d/.\-]{7,}/.test(line)) continue;
+      // 4. Bukan tanggal tempat pembuatan surat
+      if (/(?:Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember)\s+\d{4}/i.test(line)) continue;
+      // 5. Bukan info kontak / alamat jalan pendek (batas 40 agar gabungan OCR Kop+Jalan tidak ke-skip)
+      if (line.length < 40 && (line.includes('@') || /www\.|http|telp|fax|email|jalan|jln/i.test(line))) continue;
+      
+      // Jika lolos semua, ini sangat mungkin nama instansi di KOP
+      const isUpper = (line === line.toUpperCase());
+      candidates.push({ value: line, score: (isUpper ? 0.6 : 0.55) - (i * 0.05), source: 'kop_line_' + i, zone: 0 });
     }
 
     // Look for "Dari:" pattern
@@ -478,7 +529,7 @@ const ParseEngine = (function () {
 
     // Look in signature for jabatan + nama
     const sigPatterns = [
-      /(?:Kepala|Direktur|Ketua|Sekretaris|Rektor|Dekan|Wakil)\s+[\w\s]+/i,
+      /(?:Bupati|Gubernur|Walikota|Menteri|Panglima|Kapolri|Camat|Lurah|Kades|Kepala|Direktur|Ketua|Sekretaris|Rektor|Dekan|Wakil)\s+[\w\s]+/i,
     ];
     for (let s = 0; s < sigPatterns.length; s++) {
       const sigMatch = sigText.match(sigPatterns[s]);
@@ -491,10 +542,10 @@ const ParseEngine = (function () {
   }
 
   // ═══════════════════════════════════════════════════════════════
-  //  SCORED EXTRACTOR: PENERIMA (Recipient)
+  //  SCORED EXTRACTOR: KEPADA (Recipient)
   // ═══════════════════════════════════════════════════════════════
 
-  function extractPenerima_(text) {
+  function extractKepada_(text) {
     const candidates = [];
 
     // "Kepada:" or "Yth." patterns
@@ -503,13 +554,13 @@ const ParseEngine = (function () {
       candidates.push({ value: cleanValue_(kepada[1]), score: 0.85, source: 'kepada', zone: 0 });
     }
 
-    const yth = text.match(/Yth\.?\s+(.+?)(?=\n|$)/i);
+    const yth = text.match(/Yth\.?\s*[:.]?\s*(.+?)(?=\n|$)/i);
     if (yth && yth[1]) {
       candidates.push({ value: cleanValue_(yth[1]), score: 0.8, source: 'yth', zone: 0 });
     }
 
     // "Kepada Yth." combined
-    const kepYth = text.match(/(?:Kepada|Kpd)\s+Yth\.?\s+(.+?)(?=\n|$)/i);
+    const kepYth = text.match(/(?:Kepada|Kpd)\s+Yth\.?\s*[:.]?\s*(.+?)(?=\n|$)/i);
     if (kepYth && kepYth[1]) {
       candidates.push({ value: cleanValue_(kepYth[1]), score: 0.9, source: 'kepada_yth', zone: 0 });
     }
@@ -712,8 +763,8 @@ const ParseEngine = (function () {
     const tanggal = extractTanggalScored_(optimizedText, structure);
     const uraian = extractUraianScored_(topText, structure, fileName, context.activity, context.subActivity);
     const klasifikasiAkses = extractKlasifikasiAksesScored_(topText);
-    const pengirim = extractPengirim_(topText, structure);
-    const penerima = extractPenerima_(topText);
+    const dari = extractDari_(topText, structure);
+    const kepada = extractKepada_(topText);
     const tandaTangan = extractTandaTangan_(optimizedText, structure);
     const lampiran = extractLampiran_(topText, structure);
     
@@ -746,14 +797,32 @@ const ParseEngine = (function () {
     
     uraianFallback = uraianFallback.replace(/\s+/g, ' ').trim();
 
+    if (docType === 'Nota Dinas') {
+      if (uraian && uraian.value && !/^nota\s+dinas\b/i.test(uraian.value)) {
+        uraian.value = 'Nota Dinas ' + uraian.value;
+      }
+      if (uraianFallback && !/^nota\s+dinas\b/i.test(uraianFallback)) {
+        uraianFallback = 'Nota Dinas ' + uraianFallback;
+      }
+    }
+
     if (uraian && uraian.value) {
       fields.uraian_informasi_item = uraian;
     } else if (uraianFallback) {
       fields.uraian_informasi_item = { value: uraianFallback, score: 0.4, confidence: 'low', source: 'filename_fallback' };
     }
     if (klasifikasiAkses) fields.klasifikasi_akses = klasifikasiAkses;
-    if (pengirim) fields.pengirim = pengirim;
-    if (penerima) fields.penerima = penerima;
+    if (docType === 'surat_keluar') {
+      fields.dari = { value: 'Pusjar SKPP LAN RI', score: 0.99, confidence: 'high', source: 'hardcoded_surat_keluar' };
+    } else if (dari) {
+      if (dari.value) dari.value = applyAliases_(dari.value);
+      fields.dari = dari;
+    }
+    
+    if (kepada) {
+      if (kepada.value) kepada.value = applyAliases_(kepada.value);
+      fields.kepada = kepada;
+    }
     if (tandaTangan) fields.tanda_tangan = { value: tandaTangan, score: 0.6, confidence: 'medium' };
     if (lampiran !== null) fields.lampiran = { value: String(lampiran), score: 0.8, confidence: 'high' };
     fields.tingkat_perkembangan = tingkatPerkembangan;

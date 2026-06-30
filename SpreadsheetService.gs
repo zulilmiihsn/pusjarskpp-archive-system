@@ -19,12 +19,12 @@ function buildDetailRowValues_(metadata) {
       const kepada = String(metadata.kepada || '').trim();
       const dari = String(metadata.dari || '').trim();
       
-      if (nomor) parts.push(nomor);
-      if (uraian) parts.push(uraian);
-      if (kepada) parts.push(kepada);
-      if (dari) parts.push(dari);
+      if (nomor) parts.push('No. Surat: ' + nomor);
+      if (uraian) parts.push('Uraian: ' + uraian);
+      if (kepada) parts.push('Kepada: ' + kepada);
+      if (dari) parts.push('Dari: ' + dari);
       
-      return sanitizeCellValue_(parts.join(' / '));
+      return sanitizeCellValue_(parts.join('\n'));
     }
     if (key === 'lokasi_simpan' && metadata._lokasi_simpan_url) {
       return sanitizeCellValue_(metadata._lokasi_simpan_url);
@@ -55,7 +55,8 @@ function buildDetailCellData_(fieldName, val, metadata) {
   if (fieldName === 'tanggal' && val) {
     const d = parseDateCell_(val);
     if (d) {
-      userEnteredValue = { formulaValue: '=DATE(' + d.getFullYear() + ',' + (d.getMonth() + 1) + ',' + d.getDate() + ')' };
+      const serialDate = 25569 + (Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+      userEnteredValue = { numberValue: serialDate };
       numberFormat = { type: 'DATE', pattern: 'd mmmm yyyy' };
     } else {
       userEnteredValue = { stringValue: String(val) };
@@ -607,15 +608,8 @@ const SpreadsheetService = {
     
     const rawFcText = activity.laci_no + '. Laci ' + activity.activity_name;
     const fcText = rawFcText.replace(/"/g, '""');
-    const fcFormula = activity.laci_folder_id 
-        ? '=HYPERLINK("https://drive.google.com/drive/folders/' + activity.laci_folder_id + '", "' + fcText + '")' 
-        : sanitizeCellValue_(rawFcText);
-        
     const rawLaciText = subActivity.sub_activity_name || '';
     const laciText = rawLaciText.replace(/"/g, '""');
-    const laciFormula = subActivity.folder_id
-        ? '=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '", "' + laciText + '")'
-        : sanitizeCellValue_(rawLaciText);
 
     const row = [
       sanitizeCellValue_(nomorBerkas),
@@ -623,8 +617,8 @@ const SpreadsheetService = {
       sanitizeCellValue_(getSubActivityFormalName_(subActivity) || ''),
       '',
       '',
-      fcFormula,
-      laciFormula,
+      sanitizeCellValue_(rawFcText),
+      sanitizeCellValue_(rawLaciText),
       sanitizeCellValue_(nomorBerkas),
       'Terbatas',
       '',
@@ -634,6 +628,14 @@ const SpreadsheetService = {
       ''
     ];
     sheet.getRange(rowIndex, 2, 1, row.length).setValues([row]);
+    
+    if (activity.laci_folder_id) {
+      sheet.getRange(rowIndex, 7).setFormula('=HYPERLINK("https://drive.google.com/drive/folders/' + activity.laci_folder_id + '", "' + fcText + '")');
+    }
+    if (subActivity.folder_id) {
+      sheet.getRange(rowIndex, 8).setFormula('=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '", "' + laciText + '")');
+    }
+    
     sheet.getRange(rowIndex, 2, 1, row.length)
       .setBorder(true, true, true, true, true, true)
       .setWrap(true)
@@ -937,10 +939,15 @@ const SpreadsheetService = {
     } else if (locks.filingCabinet !== false) {
       const rawFcText = activity.laci_no + '. Laci ' + activity.activity_name;
       const fcText = rawFcText.replace(/"/g, '""');
-      const fcFormula = activity.laci_folder_id 
-          ? '=HYPERLINK("https://drive.google.com/drive/folders/' + activity.laci_folder_id + '", "' + fcText + '")' 
-          : sanitizeCellValue_(rawFcText);
-      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.filingCabinet, fcFormula, true);
+      const fcCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.filingCabinet);
+      if (fcCol) {
+        if (activity.laci_folder_id) {
+          sheet.getRange(rowIndex, fcCol).setFormula('=HYPERLINK("https://drive.google.com/drive/folders/' + activity.laci_folder_id + '", "' + fcText + '")');
+        } else {
+          const fcCell = sheet.getRange(rowIndex, fcCol);
+          if (!fcCell.getFormula()) fcCell.setValue(sanitizeCellValue_(rawFcText));
+        }
+      }
     }
 
     if (locks.noLaci === false && metadata.noLaci !== undefined) {
@@ -948,10 +955,15 @@ const SpreadsheetService = {
     } else if (locks.noLaci !== false) {
       const rawLaciText = subActivity.sub_activity_name || '';
       const laciText = rawLaciText.replace(/"/g, '""');
-      const laciFormula = subActivity.folder_id
-          ? '=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '", "' + laciText + '")'
-          : sanitizeCellValue_(rawLaciText);
-      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noLaci, laciFormula, true);
+      const laciCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noLaci);
+      if (laciCol) {
+        if (subActivity.folder_id) {
+          sheet.getRange(rowIndex, laciCol).setFormula('=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '", "' + laciText + '")');
+        } else {
+          const laciCell = sheet.getRange(rowIndex, laciCol);
+          if (!laciCell.getFormula()) laciCell.setValue(sanitizeCellValue_(rawLaciText));
+        }
+      }
     }
 
     if (locks.noFolder === false && metadata.noFolder !== undefined) {
@@ -1056,9 +1068,15 @@ const SpreadsheetService = {
             if (maxRowsDetail > 0) {
               const startCol = getDetailStartColumn_(detailSheet);
               const noBerkasCol = startCol + DETAIL_FIELD_ORDER.indexOf('no_berkas');
+              const itemNumberCol = startCol + DETAIL_ITEM_NUMBER_OFFSET;
+              const itemNumbers = detailSheet.getRange(DETAIL_DATA_START_ROW, itemNumberCol, maxRowsDetail, 1).getDisplayValues();
               const values = [];
               for(let i=0; i<maxRowsDetail; i++) {
-                 values.push([sanitizeCellValue_(newSortOrder)]);
+                 if (String(itemNumbers[i][0]).trim()) {
+                   values.push([sanitizeCellValue_(newSortOrder)]);
+                 } else {
+                   values.push(['']);
+                 }
               }
               detailSheet.getRange(DETAIL_DATA_START_ROW, noBerkasCol, maxRowsDetail, 1).setValues(values);
             }

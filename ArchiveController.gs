@@ -440,6 +440,180 @@ const ArchiveController = {
     };
   },
 
+  // ── Stepped archive flow ──────────────────────────────────────────────
+  // Pecah finalizeArchive jadi 3 panggilan berurutan agar client bisa
+  // menampilkan progress nyata. Atomisitas tulis tetap dijaga oleh lock
+  // di step 3. Step 1-2 tanpa lock — jika step 3 gagal, file salinan
+  // yang sudah dibuat di step 2 akan di-trash otomatis (rollback).
+  //
+  // Step 1: Validasi metadata + cek uniqueness (tanpa lock)
+  // Step 2: Copy/move file ke folder tujuan (tanpa lock, operasi lambat)
+  // Step 3: Tulis baris spreadsheet + rekap + log (dengan lock)
+
+  archiveStep_validate: function (payload) {
+    payload = payload || {};
+    requireAuth_(payload);
+    const ctx = _resolveArchiveContext_(payload);
+    const year = ctx.year, config = ctx.config, activity = ctx.activity, subActivity = ctx.subActivity;
+
+    const fields = config.fields.filter(function (field) {
+      return field.activity_id === payload.activityId && isTrue_(field.is_visible_in_form);
+    });
+    Validator.requireMetadata(payload.metadata, fields);
+
+    // Cek uniqueness tanpa lock (early-exit; akan dicek ulang di step 3 dalam lock).
+    ArchiveController._validateUniqueMetadata(payload, activity, subActivity, null);
+
+    // Siapkan metadata + nama file final.
+    const sourceFile = DriveService.getFileFromInput(payload);
+    const metadata = ArchiveController._prepareMetadata(payload, activity, subActivity, sourceFile.getName());
+
+    // Preview nomor item berikutnya (read-only, bisa berubah di step 3).
+    var autoItemNumber = false;
+    if (!metadata.nomor_item_arsip) {
+      autoItemNumber = true;
+      const nextNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
+      metadata.nomor_item_arsip = String(nextNum).padStart(2, '0');
+      metadata.lokasi_simpan = MetadataService.buildFinalFileName(metadata, sourceFile.getName());
+    }
+
+    const archiveId = 'ARC-' + Utilities.getUuid().slice(0, 8).toUpperCase();
+    const archiveUser = AuthService.getCurrentUser(payload);
+
+    return {
+      archiveId: archiveId,
+      metadata: metadata,
+      autoItemNumber: autoItemNumber,
+      sourceFileName: sourceFile.getName(),
+      sourceFileId: sourceFile.getId(),
+      createdBy: archiveUser.displayName || archiveUser.username || ''
+    };
+  },
+
+  archiveStep_copyFile: function (payload) {
+    payload = payload || {};
+    requireAuth_(payload);
+    Validator.requireString(payload.sourceFileId, 'Source File ID');
+    Validator.requireString(payload.targetFolderId, 'Target Folder ID');
+    Validator.requireString(payload.finalFileName, 'Final File Name');
+
+    const sourceFile = DriveApp.getFileById(cleanId_(payload.sourceFileId));
+    const finalFile = DriveService.copyToFinalFolder(
+      sourceFile, payload.targetFolderId, payload.finalFileName, payload.year || ''
+    );
+
+    return {
+      finalFileId: finalFile.getId(),
+      finalFileName: finalFile.getName(),
+      finalFileUrl: finalFile.getUrl()
+    };
+  },
+
+  archiveStep_writeAndLog: function (payload) {
+    payload = payload || {};
+    requireAuth_(payload);
+    const ctx = _resolveArchiveContext_(payload);
+    const year = ctx.year, activity = ctx.activity, subActivity = ctx.subActivity;
+
+    Validator.requireString(payload.archiveId, 'Archive ID');
+    Validator.requireString(payload.finalFileId, 'Final File ID');
+    Validator.requireString(payload.sourceFileId, 'Source File ID');
+
+    const finalFile = DriveApp.getFileById(cleanId_(payload.finalFileId));
+    const metadata = payload.metadata || {};
+    const createdBy = payload.createdBy || '';
+
+    let result;
+    let logWarning = '';
+    try {
+      result = withLock_(function () {
+        // Re-validasi uniqueness di dalam lock (atomik).
+        ArchiveController._validateUniqueMetadata(payload, activity, subActivity, null);
+
+        // Re-assign nomor item final di dalam lock. Jika autoItemNumber true,
+        // selalu ambil ulang nomor terbaru agar concurrent submit gak bentrok.
+        if (payload.autoItemNumber || !metadata.nomor_item_arsip) {
+          var nextNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
+          var originalNum = metadata.nomor_item_arsip;
+          metadata.nomor_item_arsip = String(nextNum).padStart(2, '0');
+          var newExpectedName = MetadataService.buildFinalFileName(metadata, finalFile.getName());
+          
+          // Jika nomor item bergeser karena antrean, RENAME file di Drive agar sesuai.
+          if (originalNum !== metadata.nomor_item_arsip && finalFile.getName() !== newExpectedName) {
+            try {
+              finalFile.setName(newExpectedName);
+            } catch (renameErr) {
+              console.warn('Gagal merename file yang bergeser antreannya: ' + renameErr.message);
+            }
+          }
+        }
+
+        // Ambil nama final yang benar-benar tersimpan di Drive.
+        metadata.lokasi_simpan = finalFile.getName();
+        metadata._lokasi_simpan_url = finalFile.getUrl();
+
+        var targetFolderId = payload.targetFolderId || subActivity.folder_id;
+        var targetFolder = DriveApp.getFolderById(cleanId_(targetFolderId));
+        var targetFolderInfo = getArchiveTargetFolderInfo_(targetFolder);
+
+        var writeResult, rekapResult;
+        try {
+          writeResult = SpreadsheetService.appendArchiveRow(activity, subActivity, metadata);
+          SpreadsheetApp.flush();
+          rekapResult = SpreadsheetService.updateRekapSummary(activity, subActivity, metadata);
+        } catch (sheetError) {
+          // Rollback: trash file salinan yang sudah dibuat di step 2.
+          try { finalFile.setTrashed(true); } catch (cleanupError) {
+            console.warn('archiveStep_writeAndLog: gagal membersihkan file salinan yatim: ' + cleanupError.message);
+          }
+          throw sheetError;
+        }
+
+        var _logWarning = ArchiveController._logArchiveCompletion(
+          payload.archiveId, year, activity, subActivity,
+          payload.sourceFileId, finalFile, writeResult, createdBy,
+          targetFolderInfo, metadata
+        );
+
+        return {
+          finalFile: finalFile,
+          writeResult: writeResult,
+          rekapResult: rekapResult,
+          metadata: metadata,
+          targetFolder: targetFolderInfo,
+          logWarning: _logWarning
+        };
+      }, 30000);
+      logWarning = result.logWarning || '';
+    } catch (error) {
+      ConfigRepository.appendArchiveLog({
+        archive_id: payload.archiveId, year: year,
+        activity_id: activity.activity_id, sub_activity_id: subActivity.sub_activity_id,
+        source_file_id: payload.sourceFileId, final_file_id: payload.finalFileId,
+        final_file_name: finalFile.getName(),
+        target_folder_id: payload.targetFolderId || subActivity.folder_id || '',
+        target_folder_name: '', target_folder_path: '',
+        spreadsheet_file_id: '', spreadsheet_row_number: '',
+        status: STATUS.FAILED, created_at: new Date().toISOString(),
+        created_by: createdBy, error_message: error.message || String(error),
+        metadata_json: JSON.stringify({ failedPayload: metadata })
+      });
+      // Rollback: trash file dari step 2.
+      try { finalFile.setTrashed(true); } catch (cleanupErr) {
+        console.warn('archiveStep_writeAndLog: rollback trash gagal: ' + cleanupErr.message);
+      }
+      CacheHelper.invalidate(year);
+      throw error;
+    }
+
+    return {
+      archiveId: payload.archiveId, status: STATUS.COMPLETED,
+      finalFile: DriveService.fileToDto(result.finalFile),
+      spreadsheet: result.writeResult, rekapSpreadsheet: result.rekapResult,
+      metadata: result.metadata, warning: logWarning || ''
+    };
+  },
+
   adoptExistingArchives: function (payload) {
     payload = payload || {};
     requireAuth_(payload);
@@ -635,8 +809,8 @@ const ArchiveController = {
     requireWithinWorkspace_(payload.fileId, psYear);
 
     // Cache hasil parse per fileId: buka file yang sama lagi = instan, tak konversi ulang.
-    const parseCacheKey = 'parsecache_' + cleanId_(payload.fileId);
-    const parseLockKey = 'parselock_' + cleanId_(payload.fileId);
+    const parseCacheKey = 'parsecache_v18_' + cleanId_(payload.fileId);
+    const parseLockKey = 'parselock_v18_' + cleanId_(payload.fileId);
     try {
       const cachedParse = CacheService.getScriptCache().get(parseCacheKey);
       if (cachedParse) { const r = JSON.parse(cachedParse); r.cached = true; return r; }
@@ -720,6 +894,18 @@ const ArchiveController = {
       try { DriveApp.getFileById(tempDocId).setTrashed(true); } catch (e) {}
     }
 
+    // Fallback: If pageCount couldn't be extracted natively (e.g. compressed PDF)
+    // estimate it from the form-feeds (\f) or \x0c in the converted text.
+    if (pageCount === 0 && text) {
+      const ffMatches = text.match(/\x0c/g);
+      if (ffMatches && ffMatches.length > 0) {
+        pageCount = ffMatches.length + 1;
+      } else {
+        // Rough estimation based on text length (~1500 chars per page on average)
+        pageCount = Math.max(1, Math.ceil(text.length / 1500));
+      }
+    }
+
 
     // Run ParseEngine for scored multi-pass extraction
     const engineResult = ParseEngine.analyze(text, fileName, { activity: {}, subActivity: {} });
@@ -741,6 +927,15 @@ const ArchiveController = {
       }
     }
 
+    if (pageCount > 0) {
+      fields.jumlah = {
+        value: String(pageCount),
+        score: 1.0,
+        confidence: 'high',
+        source: 'pdf_page_count'
+      };
+    }
+
     // Ringkasan diagnostik — TIDAK menyertakan teks dokumen mentah (rawText/ocrTextSample)
     // agar isi dokumen tidak bocor ke payload client maupun ke Stackdriver.
     const debugInfo = {
@@ -750,7 +945,7 @@ const ArchiveController = {
       structure: engineResult.structure,
       documentType: engineResult.documentType,
       fieldsFound: Object.keys(fields),
-      fieldsMissing: ['nomor_surat','kode_klasifikasi','tanggal','uraian_informasi_item','klasifikasi_akses','pengirim','penerima','tanda_tangan','lampiran']
+      fieldsMissing: ['nomor_surat','kode_klasifikasi','tanggal','uraian_informasi_item','klasifikasi_akses','dari','kepada','tanda_tangan','lampiran']
         .filter(function(k) { return !fields[k]; })
     };
 
@@ -762,8 +957,8 @@ const ArchiveController = {
       if (tt.nama) ttParts.push(tt.nama);
       fields.tanda_tangan.value = ttParts.join(', ') || ttParts.join('');
     }
-    if (fields.pengirim && typeof fields.pengirim.value === 'object') {
-      delete fields.pengirim; // skip if no string value
+    if (fields.dari && typeof fields.dari.value === 'object') {
+      delete fields.dari; // skip if no string value
     }
 
     // Add page count (estimated separately from OCR)

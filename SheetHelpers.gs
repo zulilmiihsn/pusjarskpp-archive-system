@@ -857,34 +857,8 @@ function getDetailColumnLetter_(sheet, field, fallbackLetter) {
 //
 // Hasil di-cache di Document Properties, di-key pakai locale; auto re-probe
 // kalau user ganti locale spreadsheet. Plus memo per-eksekusi.
-let FORMULA_SEP_MEMO_ = null;
 function formulaSep_(ss) {
-  if (FORMULA_SEP_MEMO_) return FORMULA_SEP_MEMO_;
-  try {
-    ss = ss || SpreadsheetApp.getActiveSpreadsheet();
-    let locale = '';
-    try { locale = ss.getSpreadsheetLocale() || ''; } catch (e) {}
-    const propKey = 'FORMULA_SEP::' + locale;
-    const props = PropertiesService.getDocumentProperties();
-    const cached = props.getProperty(propKey);
-    if (cached === ',' || cached === ';') return (FORMULA_SEP_MEMO_ = cached);
-
-    const sheet = ss.getSheets()[0];
-    const cell = sheet.getRange(sheet.getMaxRows(), sheet.getMaxColumns());
-    const prevFormula = cell.getFormula();
-    const prevValue = prevFormula ? null : cell.getValue();
-    cell.setFormula('=1/2');
-    SpreadsheetApp.flush();
-    const disp = String(cell.getDisplayValue());
-    if (prevFormula) cell.setFormula(prevFormula);
-    else cell.setValue(prevValue);
-
-    FORMULA_SEP_MEMO_ = disp.indexOf(',') >= 0 ? ';' : ',';
-    try { props.setProperty(propKey, FORMULA_SEP_MEMO_); } catch (e) {}
-  } catch (e) {
-    FORMULA_SEP_MEMO_ = ',';
-  }
-  return FORMULA_SEP_MEMO_;
+  return ',';
 }
 
 function buildKurunWaktuFormula_(detailSheet) {

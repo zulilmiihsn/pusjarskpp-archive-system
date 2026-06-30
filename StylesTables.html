@@ -679,7 +679,9 @@
 /* ── RESPONSIVE BREAKPOINT: 1024px (Tablet Landscape) ── */
 
   @media (max-width: 1024px) {
-    .archive-folder-grid { grid-template-columns: 1fr; }
+    .archive-folder-grid { grid-template-columns: 1fr !important; }
+    .archive-folder-resizer { display: none !important; }
+
     .dashboard-bottom-row { grid-template-columns: 1fr; gap: 20px; }
     .content { padding: 24px 24px 48px; }
     .search-bar { width: 260px; }

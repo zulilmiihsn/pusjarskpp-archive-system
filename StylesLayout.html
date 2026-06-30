@@ -1424,10 +1424,38 @@
 
   .archive-folder-grid {
     display: grid;
-    grid-template-columns: minmax(280px, 0.92fr) minmax(360px, 1.08fr);
-    gap: 16px;
+    /* Custom columns injected by JS or fallback */
+    grid-template-columns: minmax(280px, 0.92fr) 12px minmax(360px, 1.08fr);
+    gap: 8px; /* Slightly reduced gap because of the resizer */
     align-items: start;
     margin-top: 28px;
+  }
+
+  .archive-folder-resizer {
+    width: 12px;
+    cursor: col-resize;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    align-self: stretch;
+    margin: 0 4px;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    transition: background 0.15s;
+    user-select: none;
+    touch-action: none;
+  }
+  
+  .archive-folder-resizer:hover, .archive-folder-resizer.is-resizing {
+    background: var(--border-focus);
+  }
+  
+  .archive-folder-resizer::after {
+    content: '';
+    width: 2px;
+    height: 24px;
+    background: var(--border);
+    border-radius: 2px;
   }
 
   .archive-folder-grid:first-child {
