@@ -522,7 +522,7 @@ const ParseEngine = (function () {
     }
 
     // Look for "Dari:" pattern (search in full text, not just header, because Yth might end header early)
-    const dari = text.match(/(?:Dari|Pengirim|Asal)\s*[:.]?\s*(.+?)(?=\n|$)/i);
+    const dari = text.match(/(?:Dari|Pengirim|Asal)\s*[:.]?\s*(.+?)(?=\s+(?:Hal|Perihal|Tanggal|Yth|Nomor|Sifat|Lampiran)\b|\n|$)/i);
     if (dari && dari[1]) {
       candidates.push({ value: cleanValue_(dari[1]), score: 0.85, source: 'dari_pattern', zone: 0 });
     }
