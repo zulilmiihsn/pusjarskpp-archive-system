@@ -263,6 +263,22 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   if (!meta.nomor_item_arsip) meta.nomor_item_arsip = '01';
   if (!meta.tingkat_perkembangan) meta.tingkat_perkembangan = 'Asli';
   
+  // Fallback: Jika tidak ada nomor surat tapi ada teks uraian, coba ekstrak nomor surat dari uraian
+  if (!meta.nomor_surat && meta.uraian_informasi_item) {
+    const extNo = extractNomorSurat_(meta.uraian_informasi_item);
+    if (extNo) {
+      meta.nomor_surat = extNo;
+      // Buat regex dinamis untuk menghapus nomor yang ditemukan dari uraian
+      // extNo sudah dinormalisasi (pakai / atau -), kita kembalikan ke bentuk fleksibel
+      const rawPattern = extNo.replace(/[-\/]/g, '[\\s\\_\\-\\/]+');
+      const removeRe = new RegExp('(?:No(?:mor)?\\s*[:.\\-\\s_]+)?' + rawPattern, 'i');
+      let cleanUraian = meta.uraian_informasi_item.replace(removeRe, '');
+      // Bersihkan underscore dan spasi berlebih
+      cleanUraian = cleanUraian.replace(/^_+|_+$/g, '').replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+      meta.uraian_informasi_item = cleanUraian;
+    }
+  }
+
   // Sinkronkan no_folder dengan nomor_item_arsip (seperti logic di form)
   meta.no_folder = meta.nomor_item_arsip;
 
