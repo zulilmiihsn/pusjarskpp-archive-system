@@ -639,7 +639,7 @@ const ParseEngine = (function () {
   // Deteksi arah surat: jika KOP/header memuat instansi "LAN RI Kalimantan Timur"
   // berarti surat KELUAR (dikeluarkan oleh kita). Bila tidak ada → surat MASUK.
   // Toleransi spasi antar-kata & case agar tahan variasi OCR.
-  const LANRI_KALTIM_RE = /LAN\s*RI\s+Kalimantan\s+Timur/i;
+  const LANRI_KALTIM_RE = /(LAN\s*RI\s+Kalimantan\s+Timur|Lembaga\s+Administrasi\s+Negara)/i;
   function detectDirection_(headerText, fullText) {
     const zone = String(headerText || '') + '\n' + String(fullText || '').substring(0, 600);
     return LANRI_KALTIM_RE.test(zone) ? 'keluar' : 'masuk';
