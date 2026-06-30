@@ -278,10 +278,9 @@
         progressFill.classList.add('toast-progress-complete');
         pctCounter.textContent = '100%';
         stepLabel.textContent = successMsg || 'Selesai';
-        window.setTimeout(function () {
-          removeToast(toast);
-          if (successMsg) showToast(successMsg, false);
-        }, 600);
+        // Tampilkan hasil di toast progress ini lalu fade — tanpa memunculkan
+        // toast kedua (biar notif selesai tidak dobel).
+        window.setTimeout(function () { removeToast(toast); }, 1600);
       },
       error: function (errorMsg) {
         done = true;

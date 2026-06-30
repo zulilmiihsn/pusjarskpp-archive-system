@@ -124,9 +124,29 @@ function buildFinalFileName_(metadata, sourceName) {
   const tingkat = metadata.tingkat_perkembangan || 'Asli';
   
   const nomor = String(metadata.nomor_surat || '').trim();
-  const uraianStr = String(metadata.uraian_informasi_item || '').trim();
+  let uraianStr = String(metadata.uraian_informasi_item || '').trim();
   const kepada = String(metadata.kepada || '').trim();
   const dari = String(metadata.dari || '').trim();
+
+  // Hitung budget panjang uraian agar total string (safeUraian) tidak melebihi 170
+  let fixedLength = 0;
+  if (nomor) {
+    fixedLength += nomor.length;
+  }
+  if (kepada) {
+    fixedLength += (nomor ? 1 : 0) + 7 + kepada.length; // "/" + "Kepada " + kepada
+  }
+  if (dari) {
+    fixedLength += (nomor || kepada ? 1 : 0) + 5 + dari.length; // "/" + "Dari " + dari
+  }
+
+  const separatorLength = nomor ? 1 : 0; // "/"
+  const maxUraianBudget = 170 - fixedLength - separatorLength;
+
+  if (uraianStr.length > maxUraianBudget) {
+    const limit = Math.max(15, maxUraianBudget - 3);
+    uraianStr = uraianStr.slice(0, limit) + '...';
+  }
 
   const parts = [];
   if (nomor) parts.push(nomor);

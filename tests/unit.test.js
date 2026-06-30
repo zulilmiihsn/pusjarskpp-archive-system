@@ -172,6 +172,24 @@ test('buildFinalFileName_ - without nomor_surat', () => {
   );
 });
 
+test('buildFinalFileName_ - smart truncation of Uraian to protect Kepada and Dari', () => {
+  const metadata = {
+    nomor_item_arsip: '1',
+    tingkat_perkembangan: 'Asli',
+    nomor_surat: '123/ST/2026',
+    uraian_informasi_item: 'Ini adalah deskripsi yang sengaja dibuat sangat panjang sekali agar melebihi batas 170 karakter sehingga memicu logika pemotongan otomatis yang cerdas pada bagian uraian naskah dinas ini',
+    kepada: 'Penerima Surat Penting',
+    dari: 'Pusjar SKPP LAN RI'
+  };
+  const result = buildFinalFileName_(metadata, 'original.pdf');
+  // fixedLength = 11 (nomor) + 10 (kepada) + 23 (dari) + separators = 46
+  // maxUraianBudget = 170 - 46 = 124. Uraian should be truncated.
+  // Result should end with Kepada Penerima Surat Penting/Dari Pusjar SKPP LAN RI.pdf
+  assert.ok(result.endsWith('Kepada Penerima Surat Penting/Dari Pusjar SKPP LAN RI.pdf'), 'Kepada and Dari must be preserved at the end');
+  assert.ok(result.includes('...'), 'Uraian should have ellipsis indicating truncation');
+  assert.ok(result.length <= 170 + 15, 'Total filename length should be within limits');
+});
+
 // 7. cleanId_
 test('cleanId_ - extraction from URL', () => {
   const url = 'https://docs.google.com/spreadsheets/d/1aBcDeFgHiJkLmNoPqRsTuVwXyZ1234567890abcdef/edit';
