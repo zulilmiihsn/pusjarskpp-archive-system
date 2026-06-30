@@ -1452,12 +1452,17 @@
         return '<option value="' + esc(o) + '"' + (o === current ? ' selected' : '') + '>' + esc(o) + '</option>';
       }).join('');
       inputHtml = '<select id="meta-' + safeKey + '" data-field="' + safeKey + '"' + required + '>' + opts + '</select>';
+    } else if (key === 'tanggal') {
+      // Date picker custom (modal kalender, bahasa Indonesia, seragam tiap browser).
+      // Input terlihat = teks readonly menampilkan "4 Mei 2026"; nilai asli (ISO)
+      // disimpan di input hidden ber-data-field supaya alur lama tetap jalan.
+      const display = current ? formatIndoDate_(current) : '';
+      inputHtml =
+        '<input type="hidden" id="meta-' + safeKey + '" data-field="' + safeKey + '" value="' + safeCur + '">' +
+        '<input type="text" id="meta-' + safeKey + '-display" class="datepicker-display" readonly' + required + ' value="' + esc(display) + '" placeholder="Pilih tanggal" data-open-datepicker autocomplete="off" tabindex="0">';
     } else {
       let type = 'text';
-      if (key === 'tanggal') {
-        type = 'date';
-        extraAttrs = ' inputmode="numeric"';
-      } else if (key === 'nomor_item_arsip') {
+      if (key === 'nomor_item_arsip') {
         type = 'text';
         extraAttrs = ' inputmode="numeric" pattern="[0-9]*"';
       } else if (key === 'jumlah') {
@@ -1470,6 +1475,157 @@
     }
 
     return '<div class="' + cls + '">' + labelHtml + inputHtml + hintHtml + '</div>';
+  }
+
+  // ── Date picker custom (modal kalender, bahasa Indonesia) ──
+  var INDO_MONTHS_ = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  var INDO_DAYS_ = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+
+  function formatIndoDate_(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    if (!m) return '';
+    var mo = +m[2] - 1;
+    if (mo < 0 || mo > 11) return '';
+    return (+m[3]) + ' ' + INDO_MONTHS_[mo] + ' ' + (+m[1]);
+  }
+
+  function toIso_(y, mo, d) {
+    return y + '-' + String(mo + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+  }
+
+  function openDatePickerModal_(iso, onPick) {
+    var existing = document.getElementById('datepicker-modal-root');
+    if (existing) existing.remove();
+
+    var now = new Date();
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+    var selected = m ? toIso_(+m[1], +m[2] - 1, +m[3]) : '';
+    var view = m ? { y: +m[1], mo: +m[2] - 1 } : { y: now.getFullYear(), mo: now.getMonth() };
+
+    var host = document.createElement('div');
+    host.id = 'datepicker-modal-root';
+    host.innerHTML =
+      '<div class="modal-backdrop" style="z-index:99999;">' +
+        '<div class="modal-card datepicker-card" style="max-width:340px;">' +
+          '<div class="modal-header">' +
+            '<h3 class="section-title">Pilih Tanggal</h3>' +
+            '<button class="btn icon-btn" id="dp-close" aria-label="Tutup">x</button>' +
+          '</div>' +
+          '<div class="panel-pad">' +
+            '<div class="dp-nav">' +
+              '<button type="button" class="btn icon-btn" id="dp-prev" aria-label="Bulan sebelumnya">‹</button>' +
+              '<span class="dp-title" id="dp-title"></span>' +
+              '<button type="button" class="btn icon-btn" id="dp-next" aria-label="Bulan berikutnya">›</button>' +
+            '</div>' +
+            '<div class="dp-grid" id="dp-grid"></div>' +
+            '<div class="button-row justify-between" style="margin-top:14px;">' +
+              '<button type="button" class="btn" id="dp-today">Hari Ini</button>' +
+              '<button type="button" class="btn" id="dp-clear">Kosongkan</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(host);
+
+    var backdrop = host.querySelector('.modal-backdrop');
+    var titleEl = host.querySelector('#dp-title');
+    var gridEl = host.querySelector('#dp-grid');
+
+    function close() { hideElementAnimated(backdrop, function () { host.remove(); }); }
+    function pick(isoVal) { onPick(isoVal); close(); }
+
+    function renderGrid() {
+      titleEl.textContent = INDO_MONTHS_[view.mo] + ' ' + view.y;
+      var startDow = new Date(view.y, view.mo, 1).getDay();
+      var daysInMonth = new Date(view.y, view.mo + 1, 0).getDate();
+      var todayIso = toIso_(now.getFullYear(), now.getMonth(), now.getDate());
+      var html = '';
+      INDO_DAYS_.forEach(function (dn) { html += '<div class="dp-dow">' + dn + '</div>'; });
+      for (var i = 0; i < startDow; i++) html += '<div class="dp-cell dp-empty"></div>';
+      for (var d = 1; d <= daysInMonth; d++) {
+        var cellIso = toIso_(view.y, view.mo, d);
+        var c = 'dp-cell';
+        if (cellIso === selected) c += ' dp-selected';
+        else if (cellIso === todayIso) c += ' dp-today';
+        html += '<button type="button" class="' + c + '" data-iso="' + cellIso + '">' + d + '</button>';
+      }
+      gridEl.innerHTML = html;
+    }
+
+    gridEl.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-iso]');
+      if (btn) pick(btn.getAttribute('data-iso'));
+    });
+    host.querySelector('#dp-prev').onclick = function () { view.mo--; if (view.mo < 0) { view.mo = 11; view.y--; } renderGrid(); };
+    host.querySelector('#dp-next').onclick = function () { view.mo++; if (view.mo > 11) { view.mo = 0; view.y++; } renderGrid(); };
+    host.querySelector('#dp-today').onclick = function () { pick(toIso_(now.getFullYear(), now.getMonth(), now.getDate())); };
+    host.querySelector('#dp-clear').onclick = function () { pick(''); };
+    host.querySelector('#dp-close').onclick = close;
+    backdrop.onclick = function (e) { if (e.target === e.currentTarget) close(); };
+
+    renderGrid();
+  }
+
+  function bindDatePicker_() {
+    var disp = document.getElementById('meta-tanggal-display');
+    var hidden = document.getElementById('meta-tanggal');
+    if (!disp || !hidden) return;
+    var syncDisplay = function () { disp.value = formatIndoDate_(hidden.value); };
+    hidden.addEventListener('change', syncDisplay); // dipicu autofill (setFieldValue_)
+    hidden.addEventListener('input', syncDisplay);
+    var open = function () {
+      openDatePickerModal_(hidden.value, function (isoVal) {
+        hidden.value = isoVal;
+        disp.value = formatIndoDate_(isoVal);
+        if (state.draft && state.draft.metadata) state.draft.metadata.tanggal = isoVal;
+        hidden.dispatchEvent(new Event('change', { bubbles: true })); // sync state + updateFileName
+      });
+    };
+    disp.addEventListener('click', open);
+    disp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  }
+
+  // Upgrade generik: ubah <input type="date"> jadi date picker custom. Input asli
+  // dijadikan penyimpan nilai ISO (hidden), disisipkan input teks display di sebelahnya.
+  // Dipakai di luar form arsip (mis. EditSubActivity). Idempoten (guard dpUpgraded).
+  function upgradeDateInput_(elOrId) {
+    var input = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+    if (!input || input.dataset.dpUpgraded === '1') return null;
+    input.dataset.dpUpgraded = '1';
+    input.type = 'hidden';
+
+    var disp = document.createElement('input');
+    disp.type = 'text';
+    disp.readOnly = true;
+    disp.className = 'datepicker-display';
+    disp.placeholder = 'Pilih tanggal';
+    disp.autocomplete = 'off';
+    disp.tabIndex = 0;
+    disp.value = formatIndoDate_(input.value);
+    input.parentNode.insertBefore(disp, input.nextSibling);
+    input._dpDisplay = disp;
+
+    var open = function () {
+      if (disp.disabled) return;
+      openDatePickerModal_(input.value, function (isoVal) {
+        input.value = isoVal;
+        disp.value = formatIndoDate_(isoVal);
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    };
+    disp.addEventListener('click', open);
+    disp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+    return disp;
+  }
+
+  // Sinkronkan display dari nilai ISO input (setelah set .value programatik).
+  function syncDateDisplay_(elOrId) {
+    var input = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+    if (input && input._dpDisplay) input._dpDisplay.value = formatIndoDate_(input.value);
   }
 
   // Logic assembleUraian_ dihapus sesuai request, user akan ketik Uraian langsung.
@@ -1584,6 +1740,8 @@
         });
       }
     });
+
+    bindDatePicker_();
 
     // Ctrl+S / Ctrl+Enter kini ditangani delegator keyboard global di ClientRouter
     // (dengan guard .disabled & offsetParent). Handler lokal dihapus karena duplikat

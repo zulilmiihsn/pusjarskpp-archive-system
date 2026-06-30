@@ -42,6 +42,12 @@
     renameModal.style.display = 'grid';
     renameInput.focus();
 
+    // Seragamkan field tanggal Kurun Waktu jadi date picker custom (bahasa Indonesia).
+    upgradeDateInput_('rename-sub-kurun-start');
+    upgradeDateInput_('rename-sub-kurun-end');
+    syncDateDisplay_('rename-sub-kurun-start');
+    syncDateDisplay_('rename-sub-kurun-end');
+
     updateLockUI_('kurunWaktu', _currentMetadataLocks.kurunWaktu !== false);
     updateLockUI_('akses', _currentMetadataLocks.akses !== false);
     updateLockUI_('jumlah', _currentMetadataLocks.jumlah !== false);
@@ -96,6 +102,7 @@
       var kurunParts = String(meta.kurun_waktu || '').trim().split(/\s+-\s+/);
       if (ksEl) ksEl.value = parseKurunDate_(kurunParts[0] || '');
       if (keEl) keEl.value = parseKurunDate_(kurunParts[1] || '');
+      syncDateDisplay_(ksEl); syncDateDisplay_(keEl);
       if (cfEl) cfEl.value = meta.no_filing_cabinet || '';
       if (lEl) lEl.value = meta.no_laci || (activity ? activity.laci_no : '') || '';
       if (aEl && meta.klasifikasi_akses) aEl.value = meta.klasifikasi_akses;
@@ -141,6 +148,7 @@
           var kurunParts = String(meta.kurun_waktu || '').trim().split(/\s+-\s+/);
           if (ksEl) ksEl.value = parseKurunDate_(kurunParts[0] || '');
           if (keEl) keEl.value = parseKurunDate_(kurunParts[1] || '');
+          syncDateDisplay_(ksEl); syncDateDisplay_(keEl);
         } else if (field === 'akses') {
           var aEl = document.getElementById('rename-sub-klasifikasi-akses');
           if (aEl && meta.klasifikasi_akses) aEl.value = meta.klasifikasi_akses;
@@ -179,8 +187,8 @@
     if (field === 'kurunWaktu') {
       var startEl = document.getElementById('rename-sub-kurun-start');
       var endEl = document.getElementById('rename-sub-kurun-end');
-      if (startEl) startEl.disabled = isLocked;
-      if (endEl) endEl.disabled = isLocked;
+      if (startEl) { startEl.disabled = isLocked; if (startEl._dpDisplay) startEl._dpDisplay.disabled = isLocked; }
+      if (endEl) { endEl.disabled = isLocked; if (endEl._dpDisplay) endEl._dpDisplay.disabled = isLocked; }
     } else if (field === 'akses') {
       var aksesEl = document.getElementById('rename-sub-klasifikasi-akses');
       if (aksesEl) aksesEl.disabled = isLocked;
