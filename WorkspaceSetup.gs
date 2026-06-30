@@ -1139,56 +1139,51 @@ function wsFindOrCreateChildFolder_(parent, candidates, createName, report) {
     wsPushReport_(report, 'found', 'Folder ditemukan: ' + found.getName());
     return found;
   }
-  const folder = withRetry_(() => parent.createFolder(createName));
+  const folder = withRetry_(function() { return parent.createFolder(createName); });
+  if (typeof _wsFolderChildrenCache_ !== 'undefined') {
+    delete _wsFolderChildrenCache_[parent.getId()];
+  }
   wsPushReport_(report, 'created', 'Folder dibuat: ' + createName);
   return folder;
 }
 
 function wsFindChildFolder_(parent, candidates) {
-  let pageToken = null;
-  do {
-    let result;
-    try {
-      result = Drive.Files.list({
-        q: "'" + parent.getId() + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
-        fields: "nextPageToken, files(id, name)",
-        pageSize: 1000,
-        pageToken: pageToken,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-    } catch (e) {
-      break;
+  const items = wsListChildFolders_(parent);
+  
+  // exact match first
+  for (let i = 0; i < items.length; i++) {
+    const name = items[i].getName();
+    for (let j = 0; j < candidates.length; j++) {
+      if (name === candidates[j]) return items[i];
     }
-    const items = result.files || [];
-    
-    // exact match first
-    for (let i = 0; i < items.length; i++) {
-      for (let j = 0; j < candidates.length; j++) {
-        if (items[i].name === candidates[j]) return DriveApp.getFolderById(items[i].id);
-      }
+  }
+  // fuzzy match second
+  for (let i = 0; i < items.length; i++) {
+    const name = items[i].getName();
+    const normalized = wsNormalize_(name);
+    for (let j = 0; j < candidates.length; j++) {
+      if (normalized.indexOf(wsNormalize_(candidates[j])) >= 0) return items[i];
     }
-    // fuzzy match second
-    for (let i = 0; i < items.length; i++) {
-      const normalized = wsNormalize_(items[i].name);
-      for (let j = 0; j < candidates.length; j++) {
-        if (normalized.indexOf(wsNormalize_(candidates[j])) >= 0) return DriveApp.getFolderById(items[i].id);
-      }
-    }
-    pageToken = result.nextPageToken;
-  } while (pageToken);
+  }
   
   return null;
 }
 
+const _wsFolderChildrenCache_ = {};
+
 function wsListChildFolders_(parent) {
+  const parentId = parent.getId();
+  if (_wsFolderChildrenCache_[parentId]) {
+    return _wsFolderChildrenCache_[parentId];
+  }
+
   const folders = [];
   let pageToken = null;
   do {
     let result;
     try {
       result = Drive.Files.list({
-        q: "'" + parent.getId() + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        q: "'" + parentId + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
         fields: "nextPageToken, files(id, name)",
         pageSize: 1000,
         pageToken: pageToken,
@@ -1208,8 +1203,14 @@ function wsListChildFolders_(parent) {
     pageToken = result.nextPageToken;
   } while (pageToken);
   
-  return folders.sort((a, b) => a.name.localeCompare(b.name, 'id', { numeric: true }))
-                .map(item => item.folder);
+  const sortedFolders = folders.sort(function(a, b) {
+    return a.name.localeCompare(b.name, 'id', { numeric: true });
+  }).map(function(item) {
+    return item.folder;
+  });
+  
+  _wsFolderChildrenCache_[parentId] = sortedFolders;
+  return sortedFolders;
 }
 
 function wsGetFileByNameAndMime_(folder, name, mimeType) {
