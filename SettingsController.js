@@ -169,7 +169,12 @@ const SettingsController = {
       throw new Error('Folder Utama Workspace wajib diisi.');
     }
 
-    const result = WorkspaceSetupService.initialize(payload);
+    // Lock saat provisioning: cegah dua init bersamaan saling balapan list->create
+    // (TOCTOU) yang bisa bikin folder/spreadsheet duplikat. Aman secara availability
+    // karena saat init workspace memang belum siap dipakai mengarsip (B3).
+    const result = withLock_(function () {
+      return WorkspaceSetupService.initialize(payload);
+    }, 30000);
     CacheHelper.invalidateAll();
 
     const adminResult = AuthService.saveDefaultAdmin();

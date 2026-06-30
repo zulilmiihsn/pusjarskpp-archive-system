@@ -298,34 +298,20 @@ const WorkspaceSetupService = {
     // Helper to scan a folder and collect 4-digit years
     const scanFolder = function(parentFolder) {
       if (!parentFolder) return;
-      let pageToken = null;
-      do {
-        let res;
-        try {
-          res = Drive.Files.list({
-            q: "'" + parentFolder.getId() + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
-            fields: "nextPageToken, files(name)",
-            pageSize: 1000,
-            pageToken: pageToken,
-            supportsAllDrives: true,
-            includeItemsFromAllDrives: true
-          });
-        } catch (e) {
-          break;
-        }
-        const items = res.files || [];
-        for (let i = 0; i < items.length; i++) {
-          const folderName = items[i].name;
-          const match = folderName.match(/\b(202\d|203[0-5])\b/);
-          if (match) {
-            const detectedYear = Number(match[1]);
-            if (detectedYears.indexOf(detectedYear) === -1) {
-              detectedYears.push(detectedYear);
-            }
+      const items = listAllChildren_(
+        "'" + parentFolder.getId() + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        'nextPageToken, files(name)'
+      );
+      for (let i = 0; i < items.length; i++) {
+        const folderName = items[i].name;
+        const match = folderName.match(/\b(202\d|203[0-5])\b/);
+        if (match) {
+          const detectedYear = Number(match[1]);
+          if (detectedYears.indexOf(detectedYear) === -1) {
+            detectedYears.push(detectedYear);
           }
         }
-        pageToken = res.nextPageToken;
-      } while (pageToken);
+      }
     };
 
     // Scan both potential sources for physical years
@@ -516,13 +502,13 @@ function wsEnsureArchiveSpreadsheet_(laciFolder, activity, year, report) {
   const spreadsheetName = 'Daftar Isi Berkas Arsip Laci No.' + laciNo + ' Th. ' + year + ' - Production';
   const companion = wsGetFileByNameAndMime_(laciFolder, spreadsheetName, MimeType.GOOGLE_SHEETS);
   if (companion) {
-    wsInstallRekapTriggerIfMissing_(companion.getId());
+    // wsInstallRekapTriggerIfMissing_(companion.getId()); // Dimatikan sementara agar Init Workspace lebih cepat (Opt-in)
     return openSpreadsheetById_(companion.getId());
   }
 
   const native = wsFindFirstArchiveSheet_(laciFolder);
   if (native) {
-    wsInstallRekapTriggerIfMissing_(native.getId());
+    // wsInstallRekapTriggerIfMissing_(native.getId()); // Dimatikan sementara agar Init Workspace lebih cepat (Opt-in)
     return openSpreadsheetById_(native.getId());
   }
 
@@ -530,7 +516,7 @@ function wsEnsureArchiveSpreadsheet_(laciFolder, activity, year, report) {
   if (office) {
     const converted = wsTryConvertOfficeSpreadsheet_(office, spreadsheetName, laciFolder);
     if (converted) {
-      wsInstallRekapTriggerIfMissing_(converted.getId());
+      // wsInstallRekapTriggerIfMissing_(converted.getId()); // Dimatikan sementara agar Init Workspace lebih cepat (Opt-in)
       return converted;
     }
   }
@@ -538,7 +524,7 @@ function wsEnsureArchiveSpreadsheet_(laciFolder, activity, year, report) {
   const ss = SpreadsheetApp.create(spreadsheetName);
   wsMoveFileToFolder_(ss.getId(), laciFolder);
   wsPrepareArchiveWorkbook_(ss, activity);
-  wsInstallRekapTriggerIfMissing_(ss.getId());
+  // wsInstallRekapTriggerIfMissing_(ss.getId()); // Dimatikan sementara agar Init Workspace lebih cepat (Opt-in)
   wsPushReport_(report, 'created', 'Spreadsheet arsip dibuat: ' + spreadsheetName);
   return ss;
 }
@@ -1129,6 +1115,8 @@ function wsGetOrCreateFolder_(parent, name, report) {
     }
   }
   const folder = withRetry_(() => parent.createFolder(name));
+  // Invalidasi cache anak agar listing berikutnya melihat folder baru ini (C1).
+  delete _wsFolderChildrenCache_[parent.getId()];
   wsPushReport_(report, 'created', 'Folder dibuat: ' + name);
   return folder;
 }
@@ -1139,77 +1127,84 @@ function wsFindOrCreateChildFolder_(parent, candidates, createName, report) {
     wsPushReport_(report, 'found', 'Folder ditemukan: ' + found.getName());
     return found;
   }
-  const folder = withRetry_(() => parent.createFolder(createName));
+  const folder = withRetry_(function() { return parent.createFolder(createName); });
+  if (typeof _wsFolderChildrenCache_ !== 'undefined') {
+    delete _wsFolderChildrenCache_[parent.getId()];
+  }
   wsPushReport_(report, 'created', 'Folder dibuat: ' + createName);
   return folder;
 }
 
 function wsFindChildFolder_(parent, candidates) {
-  let pageToken = null;
-  do {
-    let result;
-    try {
-      result = Drive.Files.list({
-        q: "'" + parent.getId() + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
-        fields: "nextPageToken, files(id, name)",
-        pageSize: 1000,
-        pageToken: pageToken,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-    } catch (e) {
-      break;
+  const items = wsListChildFolders_(parent);
+  
+  // exact match first
+  for (let i = 0; i < items.length; i++) {
+    const name = items[i].getName();
+    for (let j = 0; j < candidates.length; j++) {
+      if (name === candidates[j]) return items[i];
     }
-    const items = result.files || [];
-    
-    // exact match first
-    for (let i = 0; i < items.length; i++) {
-      for (let j = 0; j < candidates.length; j++) {
-        if (items[i].name === candidates[j]) return DriveApp.getFolderById(items[i].id);
-      }
+  }
+  // fuzzy match second
+  for (let i = 0; i < items.length; i++) {
+    const name = items[i].getName();
+    const normalized = wsNormalize_(name);
+    for (let j = 0; j < candidates.length; j++) {
+      if (normalized.indexOf(wsNormalize_(candidates[j])) >= 0) return items[i];
     }
-    // fuzzy match second
-    for (let i = 0; i < items.length; i++) {
-      const normalized = wsNormalize_(items[i].name);
-      for (let j = 0; j < candidates.length; j++) {
-        if (normalized.indexOf(wsNormalize_(candidates[j])) >= 0) return DriveApp.getFolderById(items[i].id);
-      }
-    }
-    pageToken = result.nextPageToken;
-  } while (pageToken);
+  }
   
   return null;
 }
 
-function wsListChildFolders_(parent) {
-  const folders = [];
+const _wsFolderChildrenCache_ = {};
+
+// Ambil SEMUA child (lintas halaman) untuk satu query Drive.Files.list. Memakai
+// withRetry_ untuk error transient; pada kegagalan persisten ia MELEMPAR
+// (fail-closed) — bukan mengembalikan list terpotong — supaya pemanggil tidak
+// salah menyimpulkan "tidak ada" lalu membuat folder/berkas duplikat.
+function listAllChildren_(q, fields) {
+  const files = [];
   let pageToken = null;
   do {
-    let result;
-    try {
-      result = Drive.Files.list({
-        q: "'" + parent.getId() + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
-        fields: "nextPageToken, files(id, name)",
+    const result = withRetry_(function () {
+      return Drive.Files.list({
+        q: q,
+        fields: fields || 'nextPageToken, files(id, name)',
         pageSize: 1000,
         pageToken: pageToken,
         supportsAllDrives: true,
         includeItemsFromAllDrives: true
       });
-    } catch (e) {
-      break;
-    }
+    });
     const items = result.files || [];
-    for (let i = 0; i < items.length; i++) {
-      folders.push({
-        folder: DriveApp.getFolderById(items[i].id),
-        name: items[i].name
-      });
-    }
+    for (let i = 0; i < items.length; i++) files.push(items[i]);
     pageToken = result.nextPageToken;
   } while (pageToken);
-  
-  return folders.sort((a, b) => a.name.localeCompare(b.name, 'id', { numeric: true }))
-                .map(item => item.folder);
+  return files;
+}
+
+function wsListChildFolders_(parent) {
+  const parentId = parent.getId();
+  if (_wsFolderChildrenCache_[parentId]) {
+    return _wsFolderChildrenCache_[parentId];
+  }
+
+  // Bila listAllChildren_ melempar (error persisten), fungsi keluar sebelum baris
+  // cache di bawah — jadi list terpotong tak pernah tersimpan (anti cache-poison).
+  const sortedFolders = listAllChildren_(
+    "'" + parentId + "' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+    'nextPageToken, files(id, name)'
+  ).map(function (it) {
+    return { folder: DriveApp.getFolderById(it.id), name: it.name };
+  }).sort(function (a, b) {
+    return a.name.localeCompare(b.name, 'id', { numeric: true });
+  }).map(function (item) {
+    return item.folder;
+  });
+
+  _wsFolderChildrenCache_[parentId] = sortedFolders;
+  return sortedFolders;
 }
 
 function wsGetFileByNameAndMime_(folder, name, mimeType) {
@@ -1217,84 +1212,38 @@ function wsGetFileByNameAndMime_(folder, name, mimeType) {
   if (mimeType) {
     q += " and mimeType = '" + mimeType + "'";
   }
-  
-  let pageToken = null;
-  do {
-    let result;
-    try {
-      result = Drive.Files.list({
-        q: q,
-        fields: "nextPageToken, files(id)",
-        pageSize: 10,
-        pageToken: pageToken,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-    } catch (e) {
-      break;
-    }
-    if (result.files && result.files.length > 0) return DriveApp.getFileById(result.files[0].id);
-    pageToken = result.nextPageToken;
-  } while (pageToken);
-  return null;
+  const files = listAllChildren_(q, 'nextPageToken, files(id)');
+  return files.length ? DriveApp.getFileById(files[0].id) : null;
 }
 
 function wsFindFirstArchiveSheet_(folder) {
-  let pageToken = null;
-  do {
-    let result;
-    try {
-      result = Drive.Files.list({
-        q: "'" + folder.getId() + "' in parents and mimeType = '" + MimeType.GOOGLE_SHEETS + "' and trashed = false",
-        fields: "nextPageToken, files(id, name)",
-        pageSize: 1000,
-        pageToken: pageToken,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-    } catch (e) {
-      break;
+  const files = listAllChildren_(
+    "'" + folder.getId() + "' in parents and mimeType = '" + MimeType.GOOGLE_SHEETS + "' and trashed = false",
+    'nextPageToken, files(id, name)'
+  );
+  for (let i = 0; i < files.length; i++) {
+    const name = wsNormalize_(files[i].name);
+    if (name.indexOf('daftar') >= 0 && name.indexOf('arsip') >= 0) {
+      return DriveApp.getFileById(files[i].id);
     }
-    const items = result.files || [];
-    for (let i = 0; i < items.length; i++) {
-      const name = wsNormalize_(items[i].name);
-      if (name.indexOf('daftar') >= 0 && name.indexOf('arsip') >= 0) {
-        return DriveApp.getFileById(items[i].id);
-      }
-    }
-    pageToken = result.nextPageToken;
-  } while (pageToken);
+  }
   return null;
 }
 
 function wsFindFirstOfficeSpreadsheet_(folder) {
-  let pageToken = null;
-  do {
-    let result;
-    try {
-      result = Drive.Files.list({
-        q: "'" + folder.getId() + "' in parents and (mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType = 'application/vnd.ms-excel' or name contains '.xls' or name contains '.xlsx') and trashed = false",
-        fields: "nextPageToken, files(id, name, mimeType)",
-        pageSize: 1000,
-        pageToken: pageToken,
-        supportsAllDrives: true,
-        includeItemsFromAllDrives: true
-      });
-    } catch (e) {
-      break;
+  const files = listAllChildren_(
+    "'" + folder.getId() + "' in parents and (mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType = 'application/vnd.ms-excel' or name contains '.xls' or name contains '.xlsx') and trashed = false",
+    'nextPageToken, files(id, name, mimeType)'
+  );
+  for (let i = 0; i < files.length; i++) {
+    const name = files[i].name;
+    const normalizedName = wsNormalize_(name);
+    const mimeType = files[i].mimeType;
+    if (normalizedName.indexOf('daftar') >= 0 && normalizedName.indexOf('arsip') >= 0 &&
+      (/\.xlsx?$/i.test(name) || mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'application/vnd.ms-excel')) {
+      return DriveApp.getFileById(files[i].id);
     }
-    const items = result.files || [];
-    for (let i = 0; i < items.length; i++) {
-      const name = items[i].name;
-      const normalizedName = wsNormalize_(name);
-      const mimeType = items[i].mimeType;
-      if (normalizedName.indexOf('daftar') >= 0 && normalizedName.indexOf('arsip') >= 0 &&
-        (/\.xlsx?$/i.test(name) || mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || mimeType === 'application/vnd.ms-excel')) {
-        return DriveApp.getFileById(items[i].id);
-      }
-    }
-    pageToken = result.nextPageToken;
-  } while (pageToken);
+  }
   return null;
 }
 
@@ -1331,20 +1280,23 @@ function wsEnsureSheetWithHeaders_(ss, name, headers) {
 }
 
 function wsUpsertSheetData_(sheet, headers, year, yearColIndex, newRows) {
+  // Lebar tulis = max(skema, lebar sheet sekarang) supaya kolom ekstra milik baris
+  // tahun-lain (mis. skema lama lebih lebar) tidak ikut terpotong (B1).
+  const width = Math.max(headers.length, sheet.getLastColumn());
   let existingRows = [];
   if (sheet.getLastRow() > 1) {
     const range = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn());
     existingRows = range.getValues();
   }
-  
+
   // Filter out rows that belong to the current year
   const filteredRows = existingRows.filter(function (row) {
     return Number(row[yearColIndex]) !== Number(year);
   });
-  
+
   // Combine
   const allRows = [headers].concat(filteredRows).concat(newRows).map(function (row) {
-    return wsPadRow_(row, headers.length);
+    return wsPadRow_(row, width);
   });
   
   // Clear sheet and write

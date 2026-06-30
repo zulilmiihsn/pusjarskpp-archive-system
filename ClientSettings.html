@@ -1031,7 +1031,7 @@
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.sessionId) {
             localStorage.setItem('portal_session_id', state.bootstrap.workspaceSetup.sessionId);
             // Segera jadikan admin agar reload tidak mengejutkan dan dashboard di latar berubah
-            state.currentUser = { role: 'admin' };
+            state.currentUser = { role: 'admin', username: 'admin', displayName: 'Administrator' };
           }
 
           try {
@@ -1048,19 +1048,25 @@
           state.workspaceInitPhase = null;
           state.workspaceInitLoading = false;
           
-          if (typeof hideYearLoading === 'function') {
-            hideYearLoading();
-          }
+          // Simpan password default dari hasil init SEBELUM refetch bootstrap menimpanya.
+          const setupPassword = (state.bootstrap && state.bootstrap.workspaceSetup)
+            ? state.bootstrap.workspaceSetup.defaultPassword : '';
 
-          // Navigasi ke Dasbor untuk menyembunyikan modal pengaturan dan me-render ulang sebagai admin
-          if (typeof navigateTo === 'function') navigateTo('dashboard');
-          
-          if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
-            showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);
-          }
+          // Muat ulang bootstrap agar jumlah arsip terbaru (pasca-sinkronisasi) terbaca.
+          state.bootstrap = null;
+          if (typeof loadBootstrap === 'function') await loadBootstrap();
+
+          if (typeof hideYearLoading === 'function') hideYearLoading();
+
+          // Pindah ke Dasbor: menutup modal pengaturan + render ulang sebagai admin.
+          setView('dashboard');
+
+          if (setupPassword) showAdminPasswordModal(setupPassword);
         } catch (error) {
           state.workspaceInitTargetYear = null;
+          state.workspaceInitPhase = null;
           state.workspaceInitLoading = false;
+          if (typeof hideYearLoading === 'function') hideYearLoading();
           render();
           showToast(errorMessage(error));
         }
@@ -1518,7 +1524,7 @@
           
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.sessionId) {
             localStorage.setItem('portal_session_id', state.bootstrap.workspaceSetup.sessionId);
-            state.currentUser = { role: 'admin' };
+            state.currentUser = { role: 'admin', username: 'admin', displayName: 'Administrator' };
           }
 
           try {
@@ -1535,19 +1541,25 @@
           state.workspaceInitPhase = null;
           state.workspaceInitLoading = false;
           
-          if (typeof hideYearLoading === 'function') {
-            hideYearLoading();
-          }
+          // Simpan password default dari hasil init SEBELUM refetch bootstrap menimpanya.
+          const setupPassword = (state.bootstrap && state.bootstrap.workspaceSetup)
+            ? state.bootstrap.workspaceSetup.defaultPassword : '';
 
-          // Kembali ke dasbor setelah sinkronisasi selesai
-          if (typeof navigateTo === 'function') navigateTo('dashboard');
+          // Muat ulang bootstrap agar jumlah arsip terbaru (pasca-sinkronisasi) terbaca.
+          state.bootstrap = null;
+          if (typeof loadBootstrap === 'function') await loadBootstrap();
 
-          if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
-            showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);
-          }
+          if (typeof hideYearLoading === 'function') hideYearLoading();
+
+          // Kembali ke Dasbor setelah sinkronisasi selesai.
+          setView('dashboard');
+
+          if (setupPassword) showAdminPasswordModal(setupPassword);
         } catch (error) {
           state.workspaceInitTargetYear = null;
+          state.workspaceInitPhase = null;
           state.workspaceInitLoading = false;
+          if (typeof hideYearLoading === 'function') hideYearLoading();
           render();
           showToast(errorMessage(error));
         }

@@ -405,7 +405,7 @@ function normalizeAccessSummaryValue_(value) {
   if (!text) return '';
   const key = normalizeLooseLabel_(text);
   if (key.indexOf('terbuka') >= 0) return 'Terbuka';
-  if (key.indexOf('biasa') >= 0) return 'Biasa';
+  if (key.indexOf('biasa') >= 0) return 'Terbuka';
   if (key.indexOf('terbatas') >= 0) return 'Terbatas';
   if (key.indexOf('rahasia') >= 0) return 'Rahasia';
   return text.replace(/\s+/g, ' ');
@@ -869,18 +869,11 @@ function getDetailColumnLetter_(sheet, field, fallbackLetter) {
   return fallbackLetter;
 }
 
-// Pemisah argumen formula beda per locale spreadsheet: id_ID (& semua locale
-// desimal-koma) pakai ';', US/desimal-titik pakai ','. setFormula di locale
-// ';' PARSE-ERROR kalau dikasih koma. Satu-satunya cara lintas-locale: tanya
-// ke sheet-nya sendiri.
-//
-// Probe '=1/2' (tanpa argumen -> ga mungkin parse-error) ungkap pemisah
-// desimal lewat display "0,5" vs "0.5". Aturan Sheets tak terkecuali:
-// desimal-koma => argumen ';', desimal-titik => ','.
-//
-// Hasil di-cache di Document Properties, di-key pakai locale; auto re-probe
-// kalau user ganti locale spreadsheet. Plus memo per-eksekusi.
-function formulaSep_(ss) {
+// Pemisah argumen formula. Range.setFormula() di GAS SELALU memakai konvensi US
+// (koma), apa pun locale spreadsheet — locale hanya memengaruhi tampilan di UI,
+// bukan formula yang dikirim lewat API. Jadi koma benar untuk semua locale.
+// Dipertahankan sebagai satu titik ubah bila suatu saat perlu disesuaikan.
+function formulaSep_() {
   return ',';
 }
 
@@ -888,7 +881,7 @@ function buildKurunWaktuFormula_(detailSheet) {
   const ref = detailSheetFormulaRef_(detailSheet);
   const colLetter = getDetailColumnLetter_(detailSheet, 'tanggal', 'F');
   const rangeRef = ref + '!' + colLetter + '9:' + colLetter;
-  const s = formulaSep_(detailSheet.getParent());
+  const s = formulaSep_();
   return "=IF(COUNT(" + rangeRef + ")>0" + s + " TEXT(MIN(" + rangeRef + ")" + s + " \"d mmmm yyyy\") & \" - \" & TEXT(MAX(" + rangeRef + ")" + s + " \"d mmmm yyyy\")" + s + " \"\")";
 }
 
@@ -897,7 +890,7 @@ function buildJumlahFormula_(detailSheet) {
   const ref = detailSheetFormulaRef_(detailSheet);
   const jumlahLetter = getDetailColumnLetter_(detailSheet, 'jumlah', 'H');
   const sumRange = ref + '!' + jumlahLetter + '9:' + jumlahLetter;
-  const s = formulaSep_(detailSheet.getParent());
+  const s = formulaSep_();
   return "=IF(COUNT(" + sumRange + ")>0" + s + " SUM(" + sumRange + ") & \" lembar\"" + s + " \"\")";
 }
 
@@ -905,7 +898,7 @@ function buildAksesFormula_(detailSheet) {
   const ref = detailSheetFormulaRef_(detailSheet);
   const colLetter = getDetailColumnLetter_(detailSheet, 'klasifikasi_akses', 'M');
   const rangeRef = ref + '!' + colLetter + '9:' + colLetter;
-  const s = formulaSep_(detailSheet.getParent());
+  const s = formulaSep_();
   return "=IFERROR(TEXTJOIN(\" & \"" + s + " TRUE" + s + " UNIQUE(FILTER(" + rangeRef + s + " " + rangeRef + "<>\"\")))" + s + " \"Terbatas\")";
 }
 

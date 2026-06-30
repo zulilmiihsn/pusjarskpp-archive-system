@@ -148,7 +148,7 @@ function extractKlasifikasiAkses_(text) {
   const str = String(text || '');
   const upper = str.toUpperCase();
   // Contextual patterns (higher confidence)
-  const ctx = str.match(/(?:bersifat|klasifikasi\s*akses|tingkat\s*akses|sifat\s*dokumen)\s*[:.]?\s*(Rahasia|Terbatas|Terbuka|Umum)/i);
+  const ctx = str.match(/(?:bersifat|klasifikasi\s*akses|tingkat\s*akses|sifat\s*dokumen)\s*[:.]?\s*(Rahasia|Terbatas|Biasa|Terbuka|Umum)/i);
   if (ctx) {
     const val = ctx[1].toLowerCase();
     if (val === 'rahasia') return 'Rahasia';
@@ -158,7 +158,7 @@ function extractKlasifikasiAkses_(text) {
   // Keyword matching
   if (upper.indexOf('RAHASIA') >= 0) return 'Rahasia';
   if (upper.indexOf('TERBATAS') >= 0) return 'Terbatas';
-  if (upper.indexOf('TERBUKA') >= 0 || upper.indexOf('UMUM') >= 0) return 'Terbuka';
+  if (upper.indexOf('TERBUKA') >= 0 || upper.indexOf('UMUM') >= 0 || upper.indexOf('BIASA') >= 0) return 'Terbuka';
   return '';
 }
 
@@ -297,11 +297,17 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   // Fallback: Jika tidak ada nomor surat tapi ada teks uraian, coba ekstrak nomor surat dari uraian
   if (!meta.nomor_surat && meta.uraian_informasi_item) {
     const extNo = extractNomorSurat_(meta.uraian_informasi_item);
-    if (extNo) {
+    // Guard (E3): jangan anggap token mirip tanggal/pecahan ("12/2025", "1/2")
+    // sebagai nomor surat. Terima hanya bila ada huruf, atau punya >=2 pemisah,
+    // atau memuat "Tahun".
+    const looksLikeNomor = extNo && (/[A-Za-z]/.test(extNo) ||
+      (extNo.match(/[\/\-]/g) || []).length >= 2 || /tahun/i.test(extNo));
+    if (looksLikeNomor) {
       meta.nomor_surat = extNo;
-      // Buat regex dinamis untuk menghapus nomor yang ditemukan dari uraian
-      // extNo sudah dinormalisasi (pakai / atau -), kita kembalikan ke bentuk fleksibel
-      const rawPattern = extNo.replace(/[-\/]/g, '[\\s\\_\\-\\/]+');
+      // Regex dinamis untuk menghapus nomor dari uraian. Escape dulu SEMUA
+      // metakarakter regex (mis. '.'), lalu longgarkan HANYA pemisah - dan /.
+      const escaped = extNo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const rawPattern = escaped.replace(/[-\/]/g, '[\\s\\_\\-\\/]+');
       const removeRe = new RegExp('(?:No(?:mor)?\\s*[:.\\-\\s_]+)?' + rawPattern, 'i');
       let cleanUraian = meta.uraian_informasi_item.replace(removeRe, '');
       // Bersihkan underscore dan spasi berlebih

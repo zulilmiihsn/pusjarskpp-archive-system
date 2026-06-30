@@ -85,11 +85,11 @@ function extractKlasifikasiAkses_(text) {
     let val = ctx[1].toLowerCase();
     if (val === 'rahasia') return 'Rahasia';
     if (val === 'terbatas') return 'Terbatas';
-    return 'Biasa';
+    return 'Terbuka';
   }
   if (upper.indexOf('RAHASIA') >= 0) return 'Rahasia';
   if (upper.indexOf('TERBATAS') >= 0) return 'Terbatas';
-  if (upper.indexOf('BIASA') >= 0 || upper.indexOf('TERBUKA') >= 0 || upper.indexOf('UMUM') >= 0) return 'Biasa';
+  if (upper.indexOf('BIASA') >= 0 || upper.indexOf('TERBUKA') >= 0 || upper.indexOf('UMUM') >= 0) return 'Terbuka';
   return '';
 }
 

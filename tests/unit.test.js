@@ -110,12 +110,12 @@ test('extractKlasifikasiAkses_ - terbatas', () => {
   assert.strictEqual(extractKlasifikasiAkses_('Klasifikasi: Terbatas'), 'Terbatas');
 });
 
-test('extractKlasifikasiAkses_ - biasa', () => {
-  assert.strictEqual(extractKlasifikasiAkses_('Untuk kalangan BIASA / umum'), 'Biasa');
+test('extractKlasifikasiAkses_ - biasa maps to Terbuka', () => {
+  assert.strictEqual(extractKlasifikasiAkses_('Untuk kalangan BIASA / umum'), 'Terbuka');
 });
 
 test('extractKlasifikasiAkses_ - terbuka', () => {
-  assert.strictEqual(extractKlasifikasiAkses_('Dokumen TERBUKA'), 'Biasa');
+  assert.strictEqual(extractKlasifikasiAkses_('Dokumen TERBUKA'), 'Terbuka');
 });
 
 test('extractKlasifikasiAkses_ - no match returns empty', () => {
@@ -629,16 +629,16 @@ test('extractKlasifikasiAkses_ - contextual "bersifat Rahasia"', () => {
   assert.strictEqual(extractKlasifikasiAkses_('Dokumen ini bersifat Rahasia'), 'Rahasia');
 });
 
-test('extractKlasifikasiAkses_ - contextual "klasifikasi akses: Biasa"', () => {
-  assert.strictEqual(extractKlasifikasiAkses_('klasifikasi akses: Biasa'), 'Biasa');
+test('extractKlasifikasiAkses_ - contextual "klasifikasi akses: Biasa" maps to Terbuka', () => {
+  assert.strictEqual(extractKlasifikasiAkses_('klasifikasi akses: Biasa'), 'Terbuka');
 });
 
 test('extractKlasifikasiAkses_ - contextual "sifat dokumen: Terbatas"', () => {
   assert.strictEqual(extractKlasifikasiAkses_('sifat dokumen: Terbatas'), 'Terbatas');
 });
 
-test('extractKlasifikasiAkses_ - contextual Terbuka maps to Biasa', () => {
-  assert.strictEqual(extractKlasifikasiAkses_('bersifat Terbuka untuk umum'), 'Biasa');
+test('extractKlasifikasiAkses_ - contextual Terbuka', () => {
+  assert.strictEqual(extractKlasifikasiAkses_('bersifat Terbuka untuk umum'), 'Terbuka');
 });
 
 // 21. Smarter extractUraian_ patterns

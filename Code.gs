@@ -305,6 +305,14 @@ function runArchiveMaintenance() {
   } catch (error) {
     console.error('runArchiveMaintenance: cleanup gagal: ' + error.message);
   }
+  try {
+    const swept = sweepOrphanPendingCopies_();
+    if (swept > 0) {
+      auditAction_({ displayName: 'Sistem' }, 'MAINTENANCE_ORPHAN_SWEEP', { message: 'Menyapu ' + swept + ' salinan yatim (trigger)' });
+    }
+  } catch (error) {
+    console.error('runArchiveMaintenance: sweep orphan gagal: ' + error.message);
+  }
 }
 
 /**

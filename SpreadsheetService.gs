@@ -135,6 +135,62 @@ function openSpreadsheetById_(id) {
   return ss;
 }
 
+// Penulis sel detail terpadu (dipakai append/bulk/update). Membangun nilai+format
+// via batchUpdate updateCells untuk SEMUA baris sekaligus, lalu menerapkan RichText
+// (teks display = nama folder, link = URL) pada kolom FC/laci/folder di TIAP baris —
+// supaya jalur update/bulk tidak lagi kehilangan teks display seperti dulu (B6).
+function writeDetailRows_(sheet, startRow, startCol, metadataList) {
+  const rowsData = metadataList.map(function (meta) {
+    const rowVals = buildDetailRowValues_(meta);
+    const values = [];
+    for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
+      values.push(buildDetailCellData_(DETAIL_FIELD_ORDER[c], rowVals[c] || '', meta));
+    }
+    return { values: values };
+  });
+
+  Sheets.Spreadsheets.batchUpdate({
+    requests: [{
+      updateCells: {
+        rows: rowsData,
+        fields: "userEnteredValue,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.borders,userEnteredFormat.numberFormat,userEnteredFormat.textFormat",
+        range: {
+          sheetId: sheet.getSheetId(),
+          startRowIndex: startRow - 1,
+          endRowIndex: startRow - 1 + metadataList.length,
+          startColumnIndex: startCol - 1,
+          endColumnIndex: startCol - 1 + DETAIL_FIELD_ORDER.length
+        }
+      }
+    }]
+  }, sheet.getParent().getId());
+
+  metadataList.forEach(function (meta, i) {
+    applyDetailRichTextLinks_(sheet, startRow + i, startCol, meta);
+  });
+}
+
+// RichText (teks berbeda dari URL) untuk kolom hyperlink agar nama folder tampil,
+// bukan ID mentah. Dipanggil per baris oleh writeDetailRows_.
+function applyDetailRichTextLinks_(sheet, rowIndex, startCol, metadata) {
+  if (!SpreadsheetApp.newRichTextValue) return;
+  const LINK_FIELDS = [
+    ['no_filing_cabinet', '_no_filing_cabinet_path', '_no_filing_cabinet_url'],
+    ['no_laci', '_no_laci_path', '_no_laci_url'],
+    ['no_folder', '_no_folder_path', '_no_folder_url']
+  ];
+  LINK_FIELDS.forEach(function (spec) {
+    const idx = DETAIL_FIELD_ORDER.indexOf(spec[0]);
+    const path = metadata[spec[1]];
+    const url = metadata[spec[2]];
+    if (idx >= 0 && path && url) {
+      sheet.getRange(rowIndex, startCol + idx).setRichTextValue(
+        SpreadsheetApp.newRichTextValue().setText(path).setLinkUrl(url).build()
+      );
+    }
+  });
+}
+
 const SpreadsheetService = {
   getNextItemNumber: function (activity, subActivity) {
     try {
@@ -170,52 +226,9 @@ const SpreadsheetService = {
     const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = ensureDetailSheet_(ss, activity, subActivity);
     const rowIndex = findWritableDetailRow_(sheet);
-    const rowValues = buildDetailRowValues_(metadata);
     const startCol = getDetailStartColumn_(sheet);
 
-    const rowData = { values: [] };
-    for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
-      rowData.values.push(buildDetailCellData_(DETAIL_FIELD_ORDER[c], rowValues[c] || '', metadata));
-    }
-
-    const request = {
-      updateCells: {
-        rows: [rowData],
-        fields: "userEnteredValue,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.borders,userEnteredFormat.numberFormat,userEnteredFormat.textFormat",
-        range: {
-          sheetId: sheet.getSheetId(),
-          startRowIndex: rowIndex - 1,
-          endRowIndex: rowIndex,
-          startColumnIndex: startCol - 1,
-          endColumnIndex: startCol - 1 + DETAIL_FIELD_ORDER.length
-        }
-      }
-    };
-
-    Sheets.Spreadsheets.batchUpdate({ requests: [request] }, ss.getId());
-    
-    const fcIdx = DETAIL_FIELD_ORDER.indexOf('no_filing_cabinet');
-    if (fcIdx >= 0 && metadata._no_filing_cabinet_url && metadata._no_filing_cabinet_path && SpreadsheetApp.newRichTextValue) {
-      const cell = sheet.getRange(rowIndex, startCol + fcIdx);
-      cell.setRichTextValue(SpreadsheetApp.newRichTextValue().setText(metadata._no_filing_cabinet_path).setLinkUrl(metadata._no_filing_cabinet_url).build());
-    }
-
-    const laciIdx = DETAIL_FIELD_ORDER.indexOf('no_laci');
-    if (laciIdx >= 0 && metadata._no_laci_url && metadata._no_laci_path && SpreadsheetApp.newRichTextValue) {
-      const cell = sheet.getRange(rowIndex, startCol + laciIdx);
-      cell.setRichTextValue(SpreadsheetApp.newRichTextValue().setText(metadata._no_laci_path).setLinkUrl(metadata._no_laci_url).build());
-    }
-
-    const folderIdx = DETAIL_FIELD_ORDER.indexOf('no_folder');
-    if (folderIdx >= 0 && metadata._no_folder_url && metadata._no_folder_path && SpreadsheetApp.newRichTextValue) {
-      const cell = sheet.getRange(rowIndex, startCol + folderIdx);
-      cell.setRichTextValue(SpreadsheetApp.newRichTextValue().setText(metadata._no_folder_path).setLinkUrl(metadata._no_folder_url).build());
-    }
-
-    sheet.getRange(rowIndex, startCol, 1, rowValues.length)
-      .setBorder(true, true, true, true, true, true)
-      .setWrap(true)
-      .setVerticalAlignment('middle');
+    writeDetailRows_(sheet, rowIndex, startCol, [metadata]);
     sortDetailSheetByNomorItemArsip_(sheet);
 
     // Sort mengubah urutan baris; cari ulang posisi baris via URL file agar
@@ -264,38 +277,7 @@ const SpreadsheetService = {
        invalidateNoteRowCache_(sheet);
     }
 
-    const allRowValues = metadataList.map(function(meta) { return buildDetailRowValues_(meta); });
-
-    const requests = [];
-    const rowsData = [];
-    const sheetId = sheet.getSheetId();
-
-    for (let r = 0; r < metadataList.length; r++) {
-      const meta = metadataList[r];
-      const rowVals = allRowValues[r];
-      
-      const rowData = { values: [] };
-      for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
-        rowData.values.push(buildDetailCellData_(DETAIL_FIELD_ORDER[c], rowVals[c] || '', meta));
-      }
-      rowsData.push(rowData);
-    }
-
-    requests.push({
-      updateCells: {
-        rows: rowsData,
-        fields: "userEnteredValue,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.borders,userEnteredFormat.numberFormat,userEnteredFormat.textFormat",
-        range: {
-          sheetId: sheetId,
-          startRowIndex: rowIndex - 1,
-          endRowIndex: rowIndex - 1 + metadataList.length,
-          startColumnIndex: startCol - 1,
-          endColumnIndex: startCol - 1 + DETAIL_FIELD_ORDER.length
-        }
-      }
-    });
-
-    Sheets.Spreadsheets.batchUpdate({ requests: requests }, ss.getId());
+    writeDetailRows_(sheet, rowIndex, startCol, metadataList);
     sortDetailSheetByNomorItemArsip_(sheet);
 
     return metadataList.map(function(meta, i) {
@@ -358,29 +340,9 @@ const SpreadsheetService = {
   updateArchiveRow: function (activity, subActivity, rowIndex, metadata) {
     const ss = openSpreadsheetById_(getArchiveSpreadsheetId_(activity, subActivity));
     const sheet = ensureDetailSheet_(ss, activity, subActivity);
-    const rowValues = buildDetailRowValues_(metadata);
     const startCol = getDetailStartColumn_(sheet);
 
-    const rowData = { values: [] };
-    for (let c = 0; c < DETAIL_FIELD_ORDER.length; c++) {
-      rowData.values.push(buildDetailCellData_(DETAIL_FIELD_ORDER[c], rowValues[c] || '', metadata));
-    }
-
-    const request = {
-      updateCells: {
-        rows: [rowData],
-        fields: "userEnteredValue,userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment,userEnteredFormat.borders,userEnteredFormat.numberFormat,userEnteredFormat.textFormat",
-        range: {
-          sheetId: sheet.getSheetId(),
-          startRowIndex: rowIndex - 1,
-          endRowIndex: rowIndex,
-          startColumnIndex: startCol - 1,
-          endColumnIndex: startCol - 1 + DETAIL_FIELD_ORDER.length
-        }
-      }
-    };
-
-    Sheets.Spreadsheets.batchUpdate({ requests: [request] }, ss.getId());
+    writeDetailRows_(sheet, rowIndex, startCol, [metadata]);
     sortDetailSheetByNomorItemArsip_(sheet);
 
     // Sort mengubah urutan baris; cari ulang posisi baris via URL file agar

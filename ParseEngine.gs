@@ -50,19 +50,6 @@ const ParseEngine = (function () {
     [/\u2022|\u25CF/g, '-'],                    // bullets → dash
   ];
 
-  // Known Indonesian government letter number patterns
-  const NOMOR_FORMATS = [
-    { name: 'SK format', re: /(?:SK|Surat\s+Keputusan)[\s/.:-]+(\d+\/[A-Z0-9.\/\-]+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i, weight: 0.95 },
-    { name: 'SP format', re: /(?:SP|Surat\s+Perintah)[\s/.:-]+([A-Z]?\d{1,6}[\-\/][A-Z0-9.\/\-]+\/[12]\d{3})/i, weight: 0.95 },
-    { name: 'SE format', re: /(?:SE|Surat\s+Edaran)[\s/.:-]+(\d+\/[A-Z0-9.\/\-]+\/[12]\d{3})/i, weight: 0.95 },
-    { name: 'explicit Nomor', re: /(?:No(?:mor)?)\s*[:.]\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i, weight: 0.9 },
-    { name: 'explicit No', re: /(?:No(?:mor)?)\s*[:.]?\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i, weight: 0.85 },
-    { name: 'letter prefix', re: /\b([A-Z]{1,4}[\-]\d{1,6}(?:\/[A-Z0-9.]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)\b/i, weight: 0.8 },
-    { name: 'numeric segments', re: /\b(\d{1,6}\/[A-Z0-9.\/\-]+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)\b/i, weight: 0.7 },
-    { name: 'Nomor Tahun', re: /(?:No(?:mor)?)\s*[:.]?\s*(\d{1,6})\s+Tahun\s+(20[12]\d)/i, weight: 0.75 },
-    { name: 'slash year', re: /\b(\d{1,5}\/[A-Z]{1,4}[A-Z0-9.]*\/[12]\d{3})\b/i, weight: 0.6 }
-  ];
-
   // Document type keywords
   const DOC_TYPE_KEYWORDS = {
     'Surat Keputusan': ['surat keputusan', 'keputusan kepala', 'keputusan direktur', 'keputusan ketua', 'keputusan rektor', 'menetapkan', 'mengingat', 'memutuskan', 'kesatu', 'kedua', 'ketiga'],
@@ -82,10 +69,10 @@ const ParseEngine = (function () {
   const AKSES_PATTERNS = [
     { re: /(?:bersifat|sifat)\s*[:.]?\s*rahasia/i, value: 'Rahasia', score: 0.95 },
     { re: /(?:bersifat|sifat)\s*[:.]?\s*terbatas/i, value: 'Terbatas', score: 0.9 },
-    { re: /(?:bersifat|sifat)\s*[:.]?\s*(?:biasa|umum|terbuka)/i, value: 'Biasa', score: 0.9 },
+    { re: /(?:bersifat|sifat)\s*[:.]?\s*(?:biasa|umum|terbuka)/i, value: 'Terbuka', score: 0.9 },
     { re: /klasifikasi\s*(?:akses)?\s*[:.]?\s*rahasia/i, value: 'Rahasia', score: 0.95 },
     { re: /klasifikasi\s*(?:akses)?\s*[:.]?\s*terbatas/i, value: 'Terbatas', score: 0.9 },
-    { re: /klasifikasi\s*(?:akses)?\s*[:.]?\s*(?:biasa|umum|terbuka)/i, value: 'Biasa', score: 0.9 },
+    { re: /klasifikasi\s*(?:akses)?\s*[:.]?\s*(?:biasa|umum|terbuka)/i, value: 'Terbuka', score: 0.9 },
     { re: /tingkat\s*akses\s*[:.]?\s*rahasia/i, value: 'Rahasia', score: 0.9 },
     { re: /tingkat\s*akses\s*[:.]?\s*terbatas/i, value: 'Terbatas', score: 0.85 },
     { re: /tidak\s+untuk\s+(?:disebarluaskan|umum|publik)/i, value: 'Terbatas', score: 0.7 },
@@ -93,16 +80,7 @@ const ParseEngine = (function () {
     { re: /dokumen\s+(?:negara|resmi)\s+rahasia/i, value: 'Rahasia', score: 0.8 },
     { re: /\bRAHASIA\b/, value: 'Rahasia', score: 0.5 },
     { re: /\bTERBATAS\b/, value: 'Terbatas', score: 0.45 },
-    { re: /\bBIASA\b|\bTERBUKA\b|\bUMUM\b/, value: 'Biasa', score: 0.4 }
-  ];
-
-  // Kode klasifikasi patterns (contextual → raw)
-  const KODE_PATTERNS = [
-    { re: /(?:kode|kode\s+klasifikasi)\s*[:.]?\s*([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?)/i, weight: 0.95 },
-    { re: /klasifikasi\s*[:.]?\s*([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?)/i, weight: 0.9 },
-    { re: /\b([A-Z]{2,4}\.\d{2}\.\d{1,2})\b/, weight: 0.8 },
-    { re: /\b([A-Z]{2,4}\.\d{2})\b/, weight: 0.65 },
-    { re: /\b([A-Z]\.\d{2}(?:\.\d{1,2})?)\b/, weight: 0.5 }
+    { re: /\bBIASA\b|\bTERBUKA\b|\bUMUM\b/, value: 'Terbuka', score: 0.4 }
   ];
 
   // Uraian section-boundary keywords (where Perihal value stops)

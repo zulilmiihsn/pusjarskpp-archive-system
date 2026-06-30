@@ -27,7 +27,7 @@
       no_filing_cabinet:{ hint: 'FC-02' },
       no_laci:         { hint: '3 (Laci Teknis)' },
       no_folder:       { hint: 'Folder 3 (Pelatihan Teknis dan Lainnya)' },
-      klasifikasi_akses:{ hint: 'Biasa / Terbuka' },
+      klasifikasi_akses:{ hint: 'Terbuka' },
       ket:             { hint: 'Berkas aktif' }
     },
     lain_lain: {
@@ -37,7 +37,7 @@
       no_filing_cabinet:{ hint: 'FC-02' },
       no_laci:         { hint: '4 (Laci Lain-lain)' },
       no_folder:       { hint: 'Folder 4 (Lain-lain)' },
-      klasifikasi_akses:{ hint: 'Biasa / Internal' },
+      klasifikasi_akses:{ hint: 'Terbuka / Internal' },
       ket:             { hint: 'Arsip Statis / Dinamis Aktif' }
     }
   };
@@ -1856,7 +1856,10 @@
       draftCopy: JSON.parse(JSON.stringify(state.draft)),
       prevNomorItemArsip: state.draft.metadata ? state.draft.metadata.nomor_item_arsip : ''
     };
-    var restoreKey = 'portal_arsip_restore_' + (snap.year || 'default');
+    // Sertakan urutan unik per-sesi agar dua finalize (mis. tahun sama) tak saling
+    // menimpa slot pemulihan di localStorage.
+    window._restoreSeq = (window._restoreSeq || 0) + 1;
+    var restoreKey = 'portal_arsip_restore_' + (snap.year || 'default') + '_' + window._restoreSeq;
     try { localStorage.setItem(restoreKey, JSON.stringify({ draft: snap.draftCopy, returnFolder: snap.returnFolder })); } catch (e) {}
     snap.restoreKey = restoreKey;
     return snap;

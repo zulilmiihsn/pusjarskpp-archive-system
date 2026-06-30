@@ -502,6 +502,10 @@ const ArchiveController = {
       sourceFile, payload.targetFolderId, payload.finalFileName, payload.year || ''
     );
 
+    // Tandai salinan ini "pending": bila step 3 (writeAndLog) tak pernah dipanggil
+    // (klien kabur), sweeper maintenance akan menyapunya supaya tak jadi yatim (B7).
+    _recordPendingCopy_(finalFile.getId());
+
     return {
       finalFileId: finalFile.getId(),
       finalFileName: finalFile.getName(),
@@ -544,6 +548,10 @@ const ArchiveController = {
               finalFile.setName(newExpectedName);
             } catch (renameErr) {
               console.warn('Gagal merename file yang bergeser antreannya: ' + renameErr.message);
+              // Rename gagal: kembalikan nomor item ke nilai semula supaya kolom
+              // nomor tetap konsisten dengan nomor di nama file. originalNum sudah
+              // lolos cek keunikan di awal lock ini, jadi aman dipakai (B8).
+              metadata.nomor_item_arsip = originalNum;
             }
           }
         }
@@ -585,6 +593,7 @@ const ArchiveController = {
         };
       }, 30000);
       logWarning = result.logWarning || '';
+      _clearPendingCopy_(payload.finalFileId); // sukses: salinan kini ter-log, bukan yatim
     } catch (error) {
       ConfigRepository.appendArchiveLog({
         archive_id: payload.archiveId, year: year,
@@ -602,6 +611,7 @@ const ArchiveController = {
       try { finalFile.setTrashed(true); } catch (cleanupErr) {
         console.warn('archiveStep_writeAndLog: rollback trash gagal: ' + cleanupErr.message);
       }
+      _clearPendingCopy_(payload.finalFileId); // sudah di-trash di atas; lepas penanda
       CacheHelper.invalidate(year);
       throw error;
     }
@@ -961,11 +971,6 @@ const ArchiveController = {
       delete fields.dari; // skip if no string value
     }
 
-    // Add page count (estimated separately from OCR)
-    if (pageCount > 0) {
-      fields.jumlah = { value: String(pageCount), score: 0.6, confidence: 'medium', source: 'page_estimation' };
-    }
-
     const result = {
       fields: fields,
       rawTextLength: engineResult.rawTextLength || text.length,
@@ -1121,6 +1126,9 @@ const ArchiveController = {
     
     const result = wsSyncExistingFilesInFolder_(year, report, startTime);
     
+    // Invalidasi cache agar dasbor tidak menampilkan '0' pasca-inisialisasi
+    CacheHelper.invalidate(year);
+
     auditAction_(actor, 'FILES_SYNCED', { year: year, message: 'Sinkronisasi berkas fisik. Total tersinkronisasi: ' + result.totalSynced });
     
     return {
@@ -1340,6 +1348,60 @@ function buildFolderPathForLog_(folder) {
 
 function normalizeFileLookupName_(value) {
   return String(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+// === Penanda salinan pending (B7) ===
+// Step 2 (copyFile) membuat salinan di Drive di LUAR lock; bila step 3 (writeAndLog)
+// tak pernah dipanggil (klien kabur), salinan jadi yatim: tanpa baris log, tanpa
+// pembersih. Kita catat penanda ringan di ScriptProperties saat copy, dilepas saat
+// step 3 selesai (sukses/gagal). Sweeper maintenance menyapu penanda yang basi.
+const PENDING_COPY_TTL_MS = 60 * 60 * 1000; // 1 jam: jauh di atas durasi finalize normal
+const PENDING_COPY_PREFIX = 'pendcopy_';
+
+function _recordPendingCopy_(fileId) {
+  if (!fileId) return;
+  try {
+    PropertiesService.getScriptProperties().setProperty(PENDING_COPY_PREFIX + fileId, String(Date.now()));
+  } catch (e) {
+    console.warn('_recordPendingCopy_ gagal: ' + e.message);
+  }
+}
+
+function _clearPendingCopy_(fileId) {
+  if (!fileId) return;
+  try {
+    PropertiesService.getScriptProperties().deleteProperty(PENDING_COPY_PREFIX + cleanId_(fileId));
+  } catch (e) {
+    console.warn('_clearPendingCopy_ gagal: ' + e.message);
+  }
+}
+
+// Sapu salinan yatim: penanda lebih tua dari TTL yang file-nya BELUM ter-log (step 3
+// tak pernah jalan) -> trash file lalu hapus penanda. Bila ternyata sudah ter-log
+// (step 3 sukses tapi clear penanda gagal), JANGAN trash — cukup hapus penanda.
+function sweepOrphanPendingCopies_() {
+  const props = PropertiesService.getScriptProperties();
+  const all = props.getProperties();
+  const now = Date.now();
+  let swept = 0;
+  Object.keys(all).forEach(function (key) {
+    if (key.indexOf(PENDING_COPY_PREFIX) !== 0) return;
+    const ts = Number(all[key]) || 0;
+    if (now - ts < PENDING_COPY_TTL_MS) return; // masih baru, biarkan
+    const fileId = key.substring(PENDING_COPY_PREFIX.length);
+    try {
+      const logged = ConfigRepository.getArchiveLogByFileId(fileId);
+      if (!logged || !logged.archive_id) {
+        try { DriveApp.getFileById(fileId).setTrashed(true); swept++; }
+        catch (trashErr) { console.warn('sweepOrphanPendingCopies_: trash gagal ' + fileId + ': ' + trashErr.message); }
+      }
+    } catch (e) {
+      console.warn('sweepOrphanPendingCopies_: cek log gagal ' + fileId + ': ' + e.message);
+    } finally {
+      props.deleteProperty(key);
+    }
+  });
+  return swept;
 }
 
 function _resolveArchiveContext_(payload) {

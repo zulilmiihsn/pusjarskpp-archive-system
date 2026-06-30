@@ -50,19 +50,6 @@ const ParseEngine = (function () {
     [/\u2022|\u25CF/g, '-'],                    // bullets → dash
   ];
 
-  // Known Indonesian government letter number patterns
-  const NOMOR_FORMATS = [
-    { name: 'SK format', re: /(?:SK|Surat\s+Keputusan)[\s/.:-]+(\d+\/[A-Z0-9.\/\-]+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i, weight: 0.95 },
-    { name: 'SP format', re: /(?:SP|Surat\s+Perintah)[\s/.:-]+([A-Z]?\d{1,6}[\-\/][A-Z0-9.\/\-]+\/[12]\d{3})/i, weight: 0.95 },
-    { name: 'SE format', re: /(?:SE|Surat\s+Edaran)[\s/.:-]+(\d+\/[A-Z0-9.\/\-]+\/[12]\d{3})/i, weight: 0.95 },
-    { name: 'explicit Nomor', re: /(?:No(?:mor)?)\s*[:.]\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i, weight: 0.9 },
-    { name: 'explicit No', re: /(?:No(?:mor)?)\s*[:.]?\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i, weight: 0.85 },
-    { name: 'letter prefix', re: /\b([A-Z]{1,4}[\-]\d{1,6}(?:\/[A-Z0-9.]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)\b/i, weight: 0.8 },
-    { name: 'numeric segments', re: /\b(\d{1,6}\/[A-Z0-9.\/\-]+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)\b/i, weight: 0.7 },
-    { name: 'Nomor Tahun', re: /(?:No(?:mor)?)\s*[:.]?\s*(\d{1,6})\s+Tahun\s+(20[12]\d)/i, weight: 0.75 },
-    { name: 'slash year', re: /\b(\d{1,5}\/[A-Z]{1,4}[A-Z0-9.]*\/[12]\d{3})\b/i, weight: 0.6 }
-  ];
-
   // Document type keywords
   const DOC_TYPE_KEYWORDS = {
     'Surat Keputusan': ['surat keputusan', 'keputusan kepala', 'keputusan direktur', 'keputusan ketua', 'keputusan rektor', 'menetapkan', 'mengingat', 'memutuskan', 'kesatu', 'kedua', 'ketiga'],
@@ -82,10 +69,10 @@ const ParseEngine = (function () {
   const AKSES_PATTERNS = [
     { re: /(?:bersifat|sifat)\s*[:.]?\s*rahasia/i, value: 'Rahasia', score: 0.95 },
     { re: /(?:bersifat|sifat)\s*[:.]?\s*terbatas/i, value: 'Terbatas', score: 0.9 },
-    { re: /(?:bersifat|sifat)\s*[:.]?\s*(?:biasa|umum|terbuka)/i, value: 'Biasa', score: 0.9 },
+    { re: /(?:bersifat|sifat)\s*[:.]?\s*(?:biasa|umum|terbuka)/i, value: 'Terbuka', score: 0.9 },
     { re: /klasifikasi\s*(?:akses)?\s*[:.]?\s*rahasia/i, value: 'Rahasia', score: 0.95 },
     { re: /klasifikasi\s*(?:akses)?\s*[:.]?\s*terbatas/i, value: 'Terbatas', score: 0.9 },
-    { re: /klasifikasi\s*(?:akses)?\s*[:.]?\s*(?:biasa|umum|terbuka)/i, value: 'Biasa', score: 0.9 },
+    { re: /klasifikasi\s*(?:akses)?\s*[:.]?\s*(?:biasa|umum|terbuka)/i, value: 'Terbuka', score: 0.9 },
     { re: /tingkat\s*akses\s*[:.]?\s*rahasia/i, value: 'Rahasia', score: 0.9 },
     { re: /tingkat\s*akses\s*[:.]?\s*terbatas/i, value: 'Terbatas', score: 0.85 },
     { re: /tidak\s+untuk\s+(?:disebarluaskan|umum|publik)/i, value: 'Terbatas', score: 0.7 },
@@ -93,16 +80,7 @@ const ParseEngine = (function () {
     { re: /dokumen\s+(?:negara|resmi)\s+rahasia/i, value: 'Rahasia', score: 0.8 },
     { re: /\bRAHASIA\b/, value: 'Rahasia', score: 0.5 },
     { re: /\bTERBATAS\b/, value: 'Terbatas', score: 0.45 },
-    { re: /\bBIASA\b|\bTERBUKA\b|\bUMUM\b/, value: 'Biasa', score: 0.4 }
-  ];
-
-  // Kode klasifikasi patterns (contextual → raw)
-  const KODE_PATTERNS = [
-    { re: /(?:kode|kode\s+klasifikasi)\s*[:.]?\s*([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?)/i, weight: 0.95 },
-    { re: /klasifikasi\s*[:.]?\s*([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?)/i, weight: 0.9 },
-    { re: /\b([A-Z]{2,4}\.\d{2}\.\d{1,2})\b/, weight: 0.8 },
-    { re: /\b([A-Z]{2,4}\.\d{2})\b/, weight: 0.65 },
-    { re: /\b([A-Z]\.\d{2}(?:\.\d{1,2})?)\b/, weight: 0.5 }
+    { re: /\bBIASA\b|\bTERBUKA\b|\bUMUM\b/, value: 'Terbuka', score: 0.4 }
   ];
 
   // Uraian section-boundary keywords (where Perihal value stops)
@@ -110,7 +88,7 @@ const ParseEngine = (function () {
 
   // Kamus Singkatan (Alias) untuk instansi & jabatan
   const INSTITUTION_ALIASES = [
-    { re: /\bpusat\s+pembelajaran\s+dan\s+strategi\s+kebijakan\s+(?:pengembangan\s+kompetensi|pelayanan\s+publik)?\b/ig, replace: 'Pusjar SKPP' },
+    { re: /\bpusat\s+pembelajaran\s+dan\s+strat[a-z]*egi\s+kebijakan\s+(?:pengembangan\s+kompetensi|pelayanan\s+publik)?\b/ig, replace: 'Pusjar SKPP' },
     { re: /\blembaga\s+administrasi\s+negara(?:\s+republik\s+indonesia)?\b/ig, replace: 'LAN RI' },
     { re: /\bkajian\s+manajemen\s+pemerintahan\b/ig, replace: 'KMP' },
     { re: /\bkajian\s+hukum\s+administrasi\s+negara\b/ig, replace: 'KHAN' },
@@ -486,13 +464,14 @@ const ParseEngine = (function () {
   //  SCORED EXTRACTOR: DARI (Sender)
   // ═══════════════════════════════════════════════════════════════
 
-  function extractDari_(text, structure) {
+  function extractDari_(text, structure, docType) {
     const candidates = [];
     const headerText = structure.header.lines.join('\n');
     const sigText = structure.signature.lines.join('\n');
 
     // Khusus Surat Keluar: Jika KOP mengandung instansi internal, jadikan Pengirim standar
-    if (LANRI_KALTIM_RE.test(headerText)) {
+    // KECUALI Nota Dinas, karena Kepada/Dari-nya bervariasi sesuai isi
+    if (docType !== 'Nota Dinas' && LANRI_KALTIM_RE.test(headerText)) {
       candidates.push({ value: 'Pusjar SKPP LAN RI', score: 0.95, source: 'internal_kop_rule', zone: 0 });
     }
 
@@ -519,8 +498,8 @@ const ParseEngine = (function () {
       candidates.push({ value: line, score: (isUpper ? 0.6 : 0.55) - (i * 0.05), source: 'kop_line_' + i, zone: 0 });
     }
 
-    // Look for "Dari:" pattern
-    const dari = headerText.match(/(?:Dari|Pengirim|Asal)\s*[:.]?\s*(.+)/i);
+    // Look for "Dari:" pattern (search in full text, not just header, because Yth might end header early)
+    const dari = text.match(/(?:Dari|Pengirim|Asal)\s*[:.]?\s*(.+?)(?=\s+(?:Hal|Perihal|Tanggal|Yth|Nomor|Sifat|Lampiran)\b|\n|$)/i);
     if (dari && dari[1]) {
       candidates.push({ value: cleanValue_(dari[1]), score: 0.85, source: 'dari_pattern', zone: 0 });
     }
@@ -636,7 +615,7 @@ const ParseEngine = (function () {
   // Deteksi arah surat: jika KOP/header memuat instansi "LAN RI Kalimantan Timur"
   // berarti surat KELUAR (dikeluarkan oleh kita). Bila tidak ada → surat MASUK.
   // Toleransi spasi antar-kata & case agar tahan variasi OCR.
-  const LANRI_KALTIM_RE = /LAN\s*RI\s+Kalimantan\s+Timur/i;
+  const LANRI_KALTIM_RE = /Lembaga\s+Administrasi\s+Negara/i;
   function detectDirection_(headerText, fullText) {
     const zone = String(headerText || '') + '\n' + String(fullText || '').substring(0, 600);
     return LANRI_KALTIM_RE.test(zone) ? 'keluar' : 'masuk';
@@ -761,7 +740,7 @@ const ParseEngine = (function () {
     const tanggal = extractTanggalScored_(optimizedText, structure);
     const uraian = extractUraianScored_(topText, structure, fileName, context.activity, context.subActivity);
     const klasifikasiAkses = extractKlasifikasiAksesScored_(topText);
-    const dari = extractDari_(topText, structure);
+    const dari = extractDari_(topText, structure, docType);
     const kepada = extractKepada_(topText);
     const tandaTangan = extractTandaTangan_(optimizedText, structure);
     const lampiran = extractLampiran_(topText, structure);
@@ -810,7 +789,7 @@ const ParseEngine = (function () {
       fields.uraian_informasi_item = { value: uraianFallback, score: 0.4, confidence: 'low', source: 'filename_fallback' };
     }
     if (klasifikasiAkses) fields.klasifikasi_akses = klasifikasiAkses;
-    if (docType === 'surat_keluar') {
+    if (direction === 'keluar' && docType !== 'Nota Dinas') {
       fields.dari = { value: 'Pusjar SKPP LAN RI', score: 0.99, confidence: 'high', source: 'hardcoded_surat_keluar' };
     } else if (dari) {
       if (dari.value) dari.value = applyAliases_(dari.value);
