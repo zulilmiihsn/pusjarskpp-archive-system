@@ -93,12 +93,12 @@ test('B6 - requireAdminIfWorkspaceSecured_ fail-closed saat baca akun gagal', ()
 
 // --- ParseEngine: deteksi arah surat masuk/keluar (autofill) ---
 
-test('ParseEngine.detectDirection - KOP LAN RI Kalimantan Timur = keluar', () => {
-  assert.strictEqual(ParseEngine.detectDirection('PEMERINTAH\nLAN RI Kalimantan Timur\nNomor: 1', ''), 'keluar');
+test('ParseEngine.detectDirection - KOP Lembaga Administrasi Negara = keluar', () => {
+  assert.strictEqual(ParseEngine.detectDirection('PEMERINTAH\nLembaga Administrasi Negara\nNomor: 1', ''), 'keluar');
 });
 
 test('ParseEngine.detectDirection - toleran spasi/case OCR', () => {
-  assert.strictEqual(ParseEngine.detectDirection('lan  ri   kalimantan timur', ''), 'keluar');
+  assert.strictEqual(ParseEngine.detectDirection('lembaga  administrasi   negara', ''), 'keluar');
 });
 
 test('ParseEngine.detectDirection - tanpa KOP itu = masuk', () => {
@@ -113,7 +113,7 @@ test('ParseEngine.analyze - surat MASUK tidak mengisi kode_klasifikasi', () => {
 });
 
 test('ParseEngine.analyze - surat KELUAR boleh mengisi kode_klasifikasi', () => {
-  const txt = 'LAN RI Kalimantan Timur\nNomor: 100/AB.02/2025\nKode: KP.01.02\nPerihal: Undangan rapat\n\nIsi surat...';
+  const txt = 'Lembaga Administrasi Negara\nNomor: 100/AB.02/2025\nKode: KP.01.02\nPerihal: Undangan rapat\n\nIsi surat...';
   const r = ParseEngine.analyze(txt, 'surat.pdf', {});
   assert.strictEqual(r.documentDirection, 'keluar');
   assert.ok(r.fields.kode_klasifikasi && r.fields.kode_klasifikasi.value, 'kode_klasifikasi harus terisi untuk surat keluar');
@@ -129,7 +129,7 @@ test('ParseEngine.analyze - segmen PDP di nomor: nomor tetap FULL, kode = segmen
 });
 
 test('ParseEngine.analyze - tanggal dateline header terbaca', () => {
-  const txt = 'LAN RI Kalimantan Timur\nNomor: 273/P.3/PDP.07.1\nSamarinda, 13 Desember 2025\nPerihal: Undangan\n\nIsi\n\nKepala\nBudi';
+  const txt = 'Lembaga Administrasi Negara\nNomor: 273/P.3/PDP.07.1\nSamarinda, 13 Desember 2025\nPerihal: Undangan\n\nIsi\n\nKepala\nBudi';
   const r = ParseEngine.analyze(txt, 'surat.pdf', {});
   assert.ok(r.fields.tanggal, 'tanggal harus terisi');
   assert.strictEqual(r.fields.tanggal.value, '2025-12-13');
