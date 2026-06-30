@@ -641,11 +641,6 @@ test('classifyDocumentType_ - Surat Undangan', () => {
   assert.strictEqual(classifyDocumentType_(text, 'undangan.pdf'), 'Surat Undangan');
 });
 
-test('classifyDocumentType_ - Surat Tugas', () => {
-  const text = 'SURAT TUGAS\nNomor: ST-789/2025\nMenugaskan kepada pegawai di bawah ini';
-  assert.strictEqual(classifyDocumentType_(text, 'ST.pdf'), 'Surat Tugas');
-});
-
 test('classifyDocumentType_ - Berita Acara', () => {
   const text = 'BERITA ACARA\nPada hari ini Senin tanggal 15 Maret 2025, kami yang bertanda tangan di bawah ini';
   assert.strictEqual(classifyDocumentType_(text, 'BA.pdf'), 'Berita Acara');

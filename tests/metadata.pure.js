@@ -266,7 +266,6 @@ function normalizeHexColor_(value, fallback) {
 let _PE_DOC_TYPE_KEYWORDS = {
   'Surat Keputusan': ['surat keputusan', 'keputusan kepala', 'keputusan direktur', 'keputusan ketua', 'menetapkan', 'mengingat', 'memutuskan', 'kesatu', 'kedua', 'ketiga'],
   'Surat Undangan': ['surat undangan', 'undangan', 'mengharapkan kehadiran', 'dimohon hadir', 'harap hadir', 'menghadiri'],
-  'Surat Tugas': ['surat tugas', 'menugaskan', 'ditugaskan', 'bertugas', 'pelaksanaan tugas'],
   'Surat Edaran': ['surat edaran', 'edaran', 'untuk diketahui', 'untuk menjadi perhatian'],
   'Surat Perintah': ['surat perintah', 'memerintahkan', 'diperintahkan'],
   'Nota Dinas': ['nota dinas', 'memo dinas', 'catatan dinas'],

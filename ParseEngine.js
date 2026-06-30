@@ -54,7 +54,6 @@ const ParseEngine = (function () {
   const NOMOR_FORMATS = [
     { name: 'SK format', re: /(?:SK|Surat\s+Keputusan)[\s/.:-]+(\d+\/[A-Z0-9.\/\-]+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i, weight: 0.95 },
     { name: 'SP format', re: /(?:SP|Surat\s+Perintah)[\s/.:-]+([A-Z]?\d{1,6}[\-\/][A-Z0-9.\/\-]+\/[12]\d{3})/i, weight: 0.95 },
-    { name: 'ST format', re: /(?:ST|Surat\s+Tugas)[\s/.:-]+(\d+\/[A-Z0-9.\/\-]+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i, weight: 0.95 },
     { name: 'SE format', re: /(?:SE|Surat\s+Edaran)[\s/.:-]+(\d+\/[A-Z0-9.\/\-]+\/[12]\d{3})/i, weight: 0.95 },
     { name: 'explicit Nomor', re: /(?:No(?:mor)?)\s*[:.]\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i, weight: 0.9 },
     { name: 'explicit No', re: /(?:No(?:mor)?)\s*[:.]?\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i, weight: 0.85 },
@@ -68,7 +67,6 @@ const ParseEngine = (function () {
   const DOC_TYPE_KEYWORDS = {
     'Surat Keputusan': ['surat keputusan', 'keputusan kepala', 'keputusan direktur', 'keputusan ketua', 'keputusan rektor', 'menetapkan', 'mengingat', 'memutuskan', 'kesatu', 'kedua', 'ketiga'],
     'Surat Undangan': ['surat undangan', 'undangan', 'mengharapkan kehadiran', 'dimohon hadir', 'harap hadir', 'menghadiri'],
-    'Surat Tugas': ['surat tugas', 'menugaskan', 'ditugaskan', 'bertugas', 'pelaksanaan tugas'],
     'Surat Edaran': ['surat edaran', 'edaran', 'untuk diketahui', 'untuk menjadi perhatian'],
     'Surat Perintah': ['surat perintah', 'memerintahkan', 'diperintahkan'],
     'Nota Dinas': ['nota dinas'],
