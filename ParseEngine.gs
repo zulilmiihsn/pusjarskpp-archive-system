@@ -488,13 +488,14 @@ const ParseEngine = (function () {
   //  SCORED EXTRACTOR: DARI (Sender)
   // ═══════════════════════════════════════════════════════════════
 
-  function extractDari_(text, structure) {
+  function extractDari_(text, structure, docType) {
     const candidates = [];
     const headerText = structure.header.lines.join('\n');
     const sigText = structure.signature.lines.join('\n');
 
     // Khusus Surat Keluar: Jika KOP mengandung instansi internal, jadikan Pengirim standar
-    if (LANRI_KALTIM_RE.test(headerText)) {
+    // KECUALI Nota Dinas, karena Kepada/Dari-nya bervariasi sesuai isi
+    if (docType !== 'Nota Dinas' && LANRI_KALTIM_RE.test(headerText)) {
       candidates.push({ value: 'Pusjar SKPP LAN RI', score: 0.95, source: 'internal_kop_rule', zone: 0 });
     }
 
@@ -763,7 +764,7 @@ const ParseEngine = (function () {
     const tanggal = extractTanggalScored_(optimizedText, structure);
     const uraian = extractUraianScored_(topText, structure, fileName, context.activity, context.subActivity);
     const klasifikasiAkses = extractKlasifikasiAksesScored_(topText);
-    const dari = extractDari_(topText, structure);
+    const dari = extractDari_(topText, structure, docType);
     const kepada = extractKepada_(topText);
     const tandaTangan = extractTandaTangan_(optimizedText, structure);
     const lampiran = extractLampiran_(topText, structure);
@@ -812,7 +813,7 @@ const ParseEngine = (function () {
       fields.uraian_informasi_item = { value: uraianFallback, score: 0.4, confidence: 'low', source: 'filename_fallback' };
     }
     if (klasifikasiAkses) fields.klasifikasi_akses = klasifikasiAkses;
-    if (direction === 'keluar') {
+    if (direction === 'keluar' && docType !== 'Nota Dinas') {
       fields.dari = { value: 'Pusjar SKPP LAN RI', score: 0.99, confidence: 'high', source: 'hardcoded_surat_keluar' };
     } else if (dari) {
       if (dari.value) dari.value = applyAliases_(dari.value);
