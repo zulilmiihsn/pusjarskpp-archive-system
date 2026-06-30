@@ -516,13 +516,13 @@ function wsEnsureArchiveSpreadsheet_(laciFolder, activity, year, report) {
   const spreadsheetName = 'Daftar Isi Berkas Arsip Laci No.' + laciNo + ' Th. ' + year + ' - Production';
   const companion = wsGetFileByNameAndMime_(laciFolder, spreadsheetName, MimeType.GOOGLE_SHEETS);
   if (companion) {
-    wsInstallRekapTriggerIfMissing_(companion.getId());
+    // wsInstallRekapTriggerIfMissing_(companion.getId()); // Dimatikan sementara agar Init Workspace lebih cepat (Opt-in)
     return openSpreadsheetById_(companion.getId());
   }
 
   const native = wsFindFirstArchiveSheet_(laciFolder);
   if (native) {
-    wsInstallRekapTriggerIfMissing_(native.getId());
+    // wsInstallRekapTriggerIfMissing_(native.getId()); // Dimatikan sementara agar Init Workspace lebih cepat (Opt-in)
     return openSpreadsheetById_(native.getId());
   }
 
@@ -530,7 +530,7 @@ function wsEnsureArchiveSpreadsheet_(laciFolder, activity, year, report) {
   if (office) {
     const converted = wsTryConvertOfficeSpreadsheet_(office, spreadsheetName, laciFolder);
     if (converted) {
-      wsInstallRekapTriggerIfMissing_(converted.getId());
+      // wsInstallRekapTriggerIfMissing_(converted.getId()); // Dimatikan sementara agar Init Workspace lebih cepat (Opt-in)
       return converted;
     }
   }
@@ -538,7 +538,7 @@ function wsEnsureArchiveSpreadsheet_(laciFolder, activity, year, report) {
   const ss = SpreadsheetApp.create(spreadsheetName);
   wsMoveFileToFolder_(ss.getId(), laciFolder);
   wsPrepareArchiveWorkbook_(ss, activity);
-  wsInstallRekapTriggerIfMissing_(ss.getId());
+  // wsInstallRekapTriggerIfMissing_(ss.getId()); // Dimatikan sementara agar Init Workspace lebih cepat (Opt-in)
   wsPushReport_(report, 'created', 'Spreadsheet arsip dibuat: ' + spreadsheetName);
   return ss;
 }
