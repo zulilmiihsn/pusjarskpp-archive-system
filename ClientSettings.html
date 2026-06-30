@@ -1014,17 +1014,24 @@
           if (!payload.workspaceRootFolderId) throw new Error('Pilih Folder Ruang Kerja terlebih dahulu.');
           state.workspaceInitTargetYear = payload.year;
           state.workspaceInitLoading = true;
-          render();
-          showProcessToast('Menyimpan dan menghubungkan ruang kerja...');
+          
+          if (typeof showYearLoading === 'function') {
+            showYearLoading(payload.year, 'Memulai Inisialisasi...', 'Membangun struktur folder dan konfigurasi ruang kerja');
+          }
+
           state.bootstrap = await api('initializeWorkspace', payload);
           state.workspaceSetup = state.bootstrap.workspaceSetup;
           state.workspaceInitTargetYear = null;
           state.workspaceInitPhase = 'syncing';
-          render();
-          showProcessToast('Selesai membangun konfigurasi. Mensinkronisasi berkas fisik...');
+          
+          if (typeof showYearLoading === 'function') {
+            showYearLoading(payload.year, 'Mensinkronisasi berkas...', 'Mencari file lama di Google Drive dan mencatatnya ke sistem');
+          }
           
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.sessionId) {
             localStorage.setItem('portal_session_id', state.bootstrap.workspaceSetup.sessionId);
+            // Segera jadikan admin agar reload tidak mengejutkan dan dashboard di latar berubah
+            state.currentUser = { role: 'admin' };
           }
 
           try {
@@ -1040,8 +1047,14 @@
 
           state.workspaceInitPhase = null;
           state.workspaceInitLoading = false;
-          render();
+          
+          if (typeof hideYearLoading === 'function') {
+            hideYearLoading();
+          }
 
+          // Navigasi ke Dasbor untuk menyembunyikan modal pengaturan dan me-render ulang sebagai admin
+          if (typeof navigateTo === 'function') navigateTo('dashboard');
+          
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
             showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);
           }
@@ -1489,17 +1502,23 @@
           if (!payload.workspaceRootFolderId) throw new Error('Folder Ruang Kerja belum dihubungkan.');
           state.workspaceInitTargetYear = payload.year;
           state.workspaceInitLoading = true;
-          render();
-          showProcessToast('Membuat struktur folder untuk tahun ' + payload.year + '...');
+          
+          if (typeof showYearLoading === 'function') {
+            showYearLoading(payload.year, 'Memulai Inisialisasi...', 'Membuat struktur folder untuk tahun ' + payload.year);
+          }
+          
           state.bootstrap = await api('initializeWorkspace', payload);
           state.workspaceSetup = state.bootstrap.workspaceSetup;
           state.workspaceInitTargetYear = null;
           state.workspaceInitPhase = 'syncing';
-          render();
-          showProcessToast('Selesai membangun konfigurasi. Mensinkronisasi berkas fisik...');
+          
+          if (typeof showYearLoading === 'function') {
+            showYearLoading(payload.year, 'Mensinkronisasi berkas...', 'Mencari file lama di Google Drive dan mencatatnya ke sistem');
+          }
           
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.sessionId) {
             localStorage.setItem('portal_session_id', state.bootstrap.workspaceSetup.sessionId);
+            state.currentUser = { role: 'admin' };
           }
 
           try {
@@ -1515,7 +1534,13 @@
 
           state.workspaceInitPhase = null;
           state.workspaceInitLoading = false;
-          render();
+          
+          if (typeof hideYearLoading === 'function') {
+            hideYearLoading();
+          }
+
+          // Kembali ke dasbor setelah sinkronisasi selesai
+          if (typeof navigateTo === 'function') navigateTo('dashboard');
 
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
             showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);

@@ -1103,9 +1103,11 @@
     if (overlay) overlay.classList.remove('active');
   }
 
-  function showYearLoading(year) {
+  function showYearLoading(year, customTitle, customSubtitle) {
     state.yearSwitchLoading = true;
-    showGlobalLoading('Mengganti ruang kerja tahun...', 'Memuat data tahun <span id="year-loading-year">' + esc(year) + '</span>');
+    const title = customTitle || 'Mengganti ruang kerja tahun...';
+    const subtitle = customSubtitle || ('Memuat data tahun <span id="year-loading-year">' + esc(year) + '</span>');
+    showGlobalLoading(title, subtitle);
   }
 
   function hideYearLoading() {
