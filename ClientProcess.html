@@ -448,15 +448,6 @@
     + '<line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>'
     + '</svg>Bantu Isi Otomatis';
 
-  function getActivityName_() {
-    var activitySelect = document.getElementById('activity-id');
-    var data = state.bootstrap;
-    var activities = data ? (data.activities || []) : [];
-    var activityId = activitySelect ? activitySelect.value : (state.preselectedActivityId || (activities.length ? activities[0].activity_id : ''));
-    var activity = activities.find(function(a) { return a.activity_id === activityId; });
-    return activity ? activity.activity_name : '';
-  }
-
   function triggerAutoParse_() {
     if (!state.draft || !state.draft.sourceFile || !state.draft.sourceFile.id) return;
     var parseFileId = state.draft.sourceFile.id;
@@ -498,7 +489,7 @@
           if (error && error.message === "Prefetch failed") {
              // Fallback to manual trigger if prefetch failed
              window._prefetchPromise = null;
-             doParse(api('parseDocumentContent', { fileId: parseFileId, activityName: getActivityName_() }, { timeoutMs: 30000 }));
+             doParse(api('parseDocumentContent', { fileId: parseFileId }, { timeoutMs: 30000 }));
              return;
           }
           _isParsing = false;
@@ -512,7 +503,7 @@
 
     var parseAction = (window._prefetchPromise && window._prefetchFileId === parseFileId) 
       ? window._prefetchPromise 
-      : api('parseDocumentContent', { fileId: parseFileId, activityName: getActivityName_() }, { timeoutMs: 30000 });
+      : api('parseDocumentContent', { fileId: parseFileId }, { timeoutMs: 30000 });
       
     doParse(parseAction);
   }
@@ -929,7 +920,7 @@
         
         // --- PREFETCHING MAGICS (Pemanasan Memori AI) ---
         window._prefetchFileId = id;
-        window._prefetchPromise = api('parseDocumentContent', { fileId: id, activityName: getActivityName_() }, { timeoutMs: 30000 })
+        window._prefetchPromise = api('parseDocumentContent', { fileId: id }, { timeoutMs: 30000 })
           .then(function(res) { return res; })
           .catch(function(err) { return null; });
         // ------------------------------------------------

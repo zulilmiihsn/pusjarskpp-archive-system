@@ -809,8 +809,8 @@ const ArchiveController = {
     requireWithinWorkspace_(payload.fileId, psYear);
 
     // Cache hasil parse per fileId: buka file yang sama lagi = instan, tak konversi ulang.
-    const parseCacheKey = 'parsecache_v23_' + cleanId_(payload.fileId);
-    const parseLockKey = 'parselock_v23_' + cleanId_(payload.fileId);
+    const parseCacheKey = 'parsecache_v22_' + cleanId_(payload.fileId);
+    const parseLockKey = 'parselock_v22_' + cleanId_(payload.fileId);
     try {
       const cachedParse = CacheService.getScriptCache().get(parseCacheKey);
       if (cachedParse) { const r = JSON.parse(cachedParse); r.cached = true; return r; }
@@ -908,7 +908,7 @@ const ArchiveController = {
 
 
     // Run ParseEngine for scored multi-pass extraction
-    const engineResult = ParseEngine.analyze(text, fileName, { activity: { name: payload.activityName }, subActivity: {} });
+    const engineResult = ParseEngine.analyze(text, fileName, { activity: {}, subActivity: {} });
     const fields = engineResult.fields;
 
     // Use file modified date as fallback for date field

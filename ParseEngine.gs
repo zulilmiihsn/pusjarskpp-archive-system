@@ -640,11 +640,7 @@ const ParseEngine = (function () {
   // berarti surat KELUAR (dikeluarkan oleh kita). Bila tidak ada → surat MASUK.
   // Toleransi spasi antar-kata & case agar tahan variasi OCR.
   const LANRI_KALTIM_RE = /LAN\s*RI\s+Kalimantan\s+Timur/i;
-  function detectDirection_(headerText, fullText, context) {
-    const activityName = (context && context.activity && context.activity.name) ? String(context.activity.name).toLowerCase() : '';
-    if (activityName.indexOf('surat keluar') !== -1) return 'keluar';
-    if (activityName.indexOf('surat masuk') !== -1) return 'masuk';
-
+  function detectDirection_(headerText, fullText) {
     const zone = String(headerText || '') + '\n' + String(fullText || '').substring(0, 600);
     return LANRI_KALTIM_RE.test(zone) ? 'keluar' : 'masuk';
   }
@@ -740,7 +736,7 @@ const ParseEngine = (function () {
 
     // Pass 2.6: Deteksi arah surat (masuk/keluar) dari KOP header
     const headerTextForDir = structure.header.lines.join('\n');
-    let direction = detectDirection_(headerTextForDir, text, context);
+    let direction = detectDirection_(headerTextForDir, text);
 
     // Pass 3: Classify document type
     const docType = classifyDocumentType_(topText, fileName);
