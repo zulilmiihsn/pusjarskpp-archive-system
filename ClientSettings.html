@@ -973,6 +973,7 @@
     if (resetConfirm) {
       resetConfirm.addEventListener('click', async function () {
         resetConfirm.disabled = true;
+        resetConfirm.style.opacity = '0.5';
         resetConfirm.textContent = 'Menghapus spreadsheet...';
         try {
           var resetResult = await api('resetWorkspace');
@@ -988,6 +989,9 @@
           if (typeof render === 'function') render();
         } catch (e) {
           showToast('Gagal: ' + errorMessage(e));
+          resetConfirm.disabled = false;
+          resetConfirm.style.opacity = '1';
+          resetConfirm.textContent = 'Reset';
         }
       });
     }

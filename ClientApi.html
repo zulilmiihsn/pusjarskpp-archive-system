@@ -26,7 +26,7 @@
             if (response.success) {
               done(resolve, response.data);
             } else {
-              var srvErr = new Error(response.error || 'Terjadi kesalahan dari peladen');
+              var srvErr = new Error(response.error || 'Terjadi kesalahan dari server');
               srvErr.code = response.errorCode || 'UNKNOWN_ERROR';
               handleSessionError_(srvErr);
               done(reject, srvErr);
@@ -42,7 +42,7 @@
     });
   }
 
-  // Saat peladen menolak karena sesi habis/tidak ditemukan, bersihkan sesi lokal
+  // Saat server menolak karena sesi habis/tidak ditemukan, bersihkan sesi lokal
   // dan munculkan modal login otomatis supaya user tidak terjebak error generik.
   function handleSessionError_(error) {
     var isAuthErr = error && error.code === 'AUTH_ERROR';
