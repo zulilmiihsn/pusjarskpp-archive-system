@@ -565,6 +565,15 @@ test('extractNomorSurat_ - space separated from filename', () => {
   assert.strictEqual(extractNomorSurat_('No B 417 BKPSDM 800.2 12 2025 Permohonan'), 'B/417/BKPSDM/800.2/12/2025');
 });
 
+test('extractNomorSurat_ - strict uppercase code without year', () => {
+  assert.strictEqual(extractNomorSurat_('113/PDP/Informasi Terkait Hal Baru'), '113/PDP');
+  assert.strictEqual(extractNomorSurat_('Surat B-417/BKPSDM/800.2 permohonan'), 'B-417/BKPSDM/800.2');
+});
+
+test('extractNomorSurat_ - explicit No prefix without year', () => {
+  assert.strictEqual(extractNomorSurat_('No: 113/Pdp / Informasi'), '113/Pdp'); // Space stops the extraction
+});
+
 // 18. Smarter extractKodeKlasifikasi_ patterns
 test('extractKodeKlasifikasi_ - contextual "Kode:" prefix', () => {
   assert.strictEqual(extractKodeKlasifikasi_('Kode: KP.01.02 tentang kepegawaian'), 'KP.01.02');

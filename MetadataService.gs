@@ -41,22 +41,26 @@ const MetadataService = {
 function extractNomorSurat_(text) {
   const str = String(text || '');
   const patterns = [
-    // "Nomor : B-123/DL.01/2026" or "No. 123/ABC/2026" (most explicit, highest priority)
+    // 0. "Nomor : B-123/DL.01/2026" or "No. 123/ABC/2026" (most explicit, highest priority)
     /(?:No(?:mor)?\.?)\s*[:.]?\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i,
-    // Letter prefix: "B-123/DL.01/2026", "SP-456/KP.02/2025"
+    // 1. "No: 113/PDP" (explicit No: but without year)
+    /(?:No(?:mor)?\.?)\s*[:.]\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+)/i,
+    // 2. Letter prefix: "B-123/DL.01/2026", "SP-456/KP.02/2025"
     /\b([A-Z]{1,3}-\d{1,6}(?:\/[A-Z0-9.]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i,
-    // Pure numeric segments: "123/DL.01/2026", "01/02/03/2026"
+    // 3. Pure numeric segments with year: "123/DL.01/2026", "01/02/03/2026"
     /\b(\d{1,6}\/[A-Z0-9.\/\-]+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i,
-    // Formal: "Nomor 45 Tahun 2025"
+    // 4. Formal: "Nomor 45 Tahun 2025"
     /(?:No(?:mor)?\.?)\s*[:.]?\s*(\d{1,6})\s+Tahun\s+(\d{4})/i,
-    // Space/dash separated filename format
-    /(?:No(?:mor)?)\s*[:.\-\s_]+\s*([A-Z0-9][A-Z0-9.\-\s_]+?[\-\s_][12]\d{3})\b/i
+    // 5. Space/dash separated filename format with year
+    /(?:No(?:mor)?)\s*[:.\-\s_]+\s*([A-Z0-9][A-Z0-9.\-\s_]+?[\-\s_][12]\d{3})\b/i,
+    // 6. Strict Uppercase/Number without Year (e.g. 113/PDP, B-417/BKPSDM) - Case SENSITIVE
+    new RegExp('\\b((?:[A-Z]{1,3}-\\d{1,6}|\\d{1,6})\\/[A-Z0-9.\\-]+(?:\\/[A-Z0-9.\\-]+)*)\\b')
   ];
   for (let i = 0; i < patterns.length; i++) {
     const match = str.match(patterns[i]);
     if (match) {
-      if (i === 3) return match[1] + '/Tahun/' + match[2];
-      if (i === 4) return match[1].replace(/[\s_]+/g, '/').trim();
+      if (i === 4) return match[1] + '/Tahun/' + match[2];
+      if (i === 5) return match[1].replace(/[\s_]+/g, '/').trim();
       return match[1].replace(/\s+/g, ' ').trim();
     }
   }
