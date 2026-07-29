@@ -10,7 +10,7 @@ const MetadataService = {
     if (normalized.nomor_item_arsip) {
       normalized.nomor_item_arsip = String(normalized.nomor_item_arsip).padStart(2, '0');
     }
-    normalized.no_berkas = subActivity && subActivity.sort_order ? String(subActivity.sort_order) : '';
+    normalized.no_berkas = normalized.no_berkas || resolveSubActivityArchiveNumber_(subActivity, activity);
 
     normalized.no_laci = normalized.no_laci || '';
     // Paksa No Folder agar selalu sinkron dengan Nomor Item Arsip sesuai permintaan user
@@ -256,7 +256,7 @@ function normalizeLegacyTingkat_(value) {
 function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
   const meta = {
     nomor_item_arsip: '',
-    no_berkas: defaultSubActivity && defaultSubActivity.sort_order ? String(defaultSubActivity.sort_order) : (defaultActivity && defaultActivity.folder_no ? String(defaultActivity.folder_no) : ''),
+    no_berkas: resolveSubActivityArchiveNumber_(defaultSubActivity, defaultActivity),
     tingkat_perkembangan: '',
     nomor_surat: '',
     uraian_informasi_item: '',
@@ -315,6 +315,20 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
       meta.uraian_informasi_item = cleanUraian;
     }
   }
+
+  const dariMatch = meta.uraian_informasi_item.match(/(?:_|\b)Dari\s+(.+)$/i);
+  if (dariMatch) {
+    meta.dari = dariMatch[1].trim();
+    meta.uraian_informasi_item = meta.uraian_informasi_item.substring(0, dariMatch.index).trim();
+  }
+
+  const kepMatch = meta.uraian_informasi_item.match(/(?:_|\b)Kepada\s+(.+)$/i);
+  if (kepMatch) {
+    meta.kepada = kepMatch[1].trim();
+    meta.uraian_informasi_item = meta.uraian_informasi_item.substring(0, kepMatch.index).trim();
+  }
+
+  meta.uraian_informasi_item = meta.uraian_informasi_item.replace(/[\/_\s]+$/, '').replace(/\s+/g, ' ').trim();
 
   // Sinkronkan no_folder dengan nomor_item_arsip (seperti logic di form)
   meta.no_folder = meta.nomor_item_arsip;

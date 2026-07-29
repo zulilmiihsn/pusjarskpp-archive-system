@@ -15,12 +15,17 @@ const PROP_KEYS = {
 const DEFAULT_YEAR = new Date().getFullYear();
 const TRASHED_SUB_ACTIVITY_RETENTION_DAYS = 30;
 const SESSION_TTL_MS = 2 * 24 * 60 * 60 * 1000;
+// CacheService mempercepat validasi request. Script Properties tetap menjadi
+// penyimpanan durable selama 2 hari; cache 6 jam hanya lapisan baca cepat.
+const SESSION_CACHE_TTL_SECONDS = 6 * 60 * 60;
 const DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI = 'PDP.07.1';
 
 const HASH_ITERATIONS = 800;
 const HASH_ITERATIONS_V2 = 50000;
+const HASH_ITERATIONS_V3 = 5000;
 const HASH_PREFIX_V1 = 'v1:';
 const HASH_PREFIX_V2 = 'v2:';
+const HASH_PREFIX_V3 = 'v3:';
 const SESSION_KEY = 'portal_arsip_session';
 
 /* ── Cross-cutting tuneables (magic numbers, once) ── */
@@ -117,7 +122,8 @@ const SUB_ACTIVITY_HEADERS = [
   'parent_folder_name',
   'parent_folder_path',
   'spreadsheet_file_id',
-  'metadata_locks'
+  'metadata_locks',
+  'local_sort_order'
 ];
 
 const ACCOUNT_HEADERS = ['account_id', 'username', 'password_hash', 'role', 'display_name', 'is_active', 'created_at', 'updated_at'];

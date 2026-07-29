@@ -28,6 +28,14 @@ const client = read('ClientState.html') + '\n' +
                read('ClientSettings.html') + '\n' +
                read('ClientFolderPicker.html') + '\n' +
                read('ClientUtils.html');
+const clientApi = read('ClientApi.html');
+const clientRouter = read('ClientRouter.html');
+const clientLogin = read('ClientLogin.html');
+const authService = read('AuthService.gs');
+['ClientState.html', 'ClientApi.html', 'ClientRouter.html', 'ClientLogin.html', 'ClientSettings.html'].forEach(function (file) {
+  const source = read(file).replace(/^\s*<script>\s*/, '').replace(/\s*<\/script>\s*$/, '');
+  new Function(source);
+});
 const configConstants = read('ConfigConstants.gs');
 const configHelpers = read('ConfigHelpers.gs');
 const configRepo = read('ConfigRepository.gs');
@@ -48,6 +56,26 @@ assert(spreadsheetService.includes('function getDetailStartColumn_'), 'Spreadshe
 assert(configConstants.includes('DETAIL_FALLBACK_START_COL = 2'), 'Spreadsheet detail fallback column must be B.');
 assert(!workspaceSetup.includes('hasRekapSheet: false'), 'Every laci workbook must include a rekap sheet.');
 assert(workspaceSetup.includes("'error_message', 'metadata_json'"), 'Workspace setup must create archive_log with metadata_json.');
+assert(
+  workspaceSetup.includes('folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW)'),
+  'Archive folders must grant Anyone with link Viewer access.'
+);
+assert(
+  /wsEnsureAnyoneWithLinkViewer_\(daftarArsip, report\)[\s\S]*wsEnsureAnyoneWithLinkViewer_\(naskahDinas, report\)/.test(workspaceSetup),
+  'Both archive branches must receive link-viewer access.'
+);
+assert(
+  !/wsEnsureAnyoneWithLinkViewer_\(systemFolder, report\)/.test(workspaceSetup),
+  'System/config folder must remain private.'
+);
+assert(
+  /deleteArchive: function \(payload\) \{[\s\S]*?requireArchiveDeletionRole_\(payload\)/.test(appController),
+  'Archive deletion must allow authenticated portal workers through the dedicated role guard.'
+);
+assert(
+  /trashArchiveFile: function \(payload\) \{[\s\S]*?requireArchiveDeletionRole_\(payload\)/.test(appController),
+  'Archive item deletion must use the worker/admin role guard.'
+);
 const initWorkspaceBody = read('WorkspaceController.gs').match(/initializeWorkspace: function \(payload\) \{([\s\S]*?)\n {2}\},/);
 assert(
   !!initWorkspaceBody && /requireAdminIfWorkspaceSecured_\(payload\)/.test(initWorkspaceBody[1]) && !/requireAdmin_\(payload\)/.test(initWorkspaceBody[1]),
@@ -94,6 +122,34 @@ assert(config.includes("'category_id', 'name', 'color', 'sort_order', 'created_a
 assert(read('SettingsController.gs').includes('normalizeHexColor_(meta.color'), 'Template data must merge stored category colors.');
 assert(read('SettingsController.gs').includes('ConfigRepository.setTemplateCategory'), 'Template category assignment must persist to config.');
 assert(read('SpreadsheetService.gs').includes('updateRekapSubActivityIdentity'), 'Sub-activity mapping changes must update the rekap identity row.');
+assert(read('SpreadsheetService.gs').includes('reconcileGlobalArchiveNumbers'), 'Sync Drive must reconcile one global archive sequence across the year.');
+assert(read('SpreadsheetService.gs').includes('const existingRow = findRekapRowForSubActivity_'), 'Rekap row creation must be idempotent.');
+assert(read('SpreadsheetService.gs').includes('findPossibleRekapRowsFromLookup_') && read('SpreadsheetService.gs').includes('SpreadsheetService.updateRekapSummary(activity, sub, {})'), 'Sync Drive must safely recreate truly missing rekap rows and calculate them from detail sheets.');
+assert(read('SheetHelpers.gs').includes('PORTAL_ARSIP_ROW_ID|'), 'Rekap rows must carry a stable sub-activity identity marker.');
+assert(read('SheetHelpers.gs').includes('findRekapRowForSubActivityFromLookup_'), 'Rekap lookup must validate stale row hints against stable identity.');
+assert(!read('SheetHelpers.gs').includes('uraian.indexOf(targetName)') &&
+  !read('SheetHelpers.gs').includes('targetName.indexOf(uraian)'),
+  'Rekap identity must never use fuzzy substring matching for numbered or Roman-numeral sub-activities.');
+assert(!read('SheetHelpers.gs').includes('getDocumentProperties()') &&
+  !read('SheetHelpers.gs').includes("setFormula('=1/2')"),
+  'Formula separator detection must work in standalone web apps without Document Properties or cell probes.');
+assert(read('PureFunctions.gs').includes('buildGlobalArchiveNumberPlan_') &&
+  read('SpreadsheetService.gs').includes('planGlobalArchiveNumbers') &&
+  read('SheetHelpers.gs').includes('writeDetailArchiveNumber_'),
+  'Archive numbering must use one global plan and mirror it to rekap/detail sheets.');
+assert(!read('PureFunctions.gs').includes('normalizeRekapArchiveSequence_') &&
+  !read('SheetHelpers.gs').includes('repairRekapArchiveSequence_'),
+  'Per-spreadsheet 1..N normalization must not return.');
+assert(!read('SpreadsheetService.gs').includes('cascadeNomorBerkasShift'),
+  'Legacy per-activity numbering cascade must not return.');
+assert(!read('SheetHelpers.gs').includes('locks.nomorBerkas !== false && expectedNumber'), 'Canonical Nomor Berkas repair must not be bypassed by manual metadata locks.');
+assert(read('MetadataService.gs').includes('normalized.no_berkas = normalized.no_berkas || resolveSubActivityArchiveNumber_'), 'Existing detail Nomor Berkas must not be overwritten by a config fallback.');
+assert(read('SpreadsheetService.gs').includes('REKAP_SUMMARY_COLUMNS.nomorBerkas') &&
+  read('SpreadsheetService.gs').includes('REKAP_SUMMARY_COLUMNS.noFolder'),
+  'Global archive number must be mirrored to both Rekap identity columns.');
+assert(read('ConfigRepository.gs').includes('bulkUpdateSubActivityNumbering') &&
+  read('ConfigRepository.gs').includes('local_sort_order'),
+  'Global and local archive ordering must be persisted together in config.');
 assert(read('SubActivityController.gs').includes('formalArchiveName') && read('SubActivityController.gs').includes('rekapRowNumber'), 'Sub-activity rename must accept mapping metadata, not only the folder name.');
 assert(read('ClientArchiveFolder.html').includes("mode: 'edit-sub-activity'"), 'Mapped sub-activity folders must open the edit-sub-activity flow instead of raw folder rename.');
 assert(configRepo.includes('target_folder_id') && configRepo.includes('headers.map(function (header)'), 'Archive log writes must persist target folder fields by header name.');
@@ -131,11 +187,34 @@ assert(read('SubActivityController.gs').includes('wsBuildLeafSubActivityEntries_
 // gerbang = login+RBAC app. Aman setelah auth guard + requireWithinWorkspace_ (IDOR) terpasang.
 // Catatan deploy: butuh deployment versi baru + re-auth owner + un-share sheet dari 10 user.
 assert(appsscript.webapp.executeAs === 'USER_DEPLOYING', 'Web app must execute as deploying user (shared 10-user model; backend sheets stay private).');
-assert(appsscript.webapp.access === 'DOMAIN', 'Web app access must be domain-restricted.');
+assert(appsscript.webapp.access === 'ANYONE', 'Web app must allow signed-in users from any Google domain; portal authentication remains authoritative.');
 assert(appsscript.oauthScopes.includes('https://www.googleapis.com/auth/script.external_request'), 'Manifest must include external request scope for UrlFetchApp resumable uploads.');
 assert(appsscript.oauthScopes.includes('https://www.googleapis.com/auth/script.scriptapp'), 'Manifest must allow trigger installation.');
 
 assert(client.includes("result.warning || 'Selesai:"), 'Client must surface finalization warnings.');
+assert(clientApi.includes('.withFailureHandler('), 'Every google.script.run call must use the centralized failure handler.');
+assert(clientApi.includes('API_TIMEOUT_MS') && clientApi.includes('CLIENT_TIMEOUT'), 'Every client RPC must have a default timeout.');
+assert(clientApi.includes('API_TIMEOUTS_MS[name]') && read('ClientState.html').includes('initializeWorkspace: 330000'), 'Long-running workspace operations must not inherit the short RPC timeout.');
+assert(authService.includes("console.info('LOGIN_PERF '") && read('SettingsController.gs').includes("console.info('BOOTSTRAP_PERF '"), 'Login and bootstrap must emit phase timing diagnostics.');
+assert(!clientApi.includes("localStorage.getItem('portal_session_id')") && !clientLogin.includes("localStorage.setItem('portal_session_id'"), 'Authentication token must stay in client memory, not iframe storage.');
+assert(clientRouter.includes('rememberPendingRoute_') && clientRouter.includes('state.pendingRoute'), 'Deep-link route must be retained across login.');
+assert(clientRouter.includes('cancelGuestLoginPrompt_') && clientRouter.includes("classList.remove('auth-pending')"), 'Closing login as guest must restore a visible safe route.');
+assert(clientRouter.includes('state.loginReturnRoute') && clientRouter.includes('google.script.history.replace'), 'Guest login cancellation must restore the previous safe route and replace restricted history.');
+assert(clientRouter.includes('prepareRestrictedGuestRoute_') && clientRouter.includes("{ view: 'activity_detail', activityId: activityId }"), 'Restricted guest deep-links must render a safe activity background before showing login.');
+assert(clientLogin.includes("close(true)") && clientLogin.includes('cancelGuestLoginPrompt_'), 'Login close actions must invoke guest-route recovery.');
+assert(/if \(!isGuest\(\)\) \{[\s\S]*syncDrive_\(activity, true\)/.test(read('ClientActivityDetail.html')), 'Guest activity pages must not trigger authenticated silent Drive sync and hide the safe background.');
+assert(clientRouter.includes('requestGeneration !== getAuthGeneration()'), 'Stale auth responses must not overwrite a newer login.');
+assert(read('Index.html').includes('auth-pending') && read('StylesBase.html').includes('.app-shell.auth-pending'), 'Main shell must stay hidden until authentication is validated.');
+assert(clientLogin.includes('Memverifikasi...') && clientLogin.includes('Memuat data...'), 'Login must show staged progress labels.');
+assert(authService.includes('saveSession_') && authService.includes('CacheService.getScriptCache()'), 'Server sessions must use durable properties plus cache.');
+assert(authService.includes('sheet.getDataRange().getValues()'), 'Login account scan must use one batched values read.');
+assert(!authService.includes('activeEmail:') && !authService.includes('session.activeEmail'), 'Portal authorization must not bind sessions to Google email.');
+assert((authService.match(/Session\.getActiveUser\(\)\.getEmail\(\)/g) || []).length === 1 && authService.includes('detectedGoogleEmailForDiagnostics_'), 'Google active email may only be read for diagnostics.');
+assert(!read('SystemLogger.gs').includes('Session.getActiveUser'), 'System logger identity must come from portal session context.');
+assert(read('Code.gs').includes("return 'ACCESS_DENIED'") && read('Code.gs').includes("return 'AUTH_ERROR'"), 'Authorization denial must be distinct from invalid session.');
+assert(clientApi.includes('if (isAccessDeniedError_(error)) return;') && clientApi.indexOf('if (isAccessDeniedError_(error)) return;') < clientApi.indexOf('clearSessionToken();', clientApi.indexOf('function handleSessionError_')), 'Client must preserve session on nonfatal access denial.');
+assert(read('SecurityHelpers.gs').includes("SystemLogger.warn('ACCESS_DENIED'") && read('SecurityHelpers.gs').includes('failedCheck'), 'Access denials must write diagnostic context to system_logs.');
+assert(configHelpers.includes('sha256Hex_(key) + activeSalt') && !/function pbkdf2Like_[\s\S]*?Utilities\.computeDigest/.test(configHelpers), 'Password verification must run SHA-256 rounds inside V8, not call a GAS service per round.');
 assert(client.includes('install-maintenance-trigger'), 'Settings UI must expose maintenance trigger install.');
 assert(client.includes('run-cleanup-now'), 'Settings UI must expose manual cleanup.');
 assert(client.includes('renderInactiveSubActivities'), 'Client must expose inactive sub-activity page.');
@@ -159,7 +238,7 @@ assert(read('MetadataService.gs').includes('extractKlasifikasiAkses_'), 'Klasifi
 // referensi tersisa (akan ReferenceError di runtime). Gunakan WorkspaceController/DriveService.
 assert(!read('Code.gs').includes('AppController.') && !read('SubActivityController.gs').includes('AppController.'),
   'AppController (dihapus) tidak boleh direferensikan; gunakan WorkspaceController.getBootstrap / DriveService.*');
-// ConfigRepository wajib mendefinisikan metode yang dipakai cascadeNomorBerkasShift & maintenance.
+// ConfigRepository wajib mendefinisikan metode yang dipakai rekonsiliasi global & maintenance.
 assert(read('ConfigRepository.gs').includes('getActivities: function') &&
   read('ConfigRepository.gs').includes('getSubActivities: function') &&
   read('ConfigRepository.gs').includes('getSubActivityById: function'),
@@ -170,5 +249,15 @@ assert(read('ConfigConstants.gs').includes("DOCUMENT_TYPES: 'config_document_typ
 
 assert(!readme.includes('apps-script/portal-arsip/README.md'), 'README must not point to missing apps-script path.');
 assert(!readme.includes('scripts/google-apps-script'), 'README must not point to missing setup script paths.');
+
+const redundantRootMirrors = fs.readdirSync(root).filter(file =>
+  file.endsWith('.js') && fs.existsSync(path.join(root, file.replace(/\.js$/, '.gs')))
+);
+assert(redundantRootMirrors.length === 0,
+  'Root-level .js mirrors of .gs files are redundant: ' + redundantRootMirrors.join(', '));
+assert(!fs.existsSync(path.join(root, '_DebugAutofill.gs')),
+  'Temporary unauthenticated debug helpers must not be shipped to Apps Script.');
+assert(!fs.existsSync(path.join(root, 'scripts', 'html-splitter.js')),
+  'One-time HTML migration tooling must not return.');
 
 console.log('Portal Arsip verification passed.');

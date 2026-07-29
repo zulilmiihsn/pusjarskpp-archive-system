@@ -155,6 +155,10 @@ const WorkspaceSetupService = {
 
     const daftarArsip = wsFindOrCreateChildFolder_(root, ['1. Daftar Arsip', 'Daftar Arsip'], '1. Daftar Arsip (Spreadsheet)', report);
     const naskahDinas = wsFindOrCreateChildFolder_(root, ['2. Naskah Dinas Latbang', 'Naskah Dinas LitBang', 'Naskah Dinas'], '2. Naskah Dinas Latbang (Dokumen)', report);
+    // Owner deploy tetap Owner. Semua pemegang link lain hanya mendapat Viewer.
+    // Jangan terapkan ke systemFolder: config, akun, dan log harus tetap privat.
+    wsEnsureAnyoneWithLinkViewer_(daftarArsip, report);
+    wsEnsureAnyoneWithLinkViewer_(naskahDinas, report);
     const persuratan = wsFindOrCreateChildFolder_(naskahDinas, ['1. Persuratan', 'Persuratan'], '1. Persuratan', report);
 
     const configSpreadsheet = wsGetOrCreateConfigSpreadsheet_(systemFolder);
@@ -222,7 +226,29 @@ const WorkspaceSetupService = {
         });
       }
 
-      wsBuildSubActivityEntries_(root, naskahDinas, persuratan, tahunFolder, targetFolder, activity).forEach(function (entry, index) {
+      const subActivityEntries = wsBuildSubActivityEntries_(
+        root,
+        naskahDinas,
+        persuratan,
+        tahunFolder,
+        targetFolder,
+        activity
+      );
+      subActivityEntries.sort(function (a, b) {
+        return compareSubActivitiesByLocalOrder_({
+          activity_id: activity.id,
+          sub_activity_id: a.subActivityId,
+          sub_activity_name: a.folder.getName(),
+          parent_folder_name: a.parentFolderName
+        }, {
+          activity_id: activity.id,
+          sub_activity_id: b.subActivityId,
+          sub_activity_name: b.folder.getName(),
+          parent_folder_name: b.parentFolderName
+        }, { activity_id: activity.id });
+      });
+
+      subActivityEntries.forEach(function (entry, index) {
         const subFolder = entry.folder;
         if (entry.parentFolderName) {
           const docParentGroup = wsFindOrCreateChildFolder_(docTargetFolder, [entry.parentFolderName], entry.parentFolderName, report);
@@ -261,7 +287,9 @@ const WorkspaceSetupService = {
           entry.parentFolderId,
           entry.parentFolderName,
           entry.parentFolderPath,
-          subSpreadsheet ? subSpreadsheet.getId() : ''
+          subSpreadsheet ? subSpreadsheet.getId() : '',
+          '',
+          index + 1
         ]);
       });
     });
@@ -973,7 +1001,7 @@ function wsStyleRekapSheet_(sheet) {
       sheet.setColumnWidth(startCol + index, widthPx);
     });
 
-  wsWriteRekapNotes_(sheet, lastTableRow + 4);
+  wsWriteRekapNotes_(sheet, lastTableRow + 1);
 }
 
 function wsWriteRekapNotes_(sheet, startRow) {
@@ -1078,7 +1106,7 @@ function wsStyleDetailSheet_(sheet) {
     sheet.setColumnWidth(startCol + index, widthPx);
   });
 
-  wsWriteDetailNotes_(sheet, 34);
+  wsWriteDetailNotes_(sheet, 33);
 }
 
 function wsWriteDetailNotes_(sheet, startRow) {
@@ -1119,6 +1147,28 @@ function wsGetOrCreateFolder_(parent, name, report) {
   delete _wsFolderChildrenCache_[parent.getId()];
   wsPushReport_(report, 'created', 'Folder dibuat: ' + name);
   return folder;
+}
+
+function wsEnsureAnyoneWithLinkViewer_(folder, report) {
+  const folderName = folder && folder.getName ? folder.getName() : 'folder arsip';
+  try {
+    if (
+      folder.getSharingAccess() === DriveApp.Access.ANYONE_WITH_LINK &&
+      folder.getSharingPermission() === DriveApp.Permission.VIEW
+    ) {
+      wsPushReport_(report, 'found', 'Akses Viewer via link sudah aktif: ' + folderName);
+      return folder;
+    }
+    folder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    wsPushReport_(report, 'updated', 'Akses diatur ke Anyone with link (Viewer): ' + folderName);
+    return folder;
+  } catch (error) {
+    throw new Error(
+      'Gagal mengatur akses Anyone with link (Viewer) untuk "' + folderName +
+      '". Periksa kebijakan berbagi eksternal Google Workspace. Detail: ' +
+      (error && error.message ? error.message : String(error))
+    );
+  }
 }
 
 function wsFindOrCreateChildFolder_(parent, candidates, createName, report) {

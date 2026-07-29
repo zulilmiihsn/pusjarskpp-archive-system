@@ -87,7 +87,17 @@
       }
 
       if (!_syncIsSilent) {
-        if (result.updated) {
+        const rekapRepair = result.rekapRepair || {};
+        const repairedRekapCount = Number(rekapRepair.repairedIdentities || 0) +
+          Number(rekapRepair.repairedPointers || 0) +
+          Number(rekapRepair.createdRows || 0);
+        const ambiguousRekapCount = (rekapRepair.duplicateStableRows || []).length;
+        const missingRekapCount = (rekapRepair.missingSubActivityIds || []).length;
+        if (ambiguousRekapCount > 0 || missingRekapCount > 0) {
+          showToast('Sinkronisasi selesai, tetapi ada ' + (ambiguousRekapCount + missingRekapCount) + ' mapping rekap ambigu. Tidak ada baris yang dihapus atau ditambah otomatis.');
+        } else if (repairedRekapCount > 0) {
+          showToast('Sinkronisasi selesai. ' + repairedRekapCount + ' mapping baris rekap diperbaiki.');
+        } else if (result.updated) {
           showToast(stillViewing ? 'Folder baru berhasil disinkronkan dari Drive!' : 'Sinkronisasi selesai. Data aplikasi sudah diperbarui.');
         } else {
           showToast('Folder Drive sudah up-to-date.');
@@ -270,8 +280,13 @@
     trashModal?.addEventListener('click', e => { if (e.target === trashModal) closeModal_('trash-sub-modal'); });
     trashSubmitBtn?.addEventListener('click', () => submitTrashSub_(trashModal, trashSubmitBtn, currentTrashSubId));
 
-    document.getElementById('btn-sync-drive')?.addEventListener('click', () => syncDrive_(activity, false));
-    syncDrive_(activity, true);
+    // Sync Drive memutasi config/spreadsheet dan wajib sesi operator/admin.
+    // Jangan jalankan silent sync untuk guest: AUTH_ERROR akan memasang
+    // auth-pending dan menyembunyikan halaman publik di belakang modal login.
+    if (!isGuest()) {
+      document.getElementById('btn-sync-drive')?.addEventListener('click', () => syncDrive_(activity, false));
+      syncDrive_(activity, true);
+    }
 
     document.querySelector('[data-action="add-activity-sub"]')?.addEventListener('click', (e) => {
       var menu = e.target.closest('.sub-dropdown-menu');

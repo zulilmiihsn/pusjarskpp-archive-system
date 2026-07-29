@@ -13,8 +13,7 @@
     "clasp:push": "node scripts/generate-assets.js && clasp push",
     "deploy:staging": "node -e \"require('fs').copyFileSync('.clasp.staging.json', '.clasp.json')\" && npm run clasp:push",
     "deploy:prod": "node -e \"require('fs').copyFileSync('.clasp.prod.json', '.clasp.json')\" && npm run clasp:push",
-    "postinstall": "node scripts/generate-assets.js",
-    "sync": "node scripts/sync-gs-to-js.js"
+    "postinstall": "node scripts/generate-assets.js"
   },
   "keywords": [],
   "author": "",

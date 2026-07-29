@@ -166,6 +166,11 @@
     display: none;
   }
 
+  /* Fail closed: shell utama baru terlihat setelah auth selesai divalidasi. */
+  .app-shell.auth-pending {
+    visibility: hidden;
+  }
+
   .year-loading-overlay {
     position: fixed;
     inset: 0;

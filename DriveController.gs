@@ -88,6 +88,7 @@ const DriveController = {
       const log = ConfigRepository.getArchiveLogByFileId(payload.fileId);
       if (log && log.archive_id) {
         ConfigRepository.updateArchiveLog(log.archive_id, { final_file_name: (r && r.name) || payload.name });
+        CacheHelper.invalidate(log.year || payload.year);
       }
     } catch (syncError) {
       console.warn('renameArchiveFile: gagal sinkron nama ke archive_log: ' + syncError.message);
@@ -98,14 +99,13 @@ const DriveController = {
   },
   trashArchiveFile: function (payload) {
     payload = payload || {};
-    const actor = requireAuth_(payload);
+    const actor = requireArchiveDeletionRole_(payload);
     Validator.requireId(payload.fileId, 'File ID');
     requireWithinWorkspace_(payload.fileId, payload.year);
     const log = ConfigRepository.getArchiveLogByFileId(payload.fileId);
     if (log && log.archive_id) {
-       // Menghapus arsip final = admin-only. Escalate di sini, lalu pakai core
-       // (yang sudah atomik: hapus baris sheet + log + trash file).
-       requireAdmin_(payload);
+       // Role petugas/admin sudah tervalidasi. Core menghapus secara atomik:
+       // baris sheet + log + file Drive.
        ArchiveController._deleteArchiveCore_({ archiveId: log.archive_id, year: payload.year });
        auditAction_(actor, 'ARCHIVE_DELETED', {
          year: payload.year || log.year, activityId: log.activity_id, subActivityId: log.sub_activity_id,

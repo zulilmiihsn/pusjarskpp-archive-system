@@ -48,9 +48,12 @@ function sanitizeError_(message) {
  * @param {string} msg
  * @return {string}
  */
-function getErrorCode_(msg) {
-  const m = String(msg || '').toLowerCase();
-  if (m.indexOf('sesi login') >= 0 || m.indexOf('akses ditolak') >= 0 || m.indexOf('hanya admin') >= 0) return 'AUTH_ERROR';
+function getErrorCode_(errorOrMessage) {
+  if (errorOrMessage && errorOrMessage.errorCode) return errorOrMessage.errorCode;
+  const raw = errorOrMessage && errorOrMessage.message ? errorOrMessage.message : errorOrMessage;
+  const m = String(raw || '').toLowerCase();
+  if (m.indexOf('sesi login') >= 0 || m.indexOf('sesi telah berakhir') >= 0) return 'AUTH_ERROR';
+  if (m.indexOf('akses ditolak') >= 0 || m.indexOf('akses tidak ditemukan') >= 0 || m.indexOf('hanya admin') >= 0 || m.indexOf('access denied') >= 0 || m.indexOf('permission') >= 0 || m.indexOf('while accessing') >= 0) return 'ACCESS_DENIED';
   if (m.indexOf('terlalu banyak percobaan') >= 0) return 'RATE_LIMIT_ERROR';
   if (m.indexOf('wajib diisi') >= 0 || m.indexOf('tidak valid') >= 0 || m.indexOf('harus berupa teks') >= 0) return 'VALIDATION_ERROR';
   if (m.indexOf('tidak ditemukan') >= 0) return 'NOT_FOUND_ERROR';
@@ -66,15 +69,22 @@ function getErrorCode_(msg) {
  * @return {{success: boolean, data?: *, error?: string, errorCode?: string}}
  */
 function wrapApi(action) {
+  if (typeof resetRequestPortalUser_ === 'function') resetRequestPortalUser_();
   try {
     return { success: true, data: action() };
   } catch (error) {
     console.error(error.message);
-    const sanitizedMsg = sanitizeError_(error.message);
+    const errorCode = getErrorCode_(error);
+    let clientMessage = error.message;
+    if (errorCode === 'ACCESS_DENIED' && typeof logAccessDiagnostic_ === 'function') {
+      const diagnostic = logAccessDiagnostic_(error);
+      clientMessage = formatAccessDeniedMessage_(error, diagnostic);
+    }
+    const sanitizedMsg = sanitizeError_(clientMessage);
     return { 
       success: false, 
       error: sanitizedMsg,
-      errorCode: getErrorCode_(error.message)
+      errorCode: errorCode
     };
   }
 }
@@ -299,6 +309,11 @@ function cleanupTrashedSubActivities(payload) {
  * cleanupTrashedSubActivities (yang dipanggil user dan butuh sesi).
  */
 function runArchiveMaintenance() {
+  try {
+    cleanupExpiredSessions_();
+  } catch (error) {
+    console.error('runArchiveMaintenance: session cleanup gagal: ' + error.message);
+  }
   try {
     SubActivityController.cleanupTrashedSubActivities({});
     auditAction_({ displayName: 'Sistem' }, 'MAINTENANCE_CLEANUP', { message: 'Pembersihan harian sub-kegiatan terhapus (trigger)' });

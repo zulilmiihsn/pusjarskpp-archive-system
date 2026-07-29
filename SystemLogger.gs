@@ -12,7 +12,8 @@ const SystemLogger = {
       const sheet = getOrCreateSheet_(ss, SYSTEM_LOG_SHEET_NAME);
       ensureHeaders_(sheet, ['timestamp', 'level', 'user', 'action', 'message', 'metadata']);
       
-      const user = Session.getActiveUser().getEmail() || 'system';
+      const metaObject = metadata && typeof metadata === 'object' ? metadata : null;
+      const user = metaObject && metaObject.portalUsername ? String(metaObject.portalUsername) : 'system';
       const metaStr = metadata ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata)) : '';
       
       sheet.appendRow([

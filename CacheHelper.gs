@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_TTL_SECONDS = 600;
+const CACHE_TTL_SECONDS = 21600; // max TTL GAS CacheService (6 jam); aman krn tiap mutasi invalidate cache eksplisit
 const CACHE_KEY_PREFIX = 'cfg_';
 const CACHE_KEY_ALL = 'cfg_all';
 const CACHE_CHUNK_SIZE = 90000;

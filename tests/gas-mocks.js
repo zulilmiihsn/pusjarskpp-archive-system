@@ -48,6 +48,13 @@ global.Logger = {
 // Very basic Drive Mock
 const mockFiles = {};
 global.DriveApp = {
+  Access: {
+    PRIVATE: 'PRIVATE',
+    ANYONE_WITH_LINK: 'ANYONE_WITH_LINK'
+  },
+  Permission: {
+    VIEW: 'VIEW'
+  },
   getFileById: (id) => {
     if (!mockFiles[id]) throw new Error('File not found: ' + id);
     return mockFiles[id];
@@ -121,10 +128,10 @@ function loadGasScripts() {
   const root = path.resolve(__dirname, '..');
   const files = [
     'ConfigConstants.gs', 'ConfigHelpers.gs', 'PureFunctions.gs', 'ParseEngine.gs', 'SecurityHelpers.gs', 'ConfigRepository.gs',
-    'ConfigService.gs', 'DriveService.gs', 'SheetHelpers.gs', 'SpreadsheetService.gs', 
-    'WorkspaceSetup.gs', 'AuthService.gs', 'AccountController.gs', 'SettingsController.gs', 
+    'ConfigService.gs', 'CacheHelper.gs', 'DriveService.gs', 'SheetHelpers.gs', 'SpreadsheetService.gs', 
+    'WorkspaceSetup.gs', 'AuthService.gs', 'SystemLogger.gs', 'VersionService.gs', 'AccountController.gs', 'SettingsController.gs',
     'WorkspaceController.gs', 'TemplateController.gs', 'SubActivityController.gs', 'ArchiveController.gs',
-    'DriveController.gs'
+    'DriveController.gs', 'Code.gs'
   ];
   let fullCode = '';
   for (const f of files) {

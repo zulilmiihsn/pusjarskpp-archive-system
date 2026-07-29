@@ -33,7 +33,7 @@ Catatan penting:
 
 - Web app bisa membangun workspace dari folder `1. Arsip Latbang` yang dipilih user di Pengaturan.
 - Web app bekerja dari konfigurasi spreadsheet, supaya tahun dan sub-kegiatan bisa ditambah tanpa mengubah kode utama.
-- Folder `scripts/` disiapkan untuk tooling tambahan; saat ini verifikasi project ada di `scripts/verify-project.js`.
+- Folder `scripts/` berisi generator aset dan verifikasi project.
 
 ## Deployment dan Verifikasi
 
@@ -45,13 +45,13 @@ cmd /c npm test
 .\node_modules\.bin\clasp.cmd push
 ```
 
-Manifest production disetel untuk akses internal domain dan eksekusi sebagai pemilik deploy:
+Manifest production disetel untuk akun Google lintas domain dan eksekusi sebagai pemilik deploy:
 
 ```json
 {
   "webapp": {
     "executeAs": "USER_DEPLOYING",
-    "access": "DOMAIN"
+    "access": "ANYONE"
   }
 }
 ```

@@ -227,13 +227,18 @@ const ArchiveController = {
 
   deleteArchive: function (payload) {
     payload = payload || {};
-    // Menghapus arsip final = aksi sensitif → admin-only.
-    requireAdmin_(payload);
-    return ArchiveController._deleteArchiveCore_(payload);
+    const actor = requireArchiveDeletionRole_(payload);
+    const result = ArchiveController._deleteArchiveCore_(payload);
+    auditAction_(actor, 'ARCHIVE_DELETED', {
+      year: payload.year,
+      message: 'Menghapus arsip melalui portal: ' + payload.archiveId
+    });
+    bumpVersion();
+    return result;
   },
 
-  // Logika hapus tanpa cek otorisasi. Dipanggil oleh endpoint deleteArchive (admin)
-  // dan oleh DriveController.trashArchiveFile (yang sudah meng-escalate ke admin).
+  // Logika hapus tanpa cek otorisasi. Dipanggil oleh endpoint deleteArchive dan
+  // DriveController.trashArchiveFile setelah role petugas/admin tervalidasi.
   // JANGAN ekspos langsung ke client.
   _deleteArchiveCore_: function (payload) {
     payload = payload || {};

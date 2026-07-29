@@ -40,6 +40,56 @@ function auditActor_(payload) {
   }
 }
 
+function accessDeniedError_(failedCheck, message) {
+  const error = new Error(message || 'Akses ditolak.');
+  error.errorCode = 'ACCESS_DENIED';
+  error.accessCheck = failedCheck || 'UNKNOWN_ACCESS_CHECK';
+  return error;
+}
+
+function inferAccessCheck_(error) {
+  if (error && error.accessCheck) return error.accessCheck;
+  const message = String(error && error.message ? error.message : error || '').toLowerCase();
+  if (message.indexOf('permission') >= 0 || message.indexOf('access') >= 0) return 'PLATFORM_RESOURCE_ACCESS';
+  if (message.indexOf('tidak ditemukan') >= 0) return 'RESOURCE_NOT_FOUND_OR_HIDDEN';
+  return 'UNKNOWN_ACCESS_CHECK';
+}
+
+function accessDiagnosticsEnabled_() {
+  try {
+    return PropertiesService.getScriptProperties().getProperty('ACCESS_DIAGNOSTICS_ENABLED') !== 'false';
+  } catch (_) {
+    return true;
+  }
+}
+
+function logAccessDiagnostic_(error) {
+  const portalUser = getRequestPortalUser_() || {};
+  const diagnostic = {
+    googleEmail: detectedGoogleEmailForDiagnostics_(),
+    portalUsername: String(portalUser.username || ''),
+    portalRole: String(portalUser.role || ''),
+    failedCheck: inferAccessCheck_(error)
+  };
+  if (accessDiagnosticsEnabled_()) {
+    SystemLogger.warn('ACCESS_DENIED', String(error && error.message ? error.message : error || 'Akses ditolak.'), {
+      googleEmail: diagnostic.googleEmail,
+      portalUsername: diagnostic.portalUsername || '(tidak tersedia)',
+      portalRole: diagnostic.portalRole || '(tidak tersedia)',
+      failedCheck: diagnostic.failedCheck
+    });
+  }
+  return diagnostic;
+}
+
+function formatAccessDeniedMessage_(error, diagnostic) {
+  const username = diagnostic.portalUsername || '(tidak tersedia)';
+  const googleEmail = diagnostic.googleEmail || '(tidak tersedia)';
+  const check = diagnostic.failedCheck || 'UNKNOWN_ACCESS_CHECK';
+  const detail = String(error && error.message ? error.message : error || 'Akses ditolak.');
+  return 'Akses ditolak untuk username portal "' + username + '" (email Google terdeteksi: "' + googleEmail + '"). Pemeriksaan gagal: ' + check + '. ' + detail;
+}
+
 /**
  * Validasi URL yang dikirim client. Hanya izinkan skema http(s) untuk mencegah
  * stored-XSS lewat skema berbahaya (javascript:, data:, vbscript:).
@@ -89,6 +139,8 @@ function stripAccountSecrets_(account) {
 function requireAdminIfWorkspaceSecured_(payload) {
   const settings = ConfigService.getSettings();
   if (!settings.configSpreadsheetId) return null;
+  const sessionUser = AuthService.getCurrentUser(payload || {});
+  if (sessionUser && sessionUser.role !== 'guest') setRequestPortalUser_(sessionUser);
   let hasAdmin;
   try {
     hasAdmin = ConfigService.listAccounts().some(function (account) {
@@ -99,7 +151,7 @@ function requireAdminIfWorkspaceSecured_(payload) {
     // "boleh". Kalau dibiarkan return null, error transient bisa membuka jalan
     // mengubah configSpreadsheetId tanpa otorisasi.
     console.warn('Admin account check failed, denying for safety: ' + error.message);
-    throw new Error('Akses ditolak. Verifikasi akun admin gagal, coba lagi.');
+    throw accessDeniedError_('ADMIN_ACCOUNT_LOOKUP', 'Akses ditolak. Verifikasi akun admin gagal, coba lagi.');
   }
   if (!hasAdmin) return null; // benar-benar belum ada admin (bootstrap awal)
   return requireAdmin_(payload);
@@ -201,7 +253,7 @@ function _isWithinRoots_(id, roots, maxDepth) {
  */
 function requireWithinWorkspace_(itemId, year, allowedRootIds) {
   const id = cleanId_(itemId);
-  if (!id) throw new Error('Akses ditolak. ID item tidak valid.');
+  if (!id) throw accessDeniedError_('WORKSPACE_ITEM_ID', 'Akses ditolak. ID item tidak valid.');
   let roots;
   if (allowedRootIds && allowedRootIds.length) {
     roots = {};
@@ -214,11 +266,11 @@ function requireWithinWorkspace_(itemId, year, allowedRootIds) {
     // sengaja dirusak agar scope-check dilewati). Skip hanya saat benar-benar pra-init.
     let configured = false;
     try { configured = !!ConfigService.getSettings().configSpreadsheetId; } catch (e) { configured = false; }
-    if (configured) throw new Error('Akses ditolak. Ruang kerja tidak dapat diverifikasi.');
+    if (configured) throw accessDeniedError_('WORKSPACE_ROOTS', 'Akses ditolak. Ruang kerja tidak dapat diverifikasi.');
     console.warn('requireWithinWorkspace_: pra-init, scope-check dilewati untuk ' + id);
     return;
   }
   if (!_isWithinRoots_(id, roots, 12)) {
-    throw new Error('Akses ditolak. Item berada di luar ruang kerja.');
+    throw accessDeniedError_('WORKSPACE_SCOPE', 'Akses ditolak. Item berada di luar ruang kerja.');
   }
 }

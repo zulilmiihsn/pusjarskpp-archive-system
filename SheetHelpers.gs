@@ -172,63 +172,302 @@ function findRekapSheet_(ss) {
 
 function findOrCreateRekapRow_(sheet, activity, subActivity) {
   const existingRow = findRekapRowForSubActivity_(sheet, subActivity);
-  if (existingRow) return existingRow;
+  if (existingRow) {
+    writeRekapIdentityMarker_(sheet, existingRow, subActivity);
+    return existingRow;
+  }
   const created = SpreadsheetService.appendRekapRowIfPresent(activity, subActivity);
   if (created && created.rowNumber) return created.rowNumber;
   throw new Error('Baris rekap untuk sub-kegiatan tidak dapat dibuat.');
 }
 
-function findRekapRowForSubActivity_(sheet, subActivity) {
+function buildRekapIdentityMarker_(subActivity) {
+  const subActivityId = encodeURIComponent(String(subActivity && subActivity.sub_activity_id || ''));
+  const folderId = encodeURIComponent(String(subActivity && subActivity.folder_id || ''));
+  return 'PORTAL_ARSIP_ROW_ID|' + subActivityId + '|' + folderId;
+}
+
+function parseRekapIdentityMarker_(note) {
+  const prefix = 'PORTAL_ARSIP_ROW_ID|';
+  const line = String(note || '').split(/\r?\n/).find(function (item) {
+    return item.indexOf(prefix) === 0;
+  });
+  if (!line) return null;
+  const parts = line.split('|');
+  try {
+    return {
+      subActivityId: decodeURIComponent(parts[1] || ''),
+      folderId: decodeURIComponent(parts[2] || '')
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+function writeRekapIdentityMarker_(sheet, rowIndex, subActivity) {
+  if (!sheet || !rowIndex || !subActivity) return;
+  const headerMap = getRekapHeaderMap_(sheet);
+  const uraianCol = findRekapHeaderColumnFromMap_(headerMap, ['uraian informasi arsip', 'uraian informasi']) || 4;
+  const cell = sheet.getRange(rowIndex, uraianCol);
+  const prefix = 'PORTAL_ARSIP_ROW_ID|';
+  const existingLines = String(cell.getNote() || '').split(/\r?\n/).filter(function (line) {
+    return line && line.indexOf(prefix) !== 0;
+  });
+  existingLines.push(buildRekapIdentityMarker_(subActivity));
+  cell.setNote(existingLines.join('\n'));
+}
+
+function buildRekapRowLookup_(sheet) {
   const noteRow = findNoteRow_(sheet) || sheet.getLastRow() + 1;
-  if (noteRow <= REKAP_DATA_START_ROW) return null;
-
-  const configuredRow = Number(subActivity && subActivity.rekap_row_number);
-  if (configuredRow >= REKAP_DATA_START_ROW && configuredRow < noteRow) return configuredRow;
-
   const headerMap = getRekapHeaderMap_(sheet);
   const nomorBerkasCol = findRekapHeaderColumnFromMap_(headerMap, ['nomor berkas']) || 2;
   const uraianCol = findRekapHeaderColumnFromMap_(headerMap, ['uraian informasi arsip', 'uraian informasi']) || 4;
-  const width = Math.max(sheet.getLastColumn(), nomorBerkasCol, uraianCol);
-  const values = sheet.getRange(REKAP_DATA_START_ROW, 1, noteRow - REKAP_DATA_START_ROW, width).getDisplayValues();
+  const noLaciCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noLaci) || 8;
+  const noFolderCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noFolder) || 9;
+  const width = Math.max(sheet.getLastColumn(), nomorBerkasCol, uraianCol, noFolderCol);
+  if (noteRow <= REKAP_DATA_START_ROW) {
+    return {
+      startRow: REKAP_DATA_START_ROW,
+      noteRow: noteRow,
+      nomorBerkasCol: nomorBerkasCol,
+      uraianCol: uraianCol,
+      noLaciCol: noLaciCol,
+      noFolderCol: noFolderCol,
+      values: [],
+      formulas: [],
+      notes: []
+    };
+  }
+
+  const range = sheet.getRange(REKAP_DATA_START_ROW, 1, noteRow - REKAP_DATA_START_ROW, width);
+  const values = range.getDisplayValues();
+  let formulas = [];
+  let notes = [];
+  try { formulas = range.getFormulas(); } catch (e) { formulas = values.map(function (row) { return row.map(function () { return ''; }); }); }
+  try { notes = range.getNotes(); } catch (e) { notes = values.map(function (row) { return row.map(function () { return ''; }); }); }
+  return {
+    startRow: REKAP_DATA_START_ROW,
+    noteRow: noteRow,
+    nomorBerkasCol: nomorBerkasCol,
+    uraianCol: uraianCol,
+    noLaciCol: noLaciCol,
+    noFolderCol: noFolderCol,
+    values: values,
+    formulas: formulas,
+    notes: notes
+  };
+}
+
+function getRekapArchiveNumberFromLookup_(lookup, rowIndex, fallback) {
+  const index = Number(rowIndex) - lookup.startRow;
+  if (index >= 0 && index < lookup.values.length) {
+    const noFolder = String((lookup.values[index] || [])[lookup.noFolderCol - 1] || '').trim();
+    if (noFolder) return noFolder;
+  }
+  return String(fallback || '').trim();
+}
+
+function getRekapArchiveNumber_(sheet, rowIndex, fallback) {
+  const headerMap = getRekapHeaderMap_(sheet);
+  const noFolderCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noFolder);
+  if (noFolderCol) {
+    const noFolder = String(sheet.getRange(rowIndex, noFolderCol).getDisplayValue() || '').trim();
+    if (noFolder) return noFolder;
+  }
+  return String(fallback || '').trim();
+}
+
+function getNextAvailableRekapArchiveNumber_(lookup) {
+  const used = {};
+  (lookup.values || []).forEach(function (row) {
+    const value = String((row || [])[lookup.noFolderCol - 1] || '').trim();
+    if (/^\d+$/.test(value) && Number(value) > 0) used[Number(value)] = true;
+  });
+  let next = 1;
+  while (used[next]) next++;
+  return String(next);
+}
+
+function getDetailArchiveNumberForSubActivity_(ss, subActivity) {
+  const detailSheet = findExistingDetailSheet_(ss, subActivity);
+  if (!detailSheet) return '';
+  const data = getDetailDataValues_(detailSheet);
+  if (!data) return '';
+  const noBerkasCol = data.columnMap.no_berkas;
+  if (!noBerkasCol) return '';
+  for (let index = 0; index < data.values.length; index++) {
+    const value = String((data.values[index] || [])[noBerkasCol - 1] || '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
+/**
+ * Menyamakan Nomor Berkas pada semua baris rincian yang benar-benar berisi data.
+ * No Folder rincian tidak disentuh karena nilainya adalah Nomor Item Arsip (01, 02, ...).
+ */
+function writeDetailArchiveNumber_(sheet, archiveNumber) {
+  const data = getDetailDataValues_(sheet);
+  if (!data || !data.columnMap.no_berkas) return { changedRows: 0, dataRows: 0 };
+
+  const numberCol = data.columnMap.no_berkas;
+  const target = Number(archiveNumber);
+  const output = [];
+  let changedRows = 0;
+  let meaningfulRows = 0;
+
+  data.values.forEach(function (row) {
+    const metadata = {};
+    DETAIL_FIELD_ORDER.forEach(function (field, fallbackIndex) {
+      const col = data.columnMap[field] || (DETAIL_FALLBACK_START_COL + fallbackIndex);
+      metadata[field] = row[col - 1];
+    });
+    const current = row[numberCol - 1];
+    if (!hasMeaningfulDetailData_(metadata)) {
+      output.push([current]);
+      return;
+    }
+    meaningfulRows++;
+    if (String(current || '').trim() !== String(target)) changedRows++;
+    output.push([target]);
+  });
+
+  if (changedRows) {
+    sheet.getRange(DETAIL_DATA_START_ROW, numberCol, output.length, 1).setValues(output);
+  }
+  return { changedRows: changedRows, dataRows: meaningfulRows };
+}
+
+function rekapLookupRowHasFolderId_(lookup, index, folderId) {
+  if (!folderId) return false;
+  const formula = String((lookup.formulas[index] || [])[lookup.noLaciCol - 1] || '');
+  const note = parseRekapIdentityMarker_(String((lookup.notes[index] || [])[lookup.uraianCol - 1] || ''));
+  return formula.indexOf(folderId) >= 0 || !!(note && note.folderId === folderId);
+}
+
+function findStableRekapRowsFromLookup_(lookup, subActivity) {
+  const targetSubActivityId = String(subActivity && subActivity.sub_activity_id || '');
+  const targetFolderId = String(subActivity && subActivity.folder_id || '');
+  const markerRows = [];
+  const folderRows = [];
+
+  for (let i = 0; i < lookup.values.length; i++) {
+    const note = parseRekapIdentityMarker_(String((lookup.notes[i] || [])[lookup.uraianCol - 1] || ''));
+    if (targetSubActivityId && note && note.subActivityId === targetSubActivityId) markerRows.push(lookup.startRow + i);
+    if (targetFolderId && rekapLookupRowHasFolderId_(lookup, i, targetFolderId)) folderRows.push(lookup.startRow + i);
+  }
+
+  return markerRows.length ? markerRows : folderRows;
+}
+
+/**
+ * Mengembalikan baris yang terbukti mungkin milik sub-kegiatan.
+ * Fuzzy substring dilarang: "Angkatan I" bukan "Angkatan III/VIII/XII".
+ */
+function findPossibleRekapRowsFromLookup_(lookup, subActivity) {
+  if (!lookup || !lookup.values.length) return [];
+
   const targetName = normalizeComparableText_(getSubActivityFormalName_(subActivity));
   const folderName = normalizeComparableText_(subActivity && subActivity.sub_activity_name);
-  const targetSortOrder = normalizeComparableText_(subActivity && subActivity.sort_order);
-  const targetNoBerkas = normalizeComparableText_(subActivity && subActivity.no_berkas);
+  const possibleRows = {};
 
-  // Kecocokan PERSIS dulu, di SELURUH baris, urut prioritas. Substring TIDAK boleh
-  // dipakai lebih awal: nama mirip ("Laporan" vs "Laporan Akhir", atau "1." vs "11."
-  // setelah dinormalisasi) bisa membuat ringkasan tertulis ke baris sub-kegiatan
-  // yang SALAH dan diam-diam merusak data sub lain.
-  for (let i = 0; i < values.length; i++) {
-    const uraian = normalizeComparableText_(values[i][uraianCol - 1]);
-    if (targetName && uraian === targetName) return REKAP_DATA_START_ROW + i;
-  }
-  for (let i = 0; i < values.length; i++) {
-    const uraian = normalizeComparableText_(values[i][uraianCol - 1]);
-    if (folderName && uraian === folderName) return REKAP_DATA_START_ROW + i;
-  }
-  for (let i = 0; i < values.length; i++) {
-    const nomorBerkas = normalizeComparableText_(values[i][nomorBerkasCol - 1]);
-    if (targetNoBerkas && nomorBerkas === targetNoBerkas) return REKAP_DATA_START_ROW + i;
-    if (targetSortOrder && nomorBerkas === targetSortOrder) return REKAP_DATA_START_ROW + i;
-  }
+  findStableRekapRowsFromLookup_(lookup, subActivity).forEach(function (rowNumber) {
+    possibleRows[rowNumber] = true;
+  });
 
-  // Fallback substring HANYA bila tidak ada kecocokan persis DAN hasilnya unik
-  // (tepat satu baris). Kalau ambigu, kembalikan null — lebih baik gagal lembut
-  // daripada menebak dan merusak baris milik sub-kegiatan lain.
-  if (targetName) {
-    let fuzzyRow = -1;
-    let fuzzyCount = 0;
-    for (let i = 0; i < values.length; i++) {
-      const uraian = normalizeComparableText_(values[i][uraianCol - 1]);
-      if (uraian && (uraian.indexOf(targetName) >= 0 || targetName.indexOf(uraian) >= 0)) {
-        fuzzyCount++;
-        fuzzyRow = i;
-      }
+  for (let i = 0; i < lookup.values.length; i++) {
+    const uraian = normalizeComparableText_((lookup.values[i] || [])[lookup.uraianCol - 1]);
+    const exactName = !!((targetName && uraian === targetName) ||
+      (folderName && uraian === folderName));
+    if (exactName) {
+      possibleRows[lookup.startRow + i] = true;
     }
-    if (fuzzyCount === 1) return REKAP_DATA_START_ROW + fuzzyRow;
   }
+
+  return Object.keys(possibleRows).map(Number).sort(function (a, b) { return a - b; });
+}
+
+function findRekapRowForSubActivityFromLookup_(lookup, subActivity) {
+  if (!lookup || !lookup.values.length) return null;
+
+  const configuredRow = Number(subActivity && subActivity.rekap_row_number);
+  const configuredIndex = configuredRow - lookup.startRow;
+  const targetName = normalizeComparableText_(getSubActivityFormalName_(subActivity));
+  const folderName = normalizeComparableText_(subActivity && subActivity.sub_activity_name);
+  const stableRows = findStableRekapRowsFromLookup_(lookup, subActivity);
+
+  if (stableRows.length) {
+    if (stableRows.indexOf(configuredRow) !== -1) return configuredRow;
+    if (stableRows.length === 1) return stableRows[0];
+    const exactStableRows = stableRows.filter(function (rowNumber) {
+      const i = rowNumber - lookup.startRow;
+      const uraian = normalizeComparableText_((lookup.values[i] || [])[lookup.uraianCol - 1]);
+      return !!(targetName && uraian === targetName);
+    });
+    return exactStableRows.length === 1 ? exactStableRows[0] : null;
+  }
+
+  // rekap_row_number hanyalah hint posisi. Sort/insert dapat memindahkan baris.
+  // Percaya hint hanya jika identitas pada baris tersebut masih cocok dan tidak
+  // membawa marker milik sub-kegiatan lain.
+  if (configuredIndex >= 0 && configuredIndex < lookup.values.length) {
+    const configuredNote = parseRekapIdentityMarker_(
+      String((lookup.notes[configuredIndex] || [])[lookup.uraianCol - 1] || '')
+    );
+    const targetSubActivityId = String(subActivity && subActivity.sub_activity_id || '');
+    const noteConflicts = !!(configuredNote && targetSubActivityId &&
+      configuredNote.subActivityId && configuredNote.subActivityId !== targetSubActivityId);
+    const configuredUraian = normalizeComparableText_(
+      (lookup.values[configuredIndex] || [])[lookup.uraianCol - 1]
+    );
+    if (!noteConflicts && ((targetName && configuredUraian === targetName) ||
+        (folderName && configuredUraian === folderName))) {
+      return configuredRow;
+    }
+  }
+
+  // Hanya kecocokan PERSIS. Nama angka/Romawi tidak boleh diperlakukan sebagai
+  // substring: I berbeda dari III, V berbeda dari VIII, X berbeda dari XII.
+  const exactTargetRows = [];
+  const exactFolderRows = [];
+  for (let i = 0; i < lookup.values.length; i++) {
+    const uraian = normalizeComparableText_(lookup.values[i][lookup.uraianCol - 1]);
+    if (targetName && uraian === targetName) exactTargetRows.push(lookup.startRow + i);
+    if (folderName && uraian === folderName) exactFolderRows.push(lookup.startRow + i);
+  }
+  if (exactTargetRows.length === 1) return exactTargetRows[0];
+  if (exactFolderRows.length === 1) return exactFolderRows[0];
+
+  // Tanpa identitas atau nama persis, baris dianggap benar-benar belum ada.
   return null;
+}
+
+function findRekapRowForSubActivity_(sheet, subActivity) {
+  return findRekapRowForSubActivityFromLookup_(buildRekapRowLookup_(sheet), subActivity);
+}
+
+function rekapIdentityNeedsRepair_(lookup, rowIndex, activity, subActivity) {
+  const i = rowIndex - lookup.startRow;
+  if (i < 0 || i >= lookup.values.length) return true;
+  const values = lookup.values[i] || [];
+  const notes = lookup.notes[i] || [];
+  const marker = parseRekapIdentityMarker_(String(notes[lookup.uraianCol - 1] || ''));
+  const expectedId = String(subActivity && subActivity.sub_activity_id || '');
+  const expectedFolderId = String(subActivity && subActivity.folder_id || '');
+  const expectedName = normalizeComparableText_(getSubActivityFormalName_(subActivity));
+  const actualName = normalizeComparableText_(values[lookup.uraianCol - 1]);
+  const actualFolderNumber = normalizeComparableText_(values[lookup.noFolderCol - 1]);
+  const expectedNumber = actualFolderNumber ||
+    normalizeComparableText_(resolveSubActivityArchiveNumber_(subActivity, activity));
+  const actualNumber = normalizeComparableText_(values[lookup.nomorBerkasCol - 1]);
+  let locks = {};
+  try { locks = subActivity && subActivity.metadata_locks ? JSON.parse(subActivity.metadata_locks) : {}; } catch (e) {}
+
+  if (!marker || marker.subActivityId !== expectedId || marker.folderId !== expectedFolderId) return true;
+  if (expectedName && actualName !== expectedName) return true;
+  if (expectedNumber && actualNumber !== expectedNumber) return true;
+  if (locks.noLaci !== false && expectedFolderId && !rekapLookupRowHasFolderId_(lookup, i, expectedFolderId)) return true;
+  return false;
 }
 
 function buildRekapSummary_(ss, activity, subActivity, metadata) {
@@ -239,13 +478,13 @@ function buildRekapSummary_(ss, activity, subActivity, metadata) {
   const endDate = detailSummary.endDate || fallbackDate;
 
   return {
-    nomorBerkas: subActivity.sort_order || '',
+    nomorBerkas: resolveSubActivityArchiveNumber_(subActivity, activity),
     kodeKlasifikasi: subActivity.default_kode_klasifikasi || (typeof DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI !== 'undefined' ? DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI : ''),
     uraian: getSubActivityFormalName_(subActivity) || metadata.uraian_informasi_item || '',
     kurunWaktu: formatDateRange_(startDate, endDate),
     jumlah: detailSummary.sumLembar ? detailSummary.sumLembar + ' lembar' : '',
     noLaci: metadata.no_laci || activity.laci_no || '',
-    noFolder: subActivity.sort_order || '',
+    noFolder: resolveSubActivityArchiveNumber_(subActivity, activity),
     akses: detailSummary.akses || metadata.klasifikasi_akses || 'Terbatas',
     ket: metadata.ket || ''
   };
@@ -269,27 +508,48 @@ function writeRekapSummary_(sheet, rowIndex, summary) {
     .setVerticalAlignment('middle');
 }
 
-function writeRekapIdentity_(sheet, rowIndex, activity, subActivity) {
+function writeRekapIdentity_(sheet, rowIndex, activity, subActivity, options) {
   const headerMap = getRekapHeaderMap_(sheet);
-  const noFolder = subActivity && subActivity.no_folder
-    ? subActivity.no_folder
-    : (activity && activity.folder_no) || '';
+  const respectManualLocks = !!(options && options.respectManualLocks);
+  let locks = {};
+  try { locks = subActivity && subActivity.metadata_locks ? JSON.parse(subActivity.metadata_locks) : {}; } catch (e) {}
+  const noFolder = getRekapArchiveNumber_(
+    sheet,
+    rowIndex,
+    resolveSubActivityArchiveNumber_(subActivity, activity)
+  );
   const identity = {
-    nomorBerkas: subActivity && subActivity.sort_order ? subActivity.sort_order : '',
+    nomorBerkas: noFolder,
     kodeKlasifikasi: (subActivity && subActivity.default_kode_klasifikasi) || (typeof DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI !== 'undefined' ? DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI : ''),
     uraian: getSubActivityFormalName_(subActivity),
     noLaci: activity && activity.laci_no ? activity.laci_no : '',
-    noFolder: subActivity.sort_order || '',
+    noFolder: noFolder,
     akses: 'Terbatas'
   };
 
-  setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, identity.nomorBerkas, false);
+  setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, identity.nomorBerkas, true);
   setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.kodeKlasifikasi, identity.kodeKlasifikasi, true);
   setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.uraian, identity.uraian, true);
-  setRekapFilingCabinetCell_(sheet, rowIndex, headerMap, activity, false);
-  setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noLaci, identity.noLaci, true);
-  setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noFolder, identity.noFolder, true);
-  setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.akses, identity.akses, false);
+  if (!respectManualLocks || locks.filingCabinet !== false) {
+    setRekapFilingCabinetCell_(sheet, rowIndex, headerMap, activity, false);
+  }
+  if (!respectManualLocks || locks.noLaci !== false) {
+    const noLaciCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noLaci);
+    if (noLaciCol && subActivity && subActivity.folder_id) {
+      const displayText = String(subActivity.sub_activity_name || '').replace(/"/g, '""').replace(/\n/g, '" & CHAR(10) & "');
+      const hsep = typeof formulaSep_ === 'function' ? formulaSep_(sheet.getParent()) : ';';
+      sheet.getRange(rowIndex, noLaciCol).setFormula(
+        '=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '"' + hsep + ' "' + displayText + '")'
+      );
+    } else {
+      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noLaci, identity.noLaci, true);
+    }
+  }
+  setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noFolder, identity.noFolder, false);
+  if (!respectManualLocks || locks.akses !== false) {
+    setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.akses, identity.akses, false);
+  }
+  writeRekapIdentityMarker_(sheet, rowIndex, subActivity);
   sheet.getRange(rowIndex, REKAP_FALLBACK_START_COL, 1, Math.max(findLastRekapHeaderColumn_(sheet) - REKAP_FALLBACK_START_COL + 1, 1))
     .setBorder(true, true, true, true, true, true)
     .setWrap(true)
@@ -298,17 +558,18 @@ function writeRekapIdentity_(sheet, rowIndex, activity, subActivity) {
 
 // Sel "No. Filing Cabinet" di Rekap = hyperlink: teks "<laci_no>. Laci <nama kegiatan>",
 // link ke folder Drive laci. (Menggantikan angka lemari statis '02' yang lama.)
-function buildFilingCabinetFormula_(activity) {
+function buildFilingCabinetFormula_(activity, sheet) {
   if (!activity || !activity.laci_no || !activity.laci_folder_id) return null;
-  const text = (activity.laci_no + '. Laci ' + activity.activity_name).replace(/"/g, '""');
-  return '=HYPERLINK("https://drive.google.com/drive/folders/' + activity.laci_folder_id + '", "' + text + '")';
+  const text = (activity.laci_no + '. Laci ' + activity.activity_name).replace(/"/g, '""').replace(/\n/g, '" & CHAR(10) & "');
+  const s = formulaSep_(sheet);
+  return '=HYPERLINK("https://drive.google.com/drive/folders/' + activity.laci_folder_id + '"' + s + ' "' + text + '")';
 }
 
 function setRekapFilingCabinetCell_(sheet, rowIndex, headerMap, activity, overwrite) {
   const column = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.filingCabinet);
   if (!column) return;
   const cell = sheet.getRange(rowIndex, column);
-  const formula = buildFilingCabinetFormula_(activity);
+  const formula = buildFilingCabinetFormula_(activity, sheet);
   if (formula) {
     if (!overwrite && (cell.getFormula() || cell.getDisplayValue())) return;
     cell.setFormula(formula);
@@ -869,19 +1130,44 @@ function getDetailColumnLetter_(sheet, field, fallbackLetter) {
   return fallbackLetter;
 }
 
-// Pemisah argumen formula. Range.setFormula() di GAS SELALU memakai konvensi US
-// (koma), apa pun locale spreadsheet — locale hanya memengaruhi tampilan di UI,
-// bukan formula yang dikirim lewat API. Jadi koma benar untuk semua locale.
-// Dipertahankan sebagai satu titik ubah bila suatu saat perlu disesuaikan.
-function formulaSep_() {
-  return ',';
+// Pemisah argumen formula beda per locale spreadsheet: id_ID (& semua locale
+// desimal-koma) pakai ';', US/desimal-titik pakai ','.
+// Project ini standalone, jadi Document Properties dapat null. Gunakan locale
+// langsung dan memo per-eksekusi; jangan menulis sel spreadsheet sebagai probe.
+function formulaSep_(ssOrSheet) {
+  var ss;
+  if (!ssOrSheet) return ';';
+  if (typeof ssOrSheet.getParent === 'function') {
+    try { ss = ssOrSheet.getParent(); } catch (e) { return ';'; }
+  } else {
+    ss = ssOrSheet;
+  }
+  if (!ss || typeof ss.getId !== 'function') return ';';
+
+  // Memo per-eksekusi
+  if (!formulaSep_._m) formulaSep_._m = {};
+  var ssId;
+  try { ssId = ss.getId(); } catch (e) { return ';'; }
+  if (formulaSep_._m[ssId] !== undefined) return formulaSep_._m[ssId];
+
+  var sep = ';';
+  try {
+    var locale = String(ss.getSpreadsheetLocale() || '').toLowerCase();
+    sep = /^(id|de|fr|it|nl|pt|es|ru|tr|pl|cs|da|fi|el|hu|nb|nn|ro|sk|sl|sv|uk|vi)(_|-|$)/.test(locale)
+      ? ';'
+      : ',';
+  } catch (e) {
+    console.warn('formulaSep_ locale gagal: ' + e.message);
+  }
+  formulaSep_._m[ssId] = sep;
+  return sep;
 }
 
 function buildKurunWaktuFormula_(detailSheet) {
   const ref = detailSheetFormulaRef_(detailSheet);
   const colLetter = getDetailColumnLetter_(detailSheet, 'tanggal', 'F');
   const rangeRef = ref + '!' + colLetter + '9:' + colLetter;
-  const s = formulaSep_();
+  const s = formulaSep_(detailSheet);
   return "=IF(COUNT(" + rangeRef + ")>0" + s + " TEXT(MIN(" + rangeRef + ")" + s + " \"d mmmm yyyy\") & \" - \" & TEXT(MAX(" + rangeRef + ")" + s + " \"d mmmm yyyy\")" + s + " \"\")";
 }
 
@@ -890,7 +1176,7 @@ function buildJumlahFormula_(detailSheet) {
   const ref = detailSheetFormulaRef_(detailSheet);
   const jumlahLetter = getDetailColumnLetter_(detailSheet, 'jumlah', 'H');
   const sumRange = ref + '!' + jumlahLetter + '9:' + jumlahLetter;
-  const s = formulaSep_();
+  const s = formulaSep_(detailSheet);
   return "=IF(COUNT(" + sumRange + ")>0" + s + " SUM(" + sumRange + ") & \" lembar\"" + s + " \"\")";
 }
 
@@ -898,7 +1184,7 @@ function buildAksesFormula_(detailSheet) {
   const ref = detailSheetFormulaRef_(detailSheet);
   const colLetter = getDetailColumnLetter_(detailSheet, 'klasifikasi_akses', 'M');
   const rangeRef = ref + '!' + colLetter + '9:' + colLetter;
-  const s = formulaSep_();
+  const s = formulaSep_(detailSheet);
   return "=IFERROR(TEXTJOIN(\" & \"" + s + " TRUE" + s + " UNIQUE(FILTER(" + rangeRef + s + " " + rangeRef + "<>\"\")))" + s + " \"Terbatas\")";
 }
 

@@ -57,15 +57,19 @@ const SubActivityController = {
         spreadsheetFileId: spreadsheet ? spreadsheet.getId() : activity.spreadsheet_file_id
       }, folder);
 
-      if (subRow && subRow._shiftedSubActivities && subRow._shiftedSubActivities.length > 0) {
-        SpreadsheetService.cascadeNomorBerkasShift(year, subRow._shiftedSubActivities);
-      }
-
       SpreadsheetService.ensureSubActivitySheet(activity, subRow);
       const rekap = subRow.rekap_row_number
         ? SpreadsheetService.updateRekapSubActivityIdentity(activity, null, subRow)
         : SpreadsheetService.appendRekapRowIfPresent(activity, subRow);
       subRow = persistRekapRowNumber_(year, activity, subRow, rekap) || subRow;
+      const numberingRepair = SpreadsheetService.reconcileGlobalArchiveNumbers(year, { apply: true });
+      const assignedNumber = numberingRepair.assignments.find(function (assignment) {
+        return assignment.subActivityId === subRow.sub_activity_id;
+      });
+      if (assignedNumber) {
+        subRow.sort_order = assignedNumber.globalNumber;
+        subRow.local_sort_order = assignedNumber.localSortOrder;
+      }
 
       // Mirror folder to 2. Dokumen
       ensureDokumenMirrorSubActivity_(activity.target_folder_id, subActivityName, parentFolderName);
@@ -77,6 +81,7 @@ const SubActivityController = {
         newSubId: subRow.sub_activity_id,
         folder: DriveService.folderToDto(folder),
         rekap: rekap,
+        numberingRepair: numberingRepair,
         bootstrap: WorkspaceController.getBootstrap()
       };
     }, 30000);
@@ -301,9 +306,27 @@ const SubActivityController = {
 
       if (_syncDeactivateMissing_(year, activity, existingSubs, liveFolderIds, migratedHeirIds)) updated = true;
 
+      // Satu rekonsiliasi global menjadi sumber nomor seluruh kegiatan pada tahun ini.
+      // Ini juga membuat baris rekap yang hilang dan menyegarkan pointer setelah sort.
+      const rekapRepair = SpreadsheetService.reconcileGlobalArchiveNumbers(year, { apply: true });
+      const repairedCount = rekapRepair.configCellsUpdated +
+        rekapRepair.detailRowsUpdated +
+        rekapRepair.repairedPointers +
+        rekapRepair.createdRows +
+        rekapRepair.inactiveRowsCleared;
+      if (repairedCount > 0) updated = true;
+
       if (updated) CacheHelper.invalidate(year);
-      if (updated) auditAction_(actor, 'SUBACT_SYNCED', { year: year, activityId: activity.activity_id, message: 'Sinkronisasi sub-kegiatan dari folder Drive' });
-      return { updated: updated, bootstrap: WorkspaceController.getBootstrap() };
+      if (updated) auditAction_(actor, 'SUBACT_SYNCED', {
+        year: year,
+        activityId: activity.activity_id,
+        message: 'Sinkronisasi sub-kegiatan dari folder Drive; perbaikan rekap: ' + repairedCount
+      });
+      return {
+        updated: updated,
+        rekapRepair: rekapRepair,
+        bootstrap: WorkspaceController.getBootstrap()
+      };
     }, 30000);
   },
 
@@ -323,12 +346,14 @@ const SubActivityController = {
       if (!existingSub) throw new Error('Sub-kegiatan tidak ditemukan.');
 
       const removed = ConfigRepository.deactivateSubActivity(year, activity.activity_id, existingSub.sub_activity_id, SUB_ACTIVITY_INACTIVE_REASON.MANUAL);
+      let numberingRepair = null;
       if (removed > 0) {
         SpreadsheetService.markRekapSubActivityInactive(activity, existingSub, SUB_ACTIVITY_INACTIVE_REASON.MANUAL);
+        numberingRepair = SpreadsheetService.reconcileGlobalArchiveNumbers(year, { apply: true });
       }
       CacheHelper.invalidate(year);
       auditAction_(actor, 'SUBACT_DELETED', { year: year, activityId: activity.activity_id, subActivityId: existingSub.sub_activity_id, message: 'Menonaktifkan sub-kegiatan: ' + (existingSub.sub_activity_name || existingSub.sub_activity_id) });
-      return { success: removed > 0, bootstrap: WorkspaceController.getBootstrap() };
+      return { success: removed > 0, numberingRepair: numberingRepair, bootstrap: WorkspaceController.getBootstrap() };
     }, 30000);
   },
 
@@ -356,12 +381,14 @@ const SubActivityController = {
       }
 
       const removed = ConfigRepository.deactivateSubActivity(year, activity.activity_id, existingSub.sub_activity_id, SUB_ACTIVITY_INACTIVE_REASON.DRIVE_TRASHED);
+      let numberingRepair = null;
       if (removed > 0) {
         SpreadsheetService.markRekapSubActivityInactive(activity, existingSub, SUB_ACTIVITY_INACTIVE_REASON.DRIVE_TRASHED);
+        numberingRepair = SpreadsheetService.reconcileGlobalArchiveNumbers(year, { apply: true });
       }
       CacheHelper.invalidate(year);
       auditAction_(actor, 'SUBACT_TRASHED', { year: year, activityId: activity.activity_id, subActivityId: existingSub.sub_activity_id, folderId: existingSub.folder_id, message: 'Memindahkan folder sub-kegiatan ke Tempat Sampah: ' + (existingSub.sub_activity_name || existingSub.sub_activity_id) });
-      return { success: removed > 0, folderId: existingSub.folder_id, bootstrap: WorkspaceController.getBootstrap() };
+      return { success: removed > 0, folderId: existingSub.folder_id, numberingRepair: numberingRepair, bootstrap: WorkspaceController.getBootstrap() };
     }, 30000);
   },
 
@@ -484,15 +511,17 @@ const SubActivityController = {
         return sub.sub_activity_id === payload.subActivityId;
       });
     const result = ConfigRepository.restoreSubActivity(year, payload.activityId, payload.subActivityId);
+    let numberingRepair = null;
     if (result > 0 && activity && subActivity) {
-      SpreadsheetService.updateRekapSubActivityIdentity(activity, subActivity, subActivity);
+      numberingRepair = SpreadsheetService.reconcileGlobalArchiveNumbers(year, { apply: true });
       SpreadsheetService.clearRekapSubActivityInactiveMark(activity, subActivity);
       CacheHelper.invalidate(year);
     } else if (result > 0) {
+      numberingRepair = SpreadsheetService.reconcileGlobalArchiveNumbers(year, { apply: true });
       CacheHelper.invalidate(year);
     }
     if (result > 0) auditAction_(actor, 'SUBACT_RESTORED', { year: year, activityId: payload.activityId, subActivityId: payload.subActivityId, message: 'Memulihkan sub-kegiatan' });
-    return { success: result > 0, bootstrap: WorkspaceController.getBootstrap() };
+    return { success: result > 0, numberingRepair: numberingRepair, bootstrap: WorkspaceController.getBootstrap() };
   },
 
   purgeSubActivity: function (payload) {
@@ -503,9 +532,13 @@ const SubActivityController = {
     Validator.requireString(payload.subActivityId, 'Sub Activity ID');
 
     const result = ConfigRepository.purgeSubActivity(year, payload.activityId, payload.subActivityId);
-    if (result > 0) CacheHelper.invalidate(year);
+    let numberingRepair = null;
+    if (result > 0) {
+      numberingRepair = SpreadsheetService.reconcileGlobalArchiveNumbers(year, { apply: true });
+      CacheHelper.invalidate(year);
+    }
     if (result > 0) auditAction_(actor, 'SUBACT_PURGED', { year: year, activityId: payload.activityId, subActivityId: payload.subActivityId, message: 'Menghapus permanen sub-kegiatan dari config' });
-    return { success: result > 0, bootstrap: WorkspaceController.getBootstrap() };
+    return { success: result > 0, numberingRepair: numberingRepair, bootstrap: WorkspaceController.getBootstrap() };
   },
 
   updateSubActivityMetadata: function (payload) {
@@ -759,9 +792,6 @@ function _syncAddNewEntry_(entry, folder, folderName, activity, year, spreadshee
     spreadsheetFileId: spreadsheetFileId
   }, folder);
 
-  if (subRow && subRow._shiftedSubActivities && subRow._shiftedSubActivities.length > 0) {
-    SpreadsheetService.cascadeNomorBerkasShift(year, subRow._shiftedSubActivities);
-  }
   SpreadsheetService.ensureSubActivitySheet(activity, subRow);
   const rekap = SpreadsheetService.appendRekapRowIfPresent(activity, subRow);
   persistRekapRowNumber_(year, activity, subRow, rekap);

@@ -980,7 +980,7 @@
           showToast('Ruang kerja berhasil direset. ' + resetResult.removed + ' spreadsheet dihapus.');
           if (resetModal) hideElementAnimated(resetModal);
           state.currentUser = { role: 'guest', username: '', displayName: 'Tamu' };
-          localStorage.removeItem('portal_session_id');
+          clearSessionToken();
           state.bootstrap = null;
           if (typeof loadBootstrap === 'function') {
             state.bootstrap = null;
@@ -1029,7 +1029,7 @@
           }
           
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.sessionId) {
-            localStorage.setItem('portal_session_id', state.bootstrap.workspaceSetup.sessionId);
+            setSessionToken(state.bootstrap.workspaceSetup.sessionId);
             // Segera jadikan admin agar reload tidak mengejutkan dan dashboard di latar berubah
             state.currentUser = { role: 'admin', username: 'admin', displayName: 'Administrator' };
           }
@@ -1230,6 +1230,7 @@
       // Workspace & admin
       'WORKSPACE_INIT': 'Inisialisasi Ruang Kerja',
       'WORKSPACE_RESET': 'Reset Ruang Kerja',
+      'FILES_SYNCED': 'Sinkronisasi Berkas',
       'YEAR_DELETED': 'Hapus Tahun',
       'SETTINGS_SAVED': 'Ubah Pengaturan',
       'ACTIVITY_MAPPING_UPDATED': 'Ubah Mapping Kegiatan',
@@ -1523,7 +1524,7 @@
           }
           
           if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.sessionId) {
-            localStorage.setItem('portal_session_id', state.bootstrap.workspaceSetup.sessionId);
+            setSessionToken(state.bootstrap.workspaceSetup.sessionId);
             state.currentUser = { role: 'admin', username: 'admin', displayName: 'Administrator' };
           }
 

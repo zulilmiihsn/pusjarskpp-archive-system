@@ -196,7 +196,7 @@
                 <td>
                   ${statusBadge(row.status)}
                   ${String(row.status || '').toUpperCase() === STATUS_ENUM.DRAFT ? `<div class="mt-6 flex gap-4"><button class="btn btn-sm btn-outline resume-draft-btn" data-row='${esc(encodeURIComponent(JSON.stringify(row)))}'>Lanjutkan</button><button class="btn btn-sm btn-danger delete-draft-btn" data-row='${esc(encodeURIComponent(JSON.stringify(row)))}'>Hapus</button></div>` : ''}
-                  ${(String(row.status || '').toUpperCase() === STATUS_ENUM.COMPLETED || String(row.status || '').toUpperCase() === STATUS_ENUM.SUCCESS) ? `<div class="mt-6 flex gap-4"><button class="btn btn-sm btn-outline edit-metadata-btn" data-row='${esc(encodeURIComponent(JSON.stringify(row)))}'>Edit Metadata</button><button class="btn btn-sm btn-danger delete-archive-btn" data-row='${esc(encodeURIComponent(JSON.stringify(row)))}'>Hapus Arsip</button></div>` : ''}
+                  ${(String(row.status || '').toUpperCase() === STATUS_ENUM.COMPLETED || String(row.status || '').toUpperCase() === STATUS_ENUM.SUCCESS) ? `<div class="mt-6 flex gap-4"><button class="btn btn-sm btn-outline edit-metadata-btn" data-row='${esc(encodeURIComponent(JSON.stringify(row)))}'>Edit Metadata</button>${isGuest() ? '' : `<button class="btn btn-sm btn-danger delete-archive-btn" data-row='${esc(encodeURIComponent(JSON.stringify(row)))}'>Hapus Arsip</button>`}</div>` : ''}
                 </td>
               </tr>
             `).join('')}

@@ -229,27 +229,192 @@
     console.error('init nav error:', e);
   }
 
-  getSessionUser();
-  google.script.url.getLocation(onLocationChange);
+  initializeApplication();
   setTimeout(bindSearchBar, 100);
 }
 
-  async function getSessionUser() {
-    try {
-      state.currentUser = await api('getCurrentUser');
-      if (state.currentUser.role === 'guest') {
-        localStorage.removeItem('portal_session_id');
+  function getInitialLocation_() {
+    return new Promise(function (resolve) {
+      let settled = false;
+      const finish = function (location) {
+        if (settled) return;
+        settled = true;
+        resolve(location || { parameter: {} });
+      };
+      try {
+        google.script.url.getLocation(finish);
+        window.setTimeout(function () { finish({ parameter: {} }); }, 3000);
+      } catch (_) {
+        finish({ parameter: {} });
       }
-    } catch (e) {
-      console.error('getCurrentUser failed:', e);
-      state.currentUser = { role: 'guest', username: '', displayName: 'Tamu' };
-      localStorage.removeItem('portal_session_id');
+    });
+  }
+
+  function applyRouteParams_(params) {
+    params = params || {};
+    state.view = params.view || 'dashboard';
+    state.selectedActivityId = params.activityId || null;
+    state.selectedSubActivityId = params.subActivityId || null;
+    state.selectedFolderId = params.folderId || null;
+    state.selectedFolderName = params.folderName || null;
+    state.selectedFolderBreadcrumb = params.folderBreadcrumb ? String(params.folderBreadcrumb).split('|').filter(Boolean) : [];
+    state.preselectedActivityId = params.preselectedActivityId || null;
+    state.preselectedSubActivityId = params.preselectedSubActivityId || null;
+    state.preselectedTargetFolderId = params.targetFolderId || null;
+    state.preselectedTargetFolderName = params.targetFolderName || null;
+    state.preselectedFolderBreadcrumb = params.folderBreadcrumb ? String(params.folderBreadcrumb).split('|').filter(Boolean) : [];
+  }
+
+  function rememberPendingRoute_(params) {
+    state.pendingRoute = Object.assign({}, params || {});
+    applyRouteParams_(state.pendingRoute);
+  }
+
+  function currentRouteParams_() {
+    const params = { view: state.view || 'dashboard' };
+    if (state.selectedActivityId) params.activityId = state.selectedActivityId;
+    if (state.selectedSubActivityId) params.subActivityId = state.selectedSubActivityId;
+    if (state.selectedFolderId) params.folderId = state.selectedFolderId;
+    if (state.selectedFolderName) params.folderName = state.selectedFolderName;
+    if (state.preselectedActivityId) params.preselectedActivityId = state.preselectedActivityId;
+    if (state.preselectedSubActivityId) params.preselectedSubActivityId = state.preselectedSubActivityId;
+    if (state.preselectedTargetFolderId) params.targetFolderId = state.preselectedTargetFolderId;
+    if (state.preselectedTargetFolderName) params.targetFolderName = state.preselectedTargetFolderName;
+    const breadcrumb = state.selectedFolderBreadcrumb && state.selectedFolderBreadcrumb.length
+      ? state.selectedFolderBreadcrumb
+      : state.preselectedFolderBreadcrumb;
+    if (breadcrumb && breadcrumb.length) params.folderBreadcrumb = breadcrumb.join('|');
+    return params;
+  }
+
+  function replaceRouteHistory_(params) {
+    if (!window.google || !google.script || !google.script.history ||
+        typeof google.script.history.replace !== 'function') return;
+    google.script.history.replace(null, params || { view: 'dashboard' }, null);
+  }
+
+  function showGuestLoginPrompt_(returnRoute) {
+    if (returnRoute && !isRestrictedForGuest(returnRoute.view || 'dashboard')) {
+      state.loginReturnRoute = Object.assign({}, returnRoute);
     }
-    if (typeof renderLogoutBar === 'function') renderLogoutBar();
-    applyRoleVisibility();
-    populateDashboardNav();
-    document.getElementById('app').classList.remove('loading');
-    if (typeof loadBootstrap === 'function' && !state.bootstrap) loadBootstrap();
+    if (!state.loginReturnRoute) state.loginReturnRoute = { view: 'dashboard' };
+
+    const app = document.getElementById('app');
+    const canKeepSafeBackground = !!(state.bootstrap &&
+      !isRestrictedForGuest(state.loginReturnRoute.view || 'dashboard'));
+    if (app) app.classList.toggle('auth-pending', !canKeepSafeBackground);
+
+    if (!state._loginPromptShown) {
+      state._loginPromptShown = true;
+      showLoginModal();
+    }
+  }
+
+  function safeGuestReturnRouteFor_(restrictedRoute) {
+    restrictedRoute = restrictedRoute || {};
+    const activityId = restrictedRoute.activityId || restrictedRoute.preselectedActivityId || '';
+    return activityId
+      ? { view: 'activity_detail', activityId: activityId }
+      : { view: 'dashboard' };
+  }
+
+  async function prepareRestrictedGuestRoute_(restrictedRoute, returnRoute) {
+    const targetRoute = Object.assign({}, restrictedRoute || currentRouteParams_());
+    const safeRoute = returnRoute || safeGuestReturnRouteFor_(targetRoute);
+    state.pendingRoute = targetRoute;
+    state.loginReturnRoute = safeRoute;
+
+    // Deep-link/reload ke halaman terbatas belum memiliki halaman aman di DOM.
+    // Render halaman kegiatan/dashboard guest terlebih dahulu agar modal tidak
+    // berdiri di atas shell putih.
+    if (!state.bootstrap) {
+      applyRouteParams_(safeRoute);
+      await loadBootstrap();
+    }
+
+    // Tujuan terbatas tetap dipertahankan untuk dilanjutkan setelah login sukses,
+    // sementara DOM tetap berisi halaman guest aman sebagai background modal.
+    applyRouteParams_(targetRoute);
+    state.pendingRoute = targetRoute;
+    showGuestLoginPrompt_(safeRoute);
+  }
+
+  function cancelGuestLoginPrompt_() {
+    const app = document.getElementById('app');
+
+    // Jika pemeriksaan sesi gagal, batal login berarti turun aman menjadi guest.
+    if (!state.authReady || !state.currentUser) {
+      clearSessionToken();
+      state.currentUser = { role: 'guest', username: '', displayName: 'Tamu' };
+      state.authReady = true;
+    }
+
+    if (state.currentUser.role === 'guest' && isRestrictedForGuest(state.view)) {
+      let fallback = state.loginReturnRoute || { view: 'dashboard' };
+      if (isRestrictedForGuest(fallback.view || 'dashboard')) fallback = { view: 'dashboard' };
+      state.pendingRoute = null;
+      state.loginReturnRoute = null;
+      applyRouteParams_(fallback);
+      if (app) app.classList.remove('auth-pending');
+      replaceRouteHistory_(fallback);
+      if (state.bootstrap) render();
+      else loadBootstrap();
+      return;
+    }
+
+    state.loginReturnRoute = null;
+    if (app) app.classList.remove('auth-pending');
+    if (!state.bootstrap && state.authReady) loadBootstrap();
+  }
+
+  async function initializeApplication() {
+    showLoading('Memverifikasi sesi...');
+    const location = await getInitialLocation_();
+    const params = location.parameter || {};
+    state.initialUrlProcessed = true;
+    rememberPendingRoute_(params);
+
+    try {
+      await getSessionUser();
+      if (isRestrictedForGuest(state.view)) {
+        await prepareRestrictedGuestRoute_(
+          state.pendingRoute || currentRouteParams_(),
+          safeGuestReturnRouteFor_(state.pendingRoute || currentRouteParams_())
+        );
+        return;
+      }
+      state.pendingRoute = null;
+      await loadBootstrap();
+    } catch (error) {
+      // Fail closed: jangan render UI utama bila validasi sesi sendiri gagal.
+      state._loginPromptShown = true;
+      showLoginModal();
+      window.setTimeout(function () {
+        const errorEl = document.getElementById('login-error');
+        const errorText = document.getElementById('login-error-text');
+        if (errorEl && errorText) {
+          errorText.textContent = errorMessage(error);
+          errorEl.style.display = 'flex';
+        }
+      }, 0);
+    }
+  }
+
+  async function getSessionUser() {
+    const requestGeneration = getAuthGeneration();
+    try {
+      const user = await api('getCurrentUser');
+      // Respons auth lama tidak boleh menimpa login yang lebih baru.
+      if (requestGeneration !== getAuthGeneration()) return state.currentUser;
+      state.currentUser = user;
+      if (state.currentUser.role === 'guest') clearSessionToken();
+    } catch (e) {
+      if (requestGeneration !== getAuthGeneration()) return state.currentUser;
+      console.error('getCurrentUser failed:', e);
+      throw e;
+    }
+    state.authReady = true;
+    return state.currentUser;
   }
 
   const GUEST_ALLOWED = ['dashboard', 'templates'];
@@ -336,32 +501,32 @@
 
   function onLocationChange(location) {
     const params = location.parameter || {};
-    
-    if (!state.initialUrlProcessed) {
-      state.initialUrlProcessed = true;
-      if (state.userNavigated) return;
-    } else {
-      const locView = params.view || 'dashboard';
-      if (locView === state.view &&
-          (params.activityId || null) === state.selectedActivityId &&
-          (params.subActivityId || null) === state.selectedSubActivityId &&
-          (params.folderId || null) === state.selectedFolderId) {
-        return;
-      }
-    }
+    const locView = params.view || 'dashboard';
+    if (state.authReady && locView === state.view &&
+        (params.activityId || null) === state.selectedActivityId &&
+        (params.subActivityId || null) === state.selectedSubActivityId &&
+        (params.folderId || null) === state.selectedFolderId) return;
 
-    const view = params.view || 'dashboard';
-    state.view = view;
-    state.selectedActivityId = params.activityId || null;
-    state.selectedSubActivityId = params.subActivityId || null;
-    state.selectedFolderId = params.folderId || null;
-    state.selectedFolderName = params.folderName || null;
-    state.selectedFolderBreadcrumb = params.folderBreadcrumb ? String(params.folderBreadcrumb).split('|').filter(Boolean) : [];
-    state.preselectedActivityId = params.preselectedActivityId || null;
-    state.preselectedSubActivityId = params.preselectedSubActivityId || null;
-    state.preselectedTargetFolderId = params.targetFolderId || null;
-    state.preselectedTargetFolderName = params.targetFolderName || null;
-    state.preselectedFolderBreadcrumb = params.folderBreadcrumb ? String(params.folderBreadcrumb).split('|').filter(Boolean) : [];
+    const previousGuestRoute = state.authReady && state.currentUser &&
+      state.currentUser.role === 'guest' && !isRestrictedForGuest(state.view)
+      ? currentRouteParams_()
+      : null;
+    rememberPendingRoute_(params);
+    if (!state.authReady) return;
+    if (isRestrictedForGuest(state.view)) {
+      if (!state.bootstrap) {
+        prepareRestrictedGuestRoute_(state.pendingRoute, previousGuestRoute).catch(function (error) {
+          console.error('guest route preparation failed:', error);
+          showGuestLoginPrompt_(previousGuestRoute);
+        });
+      } else {
+        showGuestLoginPrompt_(previousGuestRoute);
+      }
+      return;
+    }
+    state.pendingRoute = null;
+    state.loginReturnRoute = null;
+    document.getElementById('app').classList.remove('auth-pending');
 
     try {
       updateNavActive();
@@ -377,6 +542,10 @@
   }
 
   function setView(view, extraParams = {}) {
+    const previousGuestRoute = state.currentUser && state.currentUser.role === 'guest' &&
+      !isRestrictedForGuest(state.view)
+      ? currentRouteParams_()
+      : null;
     state.userNavigated = true;
     state.view = view;
 
@@ -427,6 +596,15 @@
       state.preselectedFolderBreadcrumb = [];
     }
 
+    const queryParams = currentRouteParams_();
+    if (isRestrictedForGuest(view)) {
+      state.pendingRoute = Object.assign({}, queryParams);
+      if (previousGuestRoute) state.loginReturnRoute = previousGuestRoute;
+    } else {
+      state.pendingRoute = null;
+      state.loginReturnRoute = null;
+    }
+
     try {
       updateNavActive();
     } catch (e) {
@@ -435,19 +613,6 @@
     render();
 
     if (window.google && google.script && google.script.history) {
-      const queryParams = { view: view };
-      if (state.selectedActivityId) queryParams.activityId = state.selectedActivityId;
-      if (state.selectedSubActivityId) queryParams.subActivityId = state.selectedSubActivityId;
-      if (state.selectedFolderId) queryParams.folderId = state.selectedFolderId;
-      if (state.selectedFolderName) queryParams.folderName = state.selectedFolderName;
-      if (state.preselectedActivityId) queryParams.preselectedActivityId = state.preselectedActivityId;
-      if (state.preselectedSubActivityId) queryParams.preselectedSubActivityId = state.preselectedSubActivityId;
-      if (state.preselectedTargetFolderId) queryParams.targetFolderId = state.preselectedTargetFolderId;
-      if (state.preselectedTargetFolderName) queryParams.targetFolderName = state.preselectedTargetFolderName;
-      const breadcrumb = state.selectedFolderBreadcrumb && state.selectedFolderBreadcrumb.length
-        ? state.selectedFolderBreadcrumb
-        : state.preselectedFolderBreadcrumb;
-      if (breadcrumb && breadcrumb.length) queryParams.folderBreadcrumb = breadcrumb.join('|');
       requestAnimationFrame(() => {
         setTimeout(() => {
           google.script.history.push(null, queryParams, null);
@@ -457,21 +622,27 @@
   }
 
   let bootstrapPromise = null;
-  async function loadBootstrap() {
+  async function loadBootstrap(options) {
+    options = options || {};
     if (state.bootstrap) return;
     if (bootstrapPromise) {
-      await bootstrapPromise;
-      return;
+      try {
+        state.bootstrap = await bootstrapPromise;
+        return state.bootstrap;
+      } catch (error) {
+        if (options.throwOnError) throw error;
+        return null;
+      }
     }
-    showLoading('Memuat konfigurasi aplikasi...');
+    if (!options.silentError) showLoading('Memuat konfigurasi aplikasi...');
     const timeoutMs = (typeof BOOTSTRAP_TIMEOUT_MS !== 'undefined') ? BOOTSTRAP_TIMEOUT_MS : 15000;
-    bootstrapPromise = Promise.race([
-      api('getBootstrap'),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('GAS tidak merespon dalam 15 detik. Muat ulang halaman.')), timeoutMs))
-    ]);
+    bootstrapPromise = api('getBootstrap', null, {
+      timeoutMs: timeoutMs,
+      timeoutMessage: 'Konfigurasi belum termuat setelah ' + Math.round(timeoutMs / 1000) + ' detik. Coba lagi.'
+    });
     try {
       state.bootstrap = await bootstrapPromise;
-      document.getElementById('app').classList.remove('loading');
+      document.getElementById('app').classList.remove('loading', 'auth-pending');
       populateDashboardNav();
       render();
       startVersionTracker();
@@ -479,10 +650,49 @@
       if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
         showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);
       }
+      return state.bootstrap;
     } catch (error) {
-      setContent(`<div class="error">${esc(errorMessage(error))}</div>`);
+      if (!options.silentError) setContent(`<div class="error">${esc(errorMessage(error))}</div>`);
+      if (options.throwOnError) throw error;
+      return null;
     } finally {
       bootstrapPromise = null;
+    }
+  }
+
+  function showAccessDeniedState_(error) {
+    const app = document.getElementById('app');
+    if (app) app.classList.remove('loading', 'auth-pending');
+    applyRoleVisibility();
+    renderLogoutBar();
+    const message = errorMessage(error);
+    setContent(`
+      <div class="panel panel-pad">
+        <div class="empty">
+          <strong>Akses data ditolak</strong>
+          <p style="margin:8px 0 16px;max-width:720px;">${esc(message)}</p>
+          <button class="btn btn-primary" id="retry-access-load" type="button">Coba Muat Data</button>
+        </div>
+      </div>
+    `);
+    const retry = document.getElementById('retry-access-load');
+    if (retry) {
+      retry.addEventListener('click', async function () {
+        retry.disabled = true;
+        retry.textContent = 'Memuat...';
+        state.bootstrap = null;
+        try {
+          await loadBootstrap({ throwOnError: true, silentError: true });
+        } catch (nextError) {
+          if (isAccessDeniedError_(nextError)) {
+            showAccessDeniedState_(nextError);
+          } else {
+            retry.disabled = false;
+            retry.textContent = 'Coba Muat Data';
+            showToast('Gagal memuat data: ' + errorMessage(nextError));
+          }
+        }
+      });
     }
   }
 
@@ -500,12 +710,10 @@
     const role = state.currentUser ? state.currentUser.role : 'guest';
 
     if (isRestrictedForGuest(state.view)) {
-      if (!state._loginPromptShown) {
-        state._loginPromptShown = true;
-        showLoginModal();
-      }
+      showGuestLoginPrompt_(state.loginReturnRoute);
       if (role === 'guest') {
-        state.view = 'dashboard';
+        // Pertahankan deep-link. UI utama tidak dirender sampai login sukses.
+        return;
       }
     }
 

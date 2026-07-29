@@ -12,7 +12,32 @@
   var VIEW_FRESHNESS_MS = 10000;
   var VIEW_CACHE_MAX_ENTRIES = 200;
   var VERSION_POLL_INTERVAL_MS = 10000;
-  var BOOTSTRAP_TIMEOUT_MS = 15000;
+  // Timeout harus mengikuti kelas operasi. google.script.run tidak dapat dibatalkan
+  // dari client; timeout yang terlalu pendek pada mutasi panjang membuat UI terlihat
+  // gagal padahal server masih bekerja dan mendorong user mengulang operasi.
+  var API_TIMEOUT_MS = 30000;
+  var BOOTSTRAP_TIMEOUT_MS = 90000;
+  var API_TIMEOUTS_MS = Object.freeze({
+    login: 60000,
+    getBootstrap: BOOTSTRAP_TIMEOUT_MS,
+    initializeWorkspace: 330000,
+    syncExistingPhysicalFiles: 330000,
+    resetWorkspace: 330000,
+    adoptExistingArchives: 330000,
+    previewExistingArchives: 330000,
+    runArchiveMaintenance: 330000,
+    cleanupTrashedSubActivities: 330000,
+    parseDocumentContent: 300000,
+    syncSubActivities: 120000,
+    finalizeArchive: 120000,
+    archiveStep_copyFile: 120000,
+    archiveStep_writeAndLog: 120000,
+    uploadSourceFile: 120000,
+    uploadTemplate: 120000,
+    uploadResumableChunk: 120000,
+    deleteYear: 120000,
+    purgeSubActivity: 120000
+  });
   const viewCache = Object.create(null);
 
   function cacheKey(viewName, params) {
@@ -117,6 +142,10 @@
   const state = {
     view: 'dashboard',
     bootstrap: null,
+    currentUser: null,
+    authReady: false,
+    pendingRoute: null,
+    loginReturnRoute: null,
     draft: null,
     selectedFile: null,
     workspaceSetup: null,

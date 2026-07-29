@@ -1,7 +1,50 @@
 <script>
+  const _apiQueue = [];
+  let _apiQueueRunning = false;
+  // Token autentikasi sengaja hanya hidup di memori halaman. Jangan simpan token
+  // ke localStorage/sessionStorage/cookie: web app GAS berjalan dalam iframe.
+  let _sessionToken = '';
+  let _authGeneration = 0;
+
+  function getSessionToken() { return _sessionToken; }
+  function getAuthGeneration() { return _authGeneration; }
+  function setSessionToken(token) {
+    _sessionToken = String(token || '');
+    _authGeneration++;
+  }
+  function clearSessionToken() {
+    _sessionToken = '';
+    _authGeneration++;
+  }
+
   function api(name, payload, options) {
+    if (name.startsWith('delete')) {
+      return new Promise((resolve, reject) => {
+        _apiQueue.push({ name, payload, options, resolve, reject });
+        _processApiQueue();
+      });
+    }
+    return _executeApi(name, payload, options);
+  }
+
+  async function _processApiQueue() {
+    if (_apiQueueRunning || _apiQueue.length === 0) return;
+    _apiQueueRunning = true;
+    while (_apiQueue.length > 0) {
+      const task = _apiQueue.shift();
+      try {
+        const result = await _executeApi(task.name, task.payload, task.options);
+        task.resolve(result);
+      } catch (e) {
+        task.reject(e);
+      }
+    }
+    _apiQueueRunning = false;
+  }
+
+  function _executeApi(name, payload, options) {
     options = options || {};
-    const sid = localStorage.getItem('portal_session_id');
+    const sid = getSessionToken();
     if (sid && name !== 'login') {
       payload = payload ? Object.assign({}, payload) : {};
       payload._sessionId = sid;
@@ -15,10 +58,23 @@
         if (timer) window.clearTimeout(timer);
         fn(value);
       };
-      if (options.timeoutMs) {
+      const methodTimeout = (typeof API_TIMEOUTS_MS !== 'undefined' && API_TIMEOUTS_MS[name])
+        ? API_TIMEOUTS_MS[name]
+        : 0;
+      const defaultTimeout = methodTimeout || ((typeof API_TIMEOUT_MS !== 'undefined') ? API_TIMEOUT_MS : 30000);
+      const timeoutMs = Number(options.timeoutMs !== undefined ? options.timeoutMs : defaultTimeout);
+      if (timeoutMs > 0) {
         timer = window.setTimeout(function () {
-          done(reject, new Error(options.timeoutMessage || 'Koneksi lambat atau server belum merespon. Coba muat ulang data ini.'));
-        }, options.timeoutMs);
+          const longOperation = timeoutMs >= 120000;
+          const fallbackMessage = longOperation
+            ? 'Operasi belum selesai setelah ' + Math.round(timeoutMs / 1000) + ' detik. Server mungkin masih bekerja. Jangan ulangi operasi sebelum memeriksa status ruang kerja.'
+            : 'Server belum merespons setelah ' + Math.round(timeoutMs / 1000) + ' detik. Periksa koneksi, lalu coba lagi.';
+          const timeoutError = new Error(options.timeoutMessage || fallbackMessage);
+          timeoutError.code = 'CLIENT_TIMEOUT';
+          timeoutError.operation = name;
+          timeoutError.serverMayStillBeRunning = true;
+          done(reject, timeoutError);
+        }, timeoutMs);
       }
       google.script.run
         .withSuccessHandler(function (response) {
@@ -42,16 +98,29 @@
     });
   }
 
-  // Saat server menolak karena sesi habis/tidak ditemukan, bersihkan sesi lokal
-  // dan munculkan modal login otomatis supaya user tidak terjebak error generik.
+  function isAccessDeniedError_(error) {
+    if (error && error.code === 'ACCESS_DENIED') return true;
+    const message = error && (error.message || error) ? String(error.message || error).toLowerCase() : '';
+    return message.indexOf('akses ditolak') >= 0 || message.indexOf('akses tidak ditemukan') >= 0 || message.indexOf('access denied') >= 0;
+  }
+
+  // Hanya sesi hilang/kedaluwarsa yang boleh menghapus token. Penolakan role,
+  // scope Drive, atau permission resource bersifat nonfatal.
   function handleSessionError_(error) {
+    if (isAccessDeniedError_(error)) return;
     var isAuthErr = error && error.code === 'AUTH_ERROR';
     if (!isAuthErr) {
       // Fallback for native google script failures
-      var msg = error && (error.message || error) ? String(error.message || error) : '';
-      if (msg.indexOf('Sesi login') === -1 && msg.indexOf('akses ditolak') === -1) return;
+      var msg = error && (error.message || error) ? String(error.message || error).toLowerCase() : '';
+      if (msg.indexOf('sesi login') === -1 && msg.indexOf('sesi telah berakhir') === -1) return;
     }
-    try { localStorage.removeItem('portal_session_id'); } catch (e) {}
+    clearSessionToken();
+    if (typeof state !== 'undefined') {
+      state.currentUser = { role: 'guest', username: '', displayName: 'Tamu' };
+      state.authReady = true;
+    }
+    const appShell = document.getElementById('app');
+    if (appShell) appShell.classList.add('auth-pending');
     if (typeof showLoginModal === 'function' && !document.getElementById('login-modal-backdrop')) {
       try { showLoginModal(); } catch (e) {}
     }

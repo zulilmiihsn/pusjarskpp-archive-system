@@ -434,7 +434,7 @@ const SpreadsheetService = {
     const showJsComputed = forceCalculate;
     const nextItemNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
     const meta = {
-      no_berkas: rekapNomorBerkas || (subActivity && subActivity.sort_order ? subActivity.sort_order : ''),
+      no_berkas: rekapNomorBerkas || resolveSubActivityArchiveNumber_(subActivity, activity),
       kode_klasifikasi: '',
       kurun_waktu: (showJsComputed ? '' : rekapKurunWaktu) || formatDateRange_(summary.startDate, summary.endDate),
       jumlah: (showJsComputed ? '' : rekapJumlah) || ((summary.sumLembar || 0) + ' lembar'),
@@ -559,6 +559,12 @@ const SpreadsheetService = {
     if (!sheet) return null;
 
     ensureRekapDocumentColumns_(sheet);
+    const existingRow = findRekapRowForSubActivity_(sheet, subActivity);
+    if (existingRow) {
+      writeRekapIdentityMarker_(sheet, existingRow, subActivity);
+      return { sheetName: sheet.getName(), rowNumber: existingRow, existing: true };
+    }
+
     const noteRow = findNoteRow_(sheet) || sheet.getLastRow() + 1;
     const rowIndex = findFirstBlankInRange_(sheet, REKAP_DATA_START_ROW, noteRow - 1, 4) || noteRow;
     if (rowIndex === noteRow) {
@@ -566,7 +572,7 @@ const SpreadsheetService = {
       invalidateNoteRowCache_(sheet);
     }
 
-    const nomorBerkas = subActivity.sort_order || '';
+    const nomorBerkas = getNextAvailableRekapArchiveNumber_(buildRekapRowLookup_(sheet));
     
     const rawFcText = activity.laci_no + '. Laci ' + activity.activity_name;
     const fcText = rawFcText.replace(/"/g, '""');
@@ -591,12 +597,14 @@ const SpreadsheetService = {
     ];
     sheet.getRange(rowIndex, 2, 1, row.length).setValues([row]);
     
+    const hsep = typeof formulaSep_ === 'function' ? formulaSep_(sheet.getParent()) : ';';
     if (activity.laci_folder_id) {
-      sheet.getRange(rowIndex, 7).setFormula('=HYPERLINK("https://drive.google.com/drive/folders/' + activity.laci_folder_id + '", "' + fcText + '")');
+      sheet.getRange(rowIndex, 7).setFormula('=HYPERLINK("https://drive.google.com/drive/folders/' + activity.laci_folder_id + '"' + hsep + ' "' + fcText.replace(/"/g, '""').replace(/\n/g, '" & CHAR(10) & "') + '")');
     }
     if (subActivity.folder_id) {
-      sheet.getRange(rowIndex, 8).setFormula('=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '", "' + laciText + '")');
+      sheet.getRange(rowIndex, 8).setFormula('=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '"' + hsep + ' "' + laciText.replace(/"/g, '""').replace(/\n/g, '" & CHAR(10) & "') + '")');
     }
+    writeRekapIdentityMarker_(sheet, rowIndex, subActivity);
     
     sheet.getRange(rowIndex, 2, 1, row.length)
       .setBorder(true, true, true, true, true, true)
@@ -622,10 +630,15 @@ const SpreadsheetService = {
 
     const detailSheet = ensureDetailSheet_(ss, activity, subActivity);
     const headerMap = getRekapHeaderMap_(sheet);
+    const archiveNumber = getRekapArchiveNumber_(
+      sheet,
+      rowIndex,
+      resolveSubActivityArchiveNumber_(subActivity, activity)
+    );
+    summary.nomorBerkas = archiveNumber;
+    summary.noFolder = archiveNumber;
 
-    if (locks.nomorBerkas !== false) {
-      setRekapStaticCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, subActivity.sort_order || '');
-    }
+    setRekapStaticCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, archiveNumber);
 
     if (locks.kurunWaktu !== false) {
       setRekapFormulaCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.kurunWaktu, buildKurunWaktuFormula_(detailSheet));
@@ -659,12 +672,13 @@ const SpreadsheetService = {
 
     writeRekapSummary_(sheet, rowIndex, summary);
     sortRekapSheetByNomorBerkas_(sheet);
+    const resolvedRowIndex = findRekapRowForSubActivity_(sheet, subActivity) || rowIndex;
 
     return {
       spreadsheetId: ss.getId(),
       spreadsheetUrl: ss.getUrl(),
       sheetName: sheet.getName(),
-      rowNumber: rowIndex
+      rowNumber: resolvedRowIndex
     };
   },
 
@@ -755,13 +769,400 @@ const SpreadsheetService = {
     if (!rowIndex) return null;
 
     writeRekapIdentity_(sheet, rowIndex, activity, nextSubActivity || previousSubActivity);
+    sortRekapSheetByNomorBerkas_(sheet);
+    const resolvedRowIndex = findRekapRowForSubActivity_(sheet, nextSubActivity || previousSubActivity) || rowIndex;
 
     return {
       spreadsheetId: ss.getId(),
       spreadsheetUrl: ss.getUrl(),
       sheetName: sheet.getName(),
-      rowNumber: rowIndex
+      rowNumber: resolvedRowIndex
     };
+  },
+
+  /**
+   * Rekonsiliasi non-destruktif antara config sub-kegiatan dan baris rekap.
+   * Tidak menghapus baris ambigu. Identitas yang bisa dibuktikan lewat marker,
+   * folder_id, atau nama unik diperbaiki dan rekap_row_number disegarkan.
+   */
+  reconcileRekapSubActivities: function (activity, subActivities) {
+    const report = {
+      repairedIdentities: 0,
+      repairedPointers: 0,
+      createdRows: 0,
+      duplicateStableRows: [],
+      missingSubActivityIds: []
+    };
+    const rows = (subActivities || []).filter(function (sub) {
+      return sub && sub.sub_activity_id;
+    });
+    if (!rows.length) return report;
+
+    const grouped = {};
+    rows.forEach(function (sub) {
+      const spreadsheetId = String(sub.spreadsheet_file_id || activity.spreadsheet_file_id || '');
+      if (!spreadsheetId) return;
+      if (!grouped[spreadsheetId]) grouped[spreadsheetId] = [];
+      grouped[spreadsheetId].push(sub);
+    });
+
+    Object.keys(grouped).forEach(function (spreadsheetId) {
+      const ss = openSpreadsheetById_(spreadsheetId);
+      const sheet = findRekapSheet_(ss);
+      if (!sheet) return;
+      ensureRekapDocumentColumns_(sheet);
+
+      let lookup = buildRekapRowLookup_(sheet);
+      grouped[spreadsheetId].forEach(function (sub) {
+        const stableRows = findStableRekapRowsFromLookup_(lookup, sub);
+        if (stableRows.length > 1) {
+          report.duplicateStableRows.push({
+            subActivityId: sub.sub_activity_id,
+            rows: stableRows.slice()
+          });
+        }
+
+        let rowIndex = findRekapRowForSubActivityFromLookup_(lookup, sub);
+        if (!rowIndex) {
+          const possibleRows = findPossibleRekapRowsFromLookup_(lookup, sub);
+          if (possibleRows.length) {
+            // Ada baris lama yang mungkin milik sub-kegiatan ini. Jangan menebak
+            // atau membuat duplikat; laporkan agar diperiksa manual.
+            report.duplicateStableRows.push({
+              subActivityId: sub.sub_activity_id,
+              rows: possibleRows,
+              reason: 'ambiguous_candidates'
+            });
+            return;
+          }
+
+          // Tidak ada marker, folder, nama, atau nomor yang cocok. Baris benar-benar
+          // hilang, jadi aman dibuat ulang lalu dihitung dari sheet rincian.
+          const created = SpreadsheetService.appendRekapRowIfPresent(activity, sub);
+          if (!created || !created.rowNumber) {
+            report.missingSubActivityIds.push(sub.sub_activity_id);
+            return;
+          }
+          report.createdRows++;
+          const summaryResult = SpreadsheetService.updateRekapSummary(activity, sub, {});
+          rowIndex = summaryResult && summaryResult.rowNumber
+            ? summaryResult.rowNumber
+            : created.rowNumber;
+          lookup = buildRekapRowLookup_(sheet);
+        }
+
+        if (rekapIdentityNeedsRepair_(lookup, rowIndex, activity, sub)) {
+          writeRekapIdentity_(sheet, rowIndex, activity, sub, { respectManualLocks: true });
+          report.repairedIdentities++;
+          lookup = buildRekapRowLookup_(sheet);
+        }
+      });
+
+      if (report.repairedIdentities || report.createdRows) {
+        sortRekapSheetByNomorBerkas_(sheet);
+      }
+
+      lookup = buildRekapRowLookup_(sheet);
+      grouped[spreadsheetId].forEach(function (sub) {
+        const actualRow = findRekapRowForSubActivityFromLookup_(lookup, sub);
+        if (!actualRow) return;
+        const rowMatches = Number(sub.rekap_row_number) === Number(actualRow);
+        if (rowMatches) return;
+        ConfigRepository.updateSubActivityMapping({
+          year: sub.year || activity.year,
+          activityId: sub.activity_id || activity.activity_id,
+          subActivityId: sub.sub_activity_id,
+          rekapRowNumber: actualRow
+        });
+        sub.rekap_row_number = actualRow;
+        report.repairedPointers++;
+      });
+    });
+
+    return report;
+  },
+
+  /**
+   * Menyusun nomor arsip global lintas seluruh kegiatan pada satu tahun.
+   * Urutan lokal dipulihkan dari detail/rekap hanya saat local_sort_order belum ada.
+   */
+  planGlobalArchiveNumbers: function (year) {
+    const activities = ConfigRepository.getActivities(year);
+    const activityById = {};
+    activities.forEach(function (activity) {
+      activityById[String(activity.activity_id || '')] = activity;
+    });
+
+    const contexts = {};
+    const errors = [];
+    function getContext_(spreadsheetId) {
+      const id = String(spreadsheetId || '');
+      if (!id) return null;
+      if (contexts[id] !== undefined) return contexts[id];
+      try {
+        const ss = openSpreadsheetById_(id);
+        const rekapSheet = findRekapSheet_(ss);
+        contexts[id] = {
+          ss: ss,
+          rekapSheet: rekapSheet,
+          rekapLookup: rekapSheet ? buildRekapRowLookup_(rekapSheet) : null
+        };
+      } catch (error) {
+        contexts[id] = null;
+        errors.push({ spreadsheetId: id, message: error.message });
+      }
+      return contexts[id];
+    }
+
+    const subActivities = ConfigRepository.getAllSubActivitiesForYear(year).map(function (source) {
+      const subActivity = Object.assign({}, source);
+      if (Number(subActivity.local_sort_order) > 0) return subActivity;
+
+      const activity = activityById[String(subActivity.activity_id || '')];
+      if (!activity) return subActivity;
+      const spreadsheetId = subActivity.spreadsheet_file_id || activity.spreadsheet_file_id;
+      const context = getContext_(spreadsheetId);
+      if (!context) return subActivity;
+
+      let detailNumber = '';
+      let rekapNumber = '';
+      let rekapFolderNumber = '';
+      try {
+        detailNumber = getDetailArchiveNumberForSubActivity_(context.ss, subActivity);
+        if (context.rekapLookup) {
+          const rowIndex = findRekapRowForSubActivityFromLookup_(context.rekapLookup, subActivity);
+          if (rowIndex) {
+            const offset = rowIndex - context.rekapLookup.startRow;
+            const row = context.rekapLookup.values[offset] || [];
+            rekapNumber = String(row[context.rekapLookup.nomorBerkasCol - 1] || '').trim();
+            rekapFolderNumber = String(row[context.rekapLookup.noFolderCol - 1] || '').trim();
+          }
+        }
+      } catch (error) {
+        errors.push({
+          spreadsheetId: String(spreadsheetId || ''),
+          subActivityId: subActivity.sub_activity_id,
+          message: error.message
+        });
+      }
+      subActivity._observed_archive_number = detailNumber || rekapNumber || rekapFolderNumber || '';
+      return subActivity;
+    });
+
+    const plan = buildGlobalArchiveNumberPlan_(activities, subActivities);
+    plan.errors = errors;
+    return plan;
+  },
+
+  /**
+   * Menerapkan satu sumber nomor global ke Config, Rekap, dan semua baris Detail.
+   * Rekap: Nomor Berkas = No Folder = nomor global.
+   * Detail: Nomor Berkas = nomor global; No Folder tetap Nomor Item Arsip.
+   */
+  reconcileGlobalArchiveNumbers: function (year, options) {
+    options = options || {};
+    const applyChanges = options.apply !== false;
+    const plan = this.planGlobalArchiveNumbers(year);
+    const report = {
+      year: Number(year),
+      applied: applyChanges,
+      totalActive: plan.totalActive,
+      configCellsUpdated: 0,
+      rekapRowsUpdated: 0,
+      detailRowsUpdated: 0,
+      createdRows: 0,
+      repairedPointers: 0,
+      inactiveRowsCleared: 0,
+      ambiguousRows: [],
+      errors: (plan.errors || []).slice(),
+      assignments: plan.activeAssignments.map(function (assignment) {
+        return {
+          activityId: assignment.activityId,
+          subActivityId: assignment.subActivityId,
+          subActivityName: assignment.subActivity.sub_activity_name,
+          localSortOrder: assignment.localSortOrder,
+          globalNumber: assignment.globalNumber
+        };
+      })
+    };
+    if (!applyChanges) return report;
+
+    const grouped = {};
+    plan.assignments.forEach(function (assignment) {
+      const spreadsheetId = String(
+        assignment.subActivity.spreadsheet_file_id ||
+        assignment.activity.spreadsheet_file_id ||
+        ''
+      );
+      if (!spreadsheetId) {
+        if (assignment.isActive) {
+          report.errors.push({
+            subActivityId: assignment.subActivityId,
+            message: 'Spreadsheet arsip belum dipetakan.'
+          });
+        }
+        return;
+      }
+      if (!grouped[spreadsheetId]) grouped[spreadsheetId] = [];
+      grouped[spreadsheetId].push(assignment);
+    });
+
+    Object.keys(grouped).forEach(function (spreadsheetId) {
+      let ss;
+      let rekapSheet;
+      try {
+        ss = openSpreadsheetById_(spreadsheetId);
+        rekapSheet = findRekapSheet_(ss);
+        if (!rekapSheet) throw new Error('Sheet rekap tidak ditemukan.');
+        ensureRekapDocumentColumns_(rekapSheet);
+      } catch (error) {
+        report.errors.push({ spreadsheetId: spreadsheetId, message: error.message });
+        return;
+      }
+
+      let lookup = buildRekapRowLookup_(rekapSheet);
+      const activeAssignments = grouped[spreadsheetId].filter(function (assignment) {
+        return assignment.isActive;
+      });
+      const inactiveAssignments = grouped[spreadsheetId].filter(function (assignment) {
+        return !assignment.isActive;
+      });
+      activeAssignments.forEach(function (assignment) {
+        const activity = assignment.activity;
+        const subActivity = Object.assign({}, assignment.subActivity, {
+          sort_order: assignment.globalNumber,
+          local_sort_order: assignment.localSortOrder
+        });
+        const stableRows = findStableRekapRowsFromLookup_(lookup, subActivity);
+        if (stableRows.length > 1) {
+          report.ambiguousRows.push({
+            subActivityId: assignment.subActivityId,
+            spreadsheetId: spreadsheetId,
+            rows: stableRows.slice(),
+            reason: 'duplicate_stable_identity'
+          });
+          return;
+        }
+
+        let rowIndex = findRekapRowForSubActivityFromLookup_(lookup, subActivity);
+        let createdNow = false;
+        if (!rowIndex) {
+          const possibleRows = findPossibleRekapRowsFromLookup_(lookup, subActivity);
+          if (possibleRows.length) {
+            report.ambiguousRows.push({
+              subActivityId: assignment.subActivityId,
+              spreadsheetId: spreadsheetId,
+              rows: possibleRows,
+              reason: 'ambiguous_candidates'
+            });
+            return;
+          }
+          try {
+            const created = SpreadsheetService.appendRekapRowIfPresent(activity, subActivity);
+            if (!created || !created.rowNumber) throw new Error('Baris rekap tidak dapat dibuat.');
+            rowIndex = created.rowNumber;
+            createdNow = true;
+            report.createdRows++;
+            lookup = buildRekapRowLookup_(rekapSheet);
+          } catch (error) {
+            report.errors.push({
+              spreadsheetId: spreadsheetId,
+              subActivityId: assignment.subActivityId,
+              message: error.message
+            });
+            return;
+          }
+        }
+
+        try {
+          const headerMap = getRekapHeaderMap_(rekapSheet);
+          writeRekapIdentity_(rekapSheet, rowIndex, activity, subActivity, { respectManualLocks: true });
+          setRekapStaticCell_(
+            rekapSheet,
+            rowIndex,
+            headerMap,
+            REKAP_SUMMARY_COLUMNS.nomorBerkas,
+            assignment.globalNumber
+          );
+          setRekapStaticCell_(
+            rekapSheet,
+            rowIndex,
+            headerMap,
+            REKAP_SUMMARY_COLUMNS.noFolder,
+            assignment.globalNumber
+          );
+          writeRekapIdentityMarker_(rekapSheet, rowIndex, subActivity);
+          report.rekapRowsUpdated++;
+
+          const detailSheet = ensureDetailSheet_(ss, activity, subActivity);
+          const detailResult = writeDetailArchiveNumber_(detailSheet, assignment.globalNumber);
+          report.detailRowsUpdated += detailResult.changedRows;
+          if (createdNow) {
+            SpreadsheetService.updateRekapSummary(activity, subActivity, {});
+            lookup = buildRekapRowLookup_(rekapSheet);
+          }
+        } catch (error) {
+          report.errors.push({
+            spreadsheetId: spreadsheetId,
+            subActivityId: assignment.subActivityId,
+            message: error.message
+          });
+        }
+      });
+
+      lookup = buildRekapRowLookup_(rekapSheet);
+      inactiveAssignments.forEach(function (assignment) {
+        const rowIndex = findRekapRowForSubActivityFromLookup_(lookup, assignment.subActivity);
+        if (!rowIndex) return;
+        const headerMap = getRekapHeaderMap_(rekapSheet);
+        const nomorBerkasCol = findRekapHeaderColumnFromMap_(
+          headerMap,
+          REKAP_SUMMARY_COLUMNS.nomorBerkas
+        );
+        const noFolderCol = findRekapHeaderColumnFromMap_(
+          headerMap,
+          REKAP_SUMMARY_COLUMNS.noFolder
+        );
+        let cleared = false;
+        [nomorBerkasCol, noFolderCol].forEach(function (column) {
+          if (!column) return;
+          const cell = rekapSheet.getRange(rowIndex, column);
+          if (!String(cell.getDisplayValue() || '').trim()) return;
+          cell.clearContent();
+          cleared = true;
+        });
+        if (cleared) report.inactiveRowsCleared++;
+      });
+
+      sortRekapSheetByNomorBerkas_(rekapSheet);
+      lookup = buildRekapRowLookup_(rekapSheet);
+      activeAssignments.forEach(function (assignment) {
+        const subActivity = Object.assign({}, assignment.subActivity, {
+          sort_order: assignment.globalNumber
+        });
+        const actualRow = findRekapRowForSubActivityFromLookup_(lookup, subActivity);
+        if (!actualRow) return;
+        assignment.rekapRowNumber = actualRow;
+        if (Number(assignment.subActivity.rekap_row_number) !== Number(actualRow)) {
+          report.repairedPointers++;
+        }
+      });
+    });
+
+    report.configCellsUpdated = ConfigRepository.bulkUpdateSubActivityNumbering(
+      year,
+      plan.assignments.map(function (assignment) {
+        return {
+          activityId: assignment.activityId,
+          subActivityId: assignment.subActivityId,
+          localSortOrder: assignment.localSortOrder,
+          globalNumber: assignment.globalNumber,
+          rekapRowNumber: assignment.rekapRowNumber
+        };
+      })
+    );
+    CacheHelper.invalidate(year);
+    return report;
   },
 
   markRekapSubActivityInactive: function (activity, subActivity, reason) {
@@ -826,8 +1227,8 @@ const SpreadsheetService = {
     const cell = sheet.getRange(rowIndex, column);
 
     if (linkUrl) {
-      const hsep = formulaSep_(ss);
-      cell.setFormula('=HYPERLINK("' + linkUrl + '"' + hsep + ' "' + displayName.replace(/"/g, '""') + '")');
+      const hsep = typeof formulaSep_ === 'function' ? formulaSep_(ss) : ';';
+      cell.setFormula('=HYPERLINK("' + linkUrl + '"' + hsep + ' "' + displayName.replace(/"/g, '""').replace(/\n/g, '" & CHAR(10) & "') + '")');
     } else {
       cell.setValue(sanitizeCellValue_(linkUrl || displayName));
     }
@@ -883,11 +1284,12 @@ const SpreadsheetService = {
     const summary = summarizeDetailSheet_(detailSheet, subActivity);
     const computedJumlah = summary.sumLembar ? summary.sumLembar + ' lembar' : '';
 
-    if (locks.nomorBerkas === false && metadata.nomorBerkas !== undefined) {
-      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, metadata.nomorBerkas, true);
-    } else if (locks.nomorBerkas !== false) {
-      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, subActivity.sort_order || '', true);
-    }
+    const archiveNumber = getRekapArchiveNumber_(
+      sheet,
+      rowIndex,
+      resolveSubActivityArchiveNumber_(subActivity, activity)
+    );
+    setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, archiveNumber, true);
     setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.kodeKlasifikasi, metadata.kodeKlasifikasi, true);
 
     if (locks.kurunWaktu === false) {
@@ -916,7 +1318,8 @@ const SpreadsheetService = {
       const laciCol = findRekapHeaderColumnFromMap_(headerMap, REKAP_SUMMARY_COLUMNS.noLaci);
       if (laciCol) {
         if (subActivity.folder_id) {
-          sheet.getRange(rowIndex, laciCol).setFormula('=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '", "' + laciText + '")');
+          const hsep = typeof formulaSep_ === 'function' ? formulaSep_(sheet.getParent()) : ';';
+          sheet.getRange(rowIndex, laciCol).setFormula('=HYPERLINK("https://drive.google.com/drive/folders/' + subActivity.folder_id + '"' + hsep + ' "' + laciText.replace(/"/g, '""').replace(/\n/g, '" & CHAR(10) & "') + '")');
         } else {
           const laciCell = sheet.getRange(rowIndex, laciCol);
           if (!laciCell.getFormula()) laciCell.setValue(sanitizeCellValue_(rawLaciText));
@@ -924,11 +1327,7 @@ const SpreadsheetService = {
       }
     }
 
-    if (locks.noFolder === false && metadata.noFolder !== undefined) {
-      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noFolder, metadata.noFolder, true);
-    } else if (locks.noFolder !== false) {
-      setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noFolder, subActivity.sort_order || '', true);
-    }
+    setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.noFolder, archiveNumber, false);
 
     if (locks.akses === false) {
       setRekapStaticCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.akses, metadata.klasifikasiAkses || summary.akses);
@@ -964,84 +1363,6 @@ const SpreadsheetService = {
       console.error('SpreadsheetService.renameSubActivitySheet failed: ' + e.message);
       return false;
     }
-  },
-
-  cascadeNomorBerkasShift: function (year, shiftedSubActivities) {
-    if (!shiftedSubActivities || shiftedSubActivities.length === 0) return;
-
-    // Group shifts by activityId
-    const grouped = {};
-    shiftedSubActivities.forEach(function (shift) {
-      if (!grouped[shift.activityId]) grouped[shift.activityId] = [];
-      grouped[shift.activityId].push(shift);
-    });
-
-    const activities = ConfigRepository.getActivities(year);
-    const actMap = {};
-    activities.forEach(function(a) { actMap[a.activity_id] = a; });
-
-    Object.keys(grouped).forEach(function (actId) {
-      const act = actMap[actId];
-      if (!act || !act.spreadsheet_file_id) return;
-
-      let ss;
-      try {
-        ss = openSpreadsheetById_(act.spreadsheet_file_id);
-      } catch (e) {
-        return; // Spreadsheet deleted or inaccessible
-      }
-
-      const rekapSheet = findRekapSheet_(ss);
-      const shifts = grouped[actId];
-
-      // Muat sub-activities SEKALI jadi map (hindari getSubActivityById full-read per shift).
-      const subMap = {};
-      ConfigRepository.getSubActivities(year, actId).forEach(function (s) { subMap[s.sub_activity_id] = s; });
-
-      shifts.forEach(function (shift) {
-        const subAct = subMap[shift.subActivityId];
-        if (!subAct) return;
-
-        const newSortOrder = shift.newSortOrder;
-
-        // 1. Update Rekap Sheet
-        if (rekapSheet && subAct.rekap_row_number) {
-          const rekapRow = Number(subAct.rekap_row_number);
-          if (rekapRow > 0) {
-             rekapSheet.getRange(rekapRow, 2).setValue(sanitizeCellValue_(newSortOrder));
-             const oldSortOrder = String(Number(newSortOrder) - 1);
-             const currentFolderVal = String(rekapSheet.getRange(rekapRow, 9).getValue());
-             if (currentFolderVal === oldSortOrder) {
-                rekapSheet.getRange(rekapRow, 9).setValue(sanitizeCellValue_(newSortOrder));
-             }
-          }
-        }
-        
-        // 2. Update Detail Sheet
-        if (subAct.target_sheet_name) {
-          const detailSheet = ss.getSheetByName(subAct.target_sheet_name);
-          if (detailSheet) {
-            const noteRowDetail = findNoteRow_(detailSheet) || detailSheet.getLastRow() + 1;
-            const maxRowsDetail = Math.max(0, noteRowDetail - DETAIL_DATA_START_ROW);
-            if (maxRowsDetail > 0) {
-              const startCol = getDetailStartColumn_(detailSheet);
-              const noBerkasCol = startCol + DETAIL_FIELD_ORDER.indexOf('no_berkas');
-              const itemNumberCol = startCol + DETAIL_ITEM_NUMBER_OFFSET;
-              const itemNumbers = detailSheet.getRange(DETAIL_DATA_START_ROW, itemNumberCol, maxRowsDetail, 1).getDisplayValues();
-              const values = [];
-              for(let i=0; i<maxRowsDetail; i++) {
-                 if (String(itemNumbers[i][0]).trim()) {
-                   values.push([sanitizeCellValue_(newSortOrder)]);
-                 } else {
-                   values.push(['']);
-                 }
-              }
-              detailSheet.getRange(DETAIL_DATA_START_ROW, noBerkasCol, maxRowsDetail, 1).setValues(values);
-            }
-          }
-        }
-      });
-    });
   }
 };
 // Private helper functions moved to SheetHelpers.gs

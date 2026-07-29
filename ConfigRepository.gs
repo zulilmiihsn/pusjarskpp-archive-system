@@ -34,7 +34,7 @@ const ConfigRepository = {
       .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
     const subActivities = readSheetObjects_(ss, CONFIG_SHEETS.SUB_ACTIVITIES)
       .filter(row => Number(row.year) === selectedYear && isTrue_(row.is_active))
-      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+      .sort(compareSubActivitiesByArchiveNumber_);
     const fields = readSheetObjects_(ss, CONFIG_SHEETS.METADATA_FIELDS)
       .filter(row => Number(row.year) === selectedYear)
       .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
@@ -42,8 +42,10 @@ const ConfigRepository = {
     activities.forEach(a => { activityById[a.activity_id] = a; });
     const subActivityById = {};
     subActivities.forEach(s => { subActivityById[s.sub_activity_id] = s; });
-    const history = readRecentSheetObjects_(ss, CONFIG_SHEETS.ARCHIVE_LOG, 500)
-      .filter(row => !row.year || Number(row.year) === selectedYear)
+    const archiveLogAll = readSheetObjects_(ss, CONFIG_SHEETS.ARCHIVE_LOG)
+      .filter(row => !row.year || Number(row.year) === selectedYear);
+
+    const history = archiveLogAll
       .slice(-80)
       .reverse()
       .map(row => {
@@ -61,7 +63,8 @@ const ConfigRepository = {
       activities,
       subActivities,
       fields,
-      history
+      history,
+      historyAll: archiveLogAll
     };
   },
 
@@ -69,10 +72,10 @@ const ConfigRepository = {
     const ss = this.getConfigSpreadsheet();
     return readSheetObjects_(ss, CONFIG_SHEETS.SUB_ACTIVITIES)
       .filter(row => Number(row.year) === Number(year) && row.activity_id === activityId)
-      .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
+      .sort(compareSubActivitiesByArchiveNumber_);
   },
 
-  // Kegiatan aktif untuk tahun tertentu (dipakai cascadeNomorBerkasShift, maintenance).
+  // Kegiatan aktif untuk tahun tertentu (dipakai rekonsiliasi global dan maintenance).
   getActivities: function (year) {
     const ss = this.getConfigSpreadsheet();
     return readSheetObjects_(ss, CONFIG_SHEETS.ACTIVITIES)
@@ -438,54 +441,25 @@ const ConfigRepository = {
       while (existingIds[subActivityId + '_' + suffix]) suffix++;
       subActivityId = subActivityId + '_' + suffix;
     }
-    // Hitung Nomor Berkas global & Geser yang ada
-    const actMap = {};
-    readSheetObjects_(ss, CONFIG_SHEETS.ACTIVITIES)
-      .filter(row => Number(row.year) === Number(payload.year))
-      .forEach(a => actMap[a.activity_id] = Number(a.sort_order || 0));
-    
-    const currentActSortOrder = actMap[payload.activityId] || 0;
-    
-    let newSortOrder = 1;
-    if (existingRows.length > 0) {
-      newSortOrder = existingRows.reduce(function (max, r) { const n = Number(r.sort_order) || 0; return n > max ? n : max; }, 0) + 1;
-    } else {
-      const prevRows = allRowsForYear.filter(row => (actMap[row.activity_id] || 0) <= currentActSortOrder);
-      newSortOrder = prevRows.reduce(function (max, r) { const n = Number(r.sort_order) || 0; return n > max ? n : max; }, 0) + 1;
-    }
-
-    // Geser sort_order di sheet Config
-    const valuesAll = sheet.getDataRange().getDisplayValues();
-    const yearCol = headers.indexOf('year');
-    const sortCol = headers.indexOf('sort_order');
-    const subActIdCol = headers.indexOf('sub_activity_id');
-    const activityIdCol = headers.indexOf('activity_id');
+    // Nomor final dihitung ulang secara global setelah mutation selesai.
+    // Nilai provisional hanya mencegah field kosong sebelum rekonsiliasi berjalan.
+    const newSortOrder = allRowsForYear.reduce(function (max, row) {
+      const number = Number(row.sort_order) || 0;
+      return number > max ? number : max;
+    }, 0) + 1;
+    const inferredLocalOrder = inferSubActivityLocalOrder_({
+      activity_id: payload.activityId,
+      sub_activity_name: payload.subActivityName,
+      target_sheet_name: payload.targetSheetName,
+      parent_folder_name: payload.parentFolderName
+    }, { activity_id: payload.activityId });
+    const maxLocalOrder = existingRows.reduce(function (max, row) {
+      const number = Number(row.local_sort_order) || 0;
+      return number > max ? number : max;
+    }, 0);
+    const localSortOrder = payload.localSortOrder ||
+      (inferredLocalOrder < Number.MAX_SAFE_INTEGER ? inferredLocalOrder : maxLocalOrder + 1);
     const shiftedSubActivities = [];
-    
-    if (yearCol !== -1 && sortCol !== -1) {
-      const bulkUpdates = [];
-      for (let i = 1; i < valuesAll.length; i++) {
-        if (Number(valuesAll[i][yearCol]) === Number(payload.year)) {
-          const oldSort = Number(valuesAll[i][sortCol]) || 0;
-          if (oldSort >= newSortOrder) {
-            valuesAll[i][sortCol] = oldSort + 1;
-            bulkUpdates.push([oldSort + 1]);
-            shiftedSubActivities.push({
-               activityId: valuesAll[i][activityIdCol],
-               subActivityId: valuesAll[i][subActIdCol],
-               newSortOrder: oldSort + 1
-            });
-          } else {
-            bulkUpdates.push([valuesAll[i][sortCol]]);
-          }
-        } else {
-          bulkUpdates.push([valuesAll[i][sortCol]]);
-        }
-      }
-      if (bulkUpdates.length > 0) {
-        sheet.getRange(2, sortCol + 1, bulkUpdates.length, 1).setValues(bulkUpdates);
-      }
-    }
 
     const values = {
       year: payload.year,
@@ -510,7 +484,8 @@ const ConfigRepository = {
       parent_folder_name: payload.parentFolderName || '',
       parent_folder_path: payload.parentFolderPath || '',
       spreadsheet_file_id: payload.spreadsheetFileId ? cleanId_(payload.spreadsheetFileId) : '',
-      metadata_locks: payload.metadataLocks || ''
+      metadata_locks: payload.metadataLocks || '',
+      local_sort_order: localSortOrder
     };
     const row = headers.map(function (header) {
       return values[header] === undefined ? '' : values[header];
@@ -573,10 +548,67 @@ const ConfigRepository = {
       inactive_reason: payload.inactiveReason,
       inactive_at: payload.inactiveAt,
       metadata_locks: payload.metadataLocks,
-      default_kode_klasifikasi: payload.defaultKodeKlasifikasi
+      default_kode_klasifikasi: payload.defaultKodeKlasifikasi,
+      sort_order: payload.sortOrder,
+      local_sort_order: payload.localSortOrder
     });
     return objectFromHeaders_(getHeaders_(sheet), sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getDisplayValues()[0]);
     });
+  },
+
+  getAllSubActivitiesForYear: function (year) {
+    const ss = this.getConfigSpreadsheet();
+    return readSheetObjects_(ss, CONFIG_SHEETS.SUB_ACTIVITIES)
+      .filter(function (row) { return Number(row.year) === Number(year); });
+  },
+
+  bulkUpdateSubActivityNumbering: function (year, assignments) {
+    const rows = assignments || [];
+    if (!rows.length) return 0;
+    const ss = this.getConfigSpreadsheet();
+    const sheet = ss.getSheetByName(CONFIG_SHEETS.SUB_ACTIVITIES);
+    if (!sheet) return 0;
+    ensureSubActivityHeaders_(sheet);
+    const values = sheet.getDataRange().getValues();
+    if (values.length < 2) return 0;
+    const headers = values[0].map(normalizeHeader_);
+    const yearCol = headers.indexOf('year');
+    const activityCol = headers.indexOf('activity_id');
+    const subCol = headers.indexOf('sub_activity_id');
+    const sortCol = headers.indexOf('sort_order');
+    const localCol = headers.indexOf('local_sort_order');
+    const rowCol = headers.indexOf('rekap_row_number');
+    const byKey = {};
+    rows.forEach(function (assignment) {
+      byKey[String(assignment.activityId) + '|' + String(assignment.subActivityId)] = assignment;
+    });
+
+    let changed = 0;
+    for (let index = 1; index < values.length; index++) {
+      if (Number(values[index][yearCol]) !== Number(year)) continue;
+      const key = String(values[index][activityCol]) + '|' + String(values[index][subCol]);
+      const assignment = byKey[key];
+      if (!assignment) continue;
+      if (localCol !== -1 && assignment.localSortOrder !== undefined &&
+          String(values[index][localCol]) !== String(assignment.localSortOrder)) {
+        values[index][localCol] = assignment.localSortOrder;
+        changed++;
+      }
+      if (sortCol !== -1 && assignment.globalNumber !== undefined &&
+          String(values[index][sortCol]) !== String(assignment.globalNumber)) {
+        values[index][sortCol] = assignment.globalNumber;
+        changed++;
+      }
+      if (rowCol !== -1 && assignment.rekapRowNumber !== undefined &&
+          String(values[index][rowCol]) !== String(assignment.rekapRowNumber)) {
+        values[index][rowCol] = assignment.rekapRowNumber;
+        changed++;
+      }
+    }
+    if (changed) {
+      sheet.getRange(2, 1, values.length - 1, values[0].length).setValues(values.slice(1));
+    }
+    return changed;
   },
 
   deactivateSubActivity: function(year, activityId, subActivityId, reason) {

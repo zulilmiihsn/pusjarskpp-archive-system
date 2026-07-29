@@ -617,7 +617,7 @@ const ParseEngine = (function () {
   // Toleransi spasi antar-kata & case agar tahan variasi OCR.
   const LANRI_KALTIM_RE = /Lembaga\s+Administrasi\s+Negara/i;
   function detectDirection_(headerText, fullText) {
-    const zone = String(headerText || '') + '\n' + String(fullText || '').substring(0, 600);
+    const zone = String(headerText || '') + '\n' + String(fullText || '').substring(0, 150);
     return LANRI_KALTIM_RE.test(zone) ? 'keluar' : 'masuk';
   }
 

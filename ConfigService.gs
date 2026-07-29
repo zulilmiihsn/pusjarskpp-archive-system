@@ -86,14 +86,14 @@ const ConfigService = {
             updated_at: new Date().toISOString()
           };
           if (payload.passwordHash) {
-            updates.password_hash = hashPasswordV2_(payload.passwordHash, payload.username);
+            updates.password_hash = hashPasswordV3_(payload.passwordHash, payload.username);
           }
           updateConfigRow_(sheet, rowIndex, updates);
           return objectFromHeaders_(getHeaders_(sheet), sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getDisplayValues()[0]);
         }
       }
       const accountId = payload.accountId || Utilities.getUuid();
-      sheet.appendRow([accountId, payload.username || '', payload.passwordHash ? hashPasswordV2_(payload.passwordHash, payload.username) : '', payload.role || 'user', payload.displayName || '', 'TRUE', new Date().toISOString(), new Date().toISOString()]);
+      sheet.appendRow([accountId, payload.username || '', payload.passwordHash ? hashPasswordV3_(payload.passwordHash, payload.username) : '', payload.role || 'user', payload.displayName || '', 'TRUE', new Date().toISOString(), new Date().toISOString()]);
       return { account_id: accountId };
     });
   },

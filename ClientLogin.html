@@ -1,13 +1,24 @@
 <script>
   function showLoginModal() {
+    const existing = document.getElementById('login-modal-backdrop');
+    if (existing) {
+      const usernameInput = existing.querySelector('#login-username');
+      if (usernameInput) usernameInput.focus();
+      return;
+    }
     const backdrop = document.createElement('div');
     backdrop.className = 'modal-backdrop';
     backdrop.id = 'login-modal-backdrop';
     backdrop.style.backdropFilter = 'blur(6px)';
     backdrop.style.background = 'rgba(15,23,42,0.55)';
     backdrop.innerHTML = `
-      <div class="modal-card" style="max-width:400px;overflow:visible;">
+      <div class="modal-card login-modal-card" style="max-width:400px;position:relative;">
         <div class="login-bar"></div>
+        <button id="login-modal-close" type="button" aria-label="Tutup dan kembali" title="Tutup dan kembali" style="position:absolute;top:14px;right:14px;width:34px;height:34px;border:1px solid var(--border);border-radius:10px;background:var(--surface);color:var(--muted);display:grid;place-items:center;cursor:pointer;transition:transform 140ms ease,background 140ms ease,color 140ms ease;z-index:2;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
+        </button>
         <div style="padding:28px 28px 24px;">
           <div style="text-align:center;margin-bottom:22px;">
             <div style="width:48px;height:48px;border-radius:999px;background:linear-gradient(135deg,var(--accent-light),#DBEAFE);display:inline-grid;place-items:center;border:2px solid var(--accent-border);margin-bottom:14px;">
@@ -65,11 +76,11 @@
 
           <button id="login-btn" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px 22px;min-height:44px;margin-top:20px;border:none;border-radius:var(--radius);background:var(--accent);color:#fff;font-size:14px;font-weight:700;cursor:pointer;transition:all 140ms ease;box-shadow:0 1px 3px rgba(29,78,216,0.25);position:relative;line-height:1.25;font-family:inherit;">
             <span id="login-btn-text">Masuk</span>
-            <div id="login-spinner" style="display:none;position:absolute;inset:0;align-items:center;justify-content:center;gap:5px;">
-              <div style="width:6px;height:6px;border-radius:999px;background:rgba(255,255,255,0.7);animation:lgnDot 0.6s ease-in-out infinite;"></div>
-              <div style="width:6px;height:6px;border-radius:999px;background:rgba(255,255,255,0.7);animation:lgnDot 0.6s ease-in-out infinite;animation-delay:0.15s;"></div>
-              <div style="width:6px;height:6px;border-radius:999px;background:rgba(255,255,255,0.7);animation:lgnDot 0.6s ease-in-out infinite;animation-delay:0.3s;"></div>
-            </div>
+            <span id="login-spinner" aria-hidden="true" style="display:none;align-items:center;gap:4px;">
+              <span style="width:5px;height:5px;border-radius:999px;background:rgba(255,255,255,0.75);animation:lgnDot 0.6s ease-in-out infinite;"></span>
+              <span style="width:5px;height:5px;border-radius:999px;background:rgba(255,255,255,0.75);animation:lgnDot 0.6s ease-in-out infinite;animation-delay:0.15s;"></span>
+              <span style="width:5px;height:5px;border-radius:999px;background:rgba(255,255,255,0.75);animation:lgnDot 0.6s ease-in-out infinite;animation-delay:0.3s;"></span>
+            </span>
           </button>
         </div>
         <div style="padding:14px 28px;border-top:1px solid var(--line);text-align:center;">
@@ -114,9 +125,15 @@
       pwToggle.querySelector('.login-pw-eye-off').style.display = isPw ? '' : 'none';
     });
 
-    const close = () => { hideElementAnimated(backdrop, () => { backdrop.remove(); style.remove(); }); state._loginPromptShown = false; };
-    backdrop.querySelector('#login-modal-close')?.addEventListener('click', close);
-    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+    const close = (restoreGuestRoute = true) => {
+      if (restoreGuestRoute && typeof cancelGuestLoginPrompt_ === 'function') {
+        cancelGuestLoginPrompt_();
+      }
+      hideElementAnimated(backdrop, () => { backdrop.remove(); style.remove(); });
+      state._loginPromptShown = false;
+    };
+    backdrop.querySelector('#login-modal-close')?.addEventListener('click', () => close(true));
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(true); });
 
     const doLogin = async () => {
       const username = document.getElementById('login-username')?.value.trim();
@@ -134,42 +151,47 @@
       const btnText = document.getElementById('login-btn-text');
       const spinner = document.getElementById('login-spinner');
       if (btn) { btn.disabled = true; }
-      if (btnText) btnText.style.opacity = '0';
+      if (btnText) btnText.textContent = 'Memverifikasi...';
       if (spinner) spinner.style.display = 'flex';
       if (errorEl) errorEl.style.display = 'none';
       try {
-        const user = await api('login', { username, password });
+        const loginTimeoutMs = (typeof API_TIMEOUTS_MS !== 'undefined' && API_TIMEOUTS_MS.login)
+          ? API_TIMEOUTS_MS.login
+          : 60000;
+        const user = await api('login', { username, password }, {
+          timeoutMs: loginTimeoutMs,
+          timeoutMessage: 'Login belum selesai setelah ' + Math.round(loginTimeoutMs / 1000) + ' detik. Catat waktu kejadian untuk pemeriksaan Execution Log.'
+        });
         if (user.sessionId) {
-          localStorage.setItem('portal_session_id', user.sessionId);
+          setSessionToken(user.sessionId);
         }
         state.currentUser = user;
-        close();
-        state._loginPromptShown = false;
+        state.authReady = true;
+        if (btnText) btnText.textContent = 'Memuat data...';
 
-        // Immediately update sidebar visibility and user bar so there's no visual gap
-        applyRoleVisibility();
-        renderLogoutBar();
-        updateNavActive();
-
-        // Force a fresh bootstrap re-fetch (old one was loaded as guest)
+        // Bootstrap baru dijalankan setelah token tersedia. Modal tetap menutup UI
+        // utama sampai data selesai agar tidak ada konten/error yang bocor di belakang.
         state.bootstrap = null;
-        
-        // Populate nav again to show skeleton state while waiting
-        populateDashboardNav();
-
-        // Show loading indicator in content area while refreshing data
-        showLoading('Menyiapkan sesi Anda...');
-
         invalidateViewCache();
-        await loadBootstrap();
+        await loadBootstrap({ throwOnError: true, silentError: true });
+        state.pendingRoute = null;
+        state.loginReturnRoute = null;
+        state._loginPromptShown = false;
+        close(false);
       } catch (e) {
+        if (isAccessDeniedError_(e) && getSessionToken() && state.currentUser && state.currentUser.role !== 'guest') {
+          state._loginPromptShown = false;
+          close(false);
+          showAccessDeniedState_(e);
+          return;
+        }
         if (errorEl && errorText) {
           errorText.textContent = e.message || 'Login gagal.';
           errorEl.style.display = 'flex';
         }
       } finally {
         if (btn) { btn.disabled = false; }
-        if (btnText) btnText.style.opacity = '1';
+        if (btnText) btnText.textContent = 'Masuk';
         if (spinner) spinner.style.display = 'none';
       }
     };
@@ -248,8 +270,9 @@
     try {
       await api('logout');
     } catch (e) { /* ignore */ }
-    localStorage.removeItem('portal_session_id');
+    clearSessionToken();
     state.currentUser = { role: 'guest', username: '', displayName: 'Tamu' };
+    state.authReady = true;
     state._loginPromptShown = false;
 
     // Immediately reflect guest state in sidebar
@@ -271,7 +294,7 @@
     backdrop.style.backdropFilter = 'blur(6px)';
     backdrop.style.background = 'rgba(15,23,42,0.55)';
     backdrop.innerHTML = `
-      <div class="modal-card" style="max-width:440px;overflow:visible;">
+      <div class="modal-card login-modal-card" style="max-width:440px;">
         <div class="login-bar"></div>
         <div style="padding:28px 28px 24px;">
           <div style="text-align:center;margin-bottom:22px;">

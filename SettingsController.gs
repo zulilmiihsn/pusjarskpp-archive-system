@@ -2,8 +2,25 @@
 
 const SettingsController = {
   getBootstrap: function() {
+    const perfStartedAt = Date.now();
+    const bootstrapPerf = {
+      event: 'BOOTSTRAP_PERF',
+      outcome: 'STARTED',
+      settingsMs: 0,
+      configMs: 0,
+      adminCheckMs: 0,
+      mapActivitiesMs: 0,
+      triggerCheckMs: 0,
+      inactiveCountMs: 0,
+      totalMs: 0
+    };
+    let phaseStartedAt = Date.now();
     const settings = ConfigService.getSettings();
+    bootstrapPerf.settingsMs = Date.now() - phaseStartedAt;
     if (!settings.configSpreadsheetId) {
+      bootstrapPerf.outcome = 'NOT_CONFIGURED';
+      bootstrapPerf.totalMs = Date.now() - perfStartedAt;
+      console.info('BOOTSTRAP_PERF ' + JSON.stringify(bootstrapPerf));
       return {
         configured: false,
         settings: settings,
@@ -11,8 +28,13 @@ const SettingsController = {
       };
     }
 
+    phaseStartedAt = Date.now();
     const config = CacheHelper.getConfig(settings.currentYear);
+    bootstrapPerf.configMs = Date.now() - phaseStartedAt;
     if (!config || !config.activities || config.activities.length === 0) {
+      bootstrapPerf.outcome = 'EMPTY_CONFIG';
+      bootstrapPerf.totalMs = Date.now() - perfStartedAt;
+      console.info('BOOTSTRAP_PERF ' + JSON.stringify(bootstrapPerf));
       return {
         configured: false,
         settings: settings,
@@ -24,8 +46,13 @@ const SettingsController = {
     // yang dipanggil tiap load halaman. Membuat admin sbg efek samping = akun + sesi admin
     // siluman tanpa password pernah ditampilkan ke user (sumber "tiba-tiba login admin").
     // Pembuatan admin HANYA di initializeWorkspace yang menampilkan password.
+    phaseStartedAt = Date.now();
     try {
       if (!hasActiveAdminAccount_()) {
+        bootstrapPerf.adminCheckMs = Date.now() - phaseStartedAt;
+        bootstrapPerf.outcome = 'ADMIN_NOT_FOUND';
+        bootstrapPerf.totalMs = Date.now() - perfStartedAt;
+        console.info('BOOTSTRAP_PERF ' + JSON.stringify(bootstrapPerf));
         return {
           configured: false,
           settings: settings,
@@ -35,7 +62,9 @@ const SettingsController = {
     } catch (e) {
       // Bila pengecekan gagal, jangan blok app — lanjutkan.
     }
+    bootstrapPerf.adminCheckMs = Date.now() - phaseStartedAt;
 
+    phaseStartedAt = Date.now();
     const activities = config.activities.map((activity) => {
       const subs = config.subActivities
         .filter(sub => sub.activity_id === activity.activity_id)
@@ -70,8 +99,10 @@ const SettingsController = {
         )
       });
     });
+    bootstrapPerf.mapActivitiesMs = Date.now() - phaseStartedAt;
 
     let triggerInstalled = false;
+    phaseStartedAt = Date.now();
     try {
       const handlerName = 'runArchiveMaintenance';
       const triggers = ScriptApp.getProjectTriggers();
@@ -79,9 +110,11 @@ const SettingsController = {
     } catch (e) {
       console.warn('Error checking triggers: ' + e.message);
     }
+    bootstrapPerf.triggerCheckMs = Date.now() - phaseStartedAt;
 
     let trashedCount = 0;
     let totalSubActivitiesCount = 0;
+    phaseStartedAt = Date.now();
     try {
       const ss = ConfigRepository.getConfigSpreadsheet();
       const allSubs = readSheetObjects_(ss, CONFIG_SHEETS.SUB_ACTIVITIES)
@@ -91,8 +124,9 @@ const SettingsController = {
     } catch (e) {
       console.warn('Error loading inactive sub-activities: ' + e.message);
     }
+    bootstrapPerf.inactiveCountMs = Date.now() - phaseStartedAt;
 
-    return {
+    const result = {
       configured: true,
       settings: settings,
       selectedYear: config.selectedYear,
@@ -103,17 +137,21 @@ const SettingsController = {
       }),
       history: config.history.slice(0, 50),
       historyMeta: {
-        total: config.history.length,
+        total: (config.historyAll || config.history).length,
         page: 1,
-        totalPages: Math.ceil(config.history.length / 50)
+        totalPages: Math.ceil((config.historyAll || config.history).length / 50)
       },
-      progress: this.buildProgress(config.history, activities),
+      progress: this.buildProgress(config.historyAll || config.history, activities),
       maintenance: {
         triggerInstalled: triggerInstalled,
         trashedCount: trashedCount,
         totalCount: totalSubActivitiesCount
       }
     };
+    bootstrapPerf.outcome = 'SUCCESS';
+    bootstrapPerf.totalMs = Date.now() - perfStartedAt;
+    console.info('BOOTSTRAP_PERF ' + JSON.stringify(bootstrapPerf));
+    return result;
   },
 
   saveSettings: function (payload) {
