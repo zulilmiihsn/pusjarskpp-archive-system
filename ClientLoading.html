@@ -1,0 +1,114 @@
+<script>
+  function paramsMatchCurrent(viewName, params) {
+    if (!params) return true;
+    if (viewName === 'activity_detail') {
+      return (params.activityId || null) === state.selectedActivityId;
+    }
+    if (viewName === 'archive_folder') {
+      return (params.folderId || null) === state.selectedFolderId;
+    }
+    if (viewName === 'process') {
+      return true;
+    }
+    return true;
+  }
+
+  function rerenderCurrentView(viewName) {
+    if (state.view !== viewName) return;
+
+    if (viewName === 'archive_folder') {
+      const container = document.getElementById('archive-folder-content');
+      if (container) {
+        if (typeof loadArchiveFolderContent === 'function' && typeof getArchiveFolderContext === 'function') {
+          const context = getArchiveFolderContext();
+          loadArchiveFolderContent(context);
+        }
+        return;
+      }
+    }
+    
+    // Jangan hancurkan form jika pengguna berada di pengaturan
+    if (viewName === 'settings') {
+      if (typeof updateSettingsInPlace === 'function') {
+        updateSettingsInPlace();
+      }
+      return; 
+    }
+
+    if (viewName === 'accounts') {
+      if (typeof renderAccounts === 'function') {
+        renderAccounts(true); // Akan dimodifikasi untuk SWR in-place di file ClientAccounts
+        return;
+      }
+    }
+
+    if (viewName === 'process' || viewName === 'document_process') {
+      // Form sedang aktif, jangan render ulang agar input & scroll tidak terganggu
+      return;
+    }
+
+    if (typeof render === 'function') {
+      // Jaga posisi scroll agar refresh background tidak melompatkan user ke atas.
+      const contentEl = document.getElementById('content');
+      const prevScroll = contentEl ? contentEl.scrollTop : 0;
+      render();
+      const newContentEl = document.getElementById('content');
+      if (newContentEl && prevScroll) newContentEl.scrollTop = prevScroll;
+    }
+  }
+
+  function showGlobalLoading(titleText, subtitleHtml) {
+    const overlay = document.getElementById('year-loading-overlay');
+    const titleEl = document.querySelector('.year-loading-text');
+    const sub = document.getElementById('year-loading-sub');
+    if (overlay) overlay.classList.add('active');
+    if (titleEl) titleEl.textContent = titleText || 'Memproses...';
+    if (sub) {
+      if (subtitleHtml !== undefined) {
+        sub.style.display = subtitleHtml ? '' : 'none';
+        sub.innerHTML = subtitleHtml || '';
+      } else {
+        sub.style.display = 'none';
+      }
+    }
+  }
+
+  function hideGlobalLoading() {
+    const overlay = document.getElementById('year-loading-overlay');
+    if (overlay) overlay.classList.remove('active');
+  }
+
+  function showYearLoading(year, customTitle, customSubtitle) {
+    state.yearSwitchLoading = true;
+    const title = customTitle || 'Mengganti ruang kerja tahun...';
+    const subtitle = customSubtitle || ('Memuat data tahun <span id="year-loading-year">' + esc(year) + '</span>');
+    showGlobalLoading(title, subtitle);
+  }
+
+  function hideYearLoading() {
+    state.yearSwitchLoading = false;
+    hideGlobalLoading();
+  }
+
+  function prefetchTemplatesData() {
+    if (typeof api !== 'function') return;
+    // Jangan prefetch sebelum ruang kerja dibangun — config spreadsheet belum ada,
+    // pemanggilan template akan gagal dengan "CONFIG_SPREADSHEET_ID belum diisi".
+    if (!state.bootstrap || !state.bootstrap.configured) return;
+    if (typeof ensureTemplatesData === 'function') {
+      ensureTemplatesData().catch(function () {});
+    }
+  }
+
+  async function smartRefresh() {
+    try {
+      if (state.view === 'templates') {
+        if (typeof reloadTpl === 'function') reloadTpl(null, true); // true = silent background SWR
+        return;
+      }
+      state.bootstrap = await api('getBootstrap');
+      populateDashboardNav();
+    } catch (e) { /* silent */ }
+    rerenderCurrentView(state.view);
+  }
+</script>

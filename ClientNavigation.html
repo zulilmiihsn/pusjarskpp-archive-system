@@ -1,0 +1,281 @@
+<script>
+  const GUEST_ALLOWED = ['dashboard', 'templates'];
+
+  function isRestrictedForGuest(view) {
+    if (!state.currentUser) return true;
+    if (state.currentUser.role !== 'guest') return false;
+    if (view === 'activity_detail') return false;
+    return GUEST_ALLOWED.indexOf(view) === -1;
+  }
+
+  function applyRoleVisibility() {
+    const role = state.currentUser ? state.currentUser.role : 'guest';
+    const isGuest = (role === 'guest');
+    document.querySelectorAll('.nav-admin').forEach(el => {
+      el.style.display = (role === 'admin') ? '' : 'none';
+    });
+    document.querySelectorAll('.nav-auth').forEach(el => {
+      el.style.display = isGuest ? 'none' : '';
+    });
+  }
+
+  function populateDashboardNav() {
+    const container = document.getElementById('nav-kegiatan-children');
+    if (!container) return;
+    const btn = document.getElementById('nav-kegiatan');
+    
+    if (!state.bootstrap || !state.bootstrap.configured) {
+      if (btn) btn.disabled = true;
+      container.innerHTML = '';
+      return;
+    }
+    
+    if (btn) btn.disabled = false;
+    const activities = state.bootstrap.activities || [];
+    container.innerHTML = activities.map(a => `
+      <button class="nav-child-item" data-activity-id="${esc(a.activity_id)}">${esc(a.activity_name)}</button>
+    `).join('');
+    container.querySelectorAll('.nav-child-item').forEach(btnChild => {
+      btnChild.addEventListener('click', () => {
+        setView('activity_detail', { activityId: btnChild.dataset.activityId });
+      });
+    });
+    const parent = container.closest('.nav-parent');
+    if (parent && activities.length) {
+      const savedState = localStorage.getItem('kegiatan_expanded');
+      if (savedState === '0') {
+        parent.classList.remove('expanded');
+      } else {
+        parent.classList.add('expanded');
+      }
+    }
+  }
+
+  function updateNavActive() {
+    document.querySelectorAll('.nav-item').forEach(button => {
+      let isActive = false;
+      if (button.id === 'nav-dashboard') {
+        isActive = (state.view === 'dashboard');
+      } else if (button.id === 'nav-kegiatan') {
+        isActive = isKegiatanView();
+      } else {
+        isActive = (button.dataset.view === state.view);
+      }
+      button.classList.toggle('active', isActive);
+    });
+    document.querySelectorAll('.nav-child-item').forEach(item => {
+      item.classList.toggle('active',
+        isKegiatanView() && item.dataset.activityId === state.selectedActivityId
+      );
+    });
+    const parent = document.getElementById('nav-kegiatan-group');
+    if (parent) {
+      const savedState = localStorage.getItem('kegiatan_expanded');
+      if (isKegiatanView()) {
+        parent.classList.add('expanded');
+      } else if (savedState === '0') {
+        parent.classList.remove('expanded');
+      } else if (savedState === '1') {
+        parent.classList.add('expanded');
+      }
+    }
+  }
+
+  function onLocationChange(location) {
+    const params = location.parameter || {};
+    const locView = params.view || 'dashboard';
+    if (state.authReady && locView === state.view &&
+        (params.activityId || null) === state.selectedActivityId &&
+        (params.subActivityId || null) === state.selectedSubActivityId &&
+        (params.folderId || null) === state.selectedFolderId) return;
+
+    const previousGuestRoute = state.authReady && state.currentUser &&
+      state.currentUser.role === 'guest' && !isRestrictedForGuest(state.view)
+      ? currentRouteParams_()
+      : null;
+    rememberPendingRoute_(params);
+    if (!state.authReady) return;
+    if (isRestrictedForGuest(state.view)) {
+      if (!state.bootstrap) {
+        prepareRestrictedGuestRoute_(state.pendingRoute, previousGuestRoute).catch(function (error) {
+          console.error('guest route preparation failed:', error);
+          showGuestLoginPrompt_(previousGuestRoute);
+        });
+      } else {
+        showGuestLoginPrompt_(previousGuestRoute);
+      }
+      return;
+    }
+    state.pendingRoute = null;
+    state.loginReturnRoute = null;
+    document.getElementById('app').classList.remove('auth-pending');
+
+    try {
+      updateNavActive();
+    } catch (e) {
+      console.error('nav error:', e);
+    }
+
+    if (!state.bootstrap) {
+      loadBootstrap();
+    } else {
+      render();
+    }
+  }
+
+  function setView(view, extraParams = {}) {
+    const previousGuestRoute = state.currentUser && state.currentUser.role === 'guest' &&
+      !isRestrictedForGuest(state.view)
+      ? currentRouteParams_()
+      : null;
+    state.userNavigated = true;
+    state.view = view;
+
+    if (view !== 'process') {
+      state.editMode = false;
+      state.editReturnFolder = null;
+    }
+
+    if (extraParams.activityId) {
+      state.selectedActivityId = extraParams.activityId;
+    } else if (!isKegiatanView()) {
+      state.selectedActivityId = null;
+    }
+
+    if (extraParams.subActivityId) {
+      state.selectedSubActivityId = extraParams.subActivityId;
+    } else if (view !== 'archive_folder') {
+      state.selectedSubActivityId = null;
+    }
+
+    if (extraParams.folderId) {
+      state.selectedFolderId = extraParams.folderId;
+      state.selectedFolderName = extraParams.folderName || '';
+      state.selectedFolderBreadcrumb = extraParams.folderBreadcrumb || [];
+    } else if (view !== 'archive_folder') {
+      state.selectedFolderId = null;
+      state.selectedFolderName = null;
+      state.selectedFolderBreadcrumb = [];
+    }
+
+    if (extraParams.preselectedActivityId) {
+      state.preselectedActivityId = extraParams.preselectedActivityId;
+    } else if (view === 'process' || view === 'document_process') {
+      state.preselectedActivityId = null;
+    }
+    if (extraParams.preselectedSubActivityId) {
+      state.preselectedSubActivityId = extraParams.preselectedSubActivityId;
+    } else if (view === 'process' || view === 'document_process') {
+      state.preselectedSubActivityId = null;
+    }
+    if (extraParams.targetFolderId) {
+      state.preselectedTargetFolderId = extraParams.targetFolderId;
+      state.preselectedTargetFolderName = extraParams.targetFolderName || '';
+      state.preselectedFolderBreadcrumb = extraParams.folderBreadcrumb || [];
+    } else if (view !== 'process' || !extraParams.targetFolderId) {
+      state.preselectedTargetFolderId = null;
+      state.preselectedTargetFolderName = null;
+      state.preselectedFolderBreadcrumb = [];
+    }
+
+    const queryParams = currentRouteParams_();
+    if (isRestrictedForGuest(view)) {
+      state.pendingRoute = Object.assign({}, queryParams);
+      if (previousGuestRoute) state.loginReturnRoute = previousGuestRoute;
+    } else {
+      state.pendingRoute = null;
+      state.loginReturnRoute = null;
+    }
+
+    try {
+      updateNavActive();
+    } catch (e) {
+      console.error('nav error:', e);
+    }
+    render();
+
+    if (window.google && google.script && google.script.history) {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          google.script.history.push(null, queryParams, null);
+        }, 50);
+      });
+    }
+  }
+
+  let bootstrapPromise = null;
+  async function loadBootstrap(options) {
+    options = options || {};
+    if (state.bootstrap) return;
+    if (bootstrapPromise) {
+      try {
+        state.bootstrap = await bootstrapPromise;
+        return state.bootstrap;
+      } catch (error) {
+        if (options.throwOnError) throw error;
+        return null;
+      }
+    }
+    if (!options.silentError) showLoading('Memuat konfigurasi aplikasi...');
+    const timeoutMs = (typeof BOOTSTRAP_TIMEOUT_MS !== 'undefined') ? BOOTSTRAP_TIMEOUT_MS : 15000;
+    bootstrapPromise = api('getBootstrap', null, {
+      timeoutMs: timeoutMs,
+      timeoutMessage: 'Konfigurasi belum termuat setelah ' + Math.round(timeoutMs / 1000) + ' detik. Coba lagi.'
+    });
+    try {
+      state.bootstrap = await bootstrapPromise;
+      document.getElementById('app').classList.remove('loading', 'auth-pending');
+      populateDashboardNav();
+      render();
+      startVersionTracker();
+      prefetchTemplatesData();
+      if (state.bootstrap.workspaceSetup && state.bootstrap.workspaceSetup.defaultPassword) {
+        showAdminPasswordModal(state.bootstrap.workspaceSetup.defaultPassword);
+      }
+      return state.bootstrap;
+    } catch (error) {
+      if (!options.silentError) setContent(`<div class="error">${esc(errorMessage(error))}</div>`);
+      if (options.throwOnError) throw error;
+      return null;
+    } finally {
+      bootstrapPromise = null;
+    }
+  }
+
+  function showAccessDeniedState_(error) {
+    const app = document.getElementById('app');
+    if (app) app.classList.remove('loading', 'auth-pending');
+    applyRoleVisibility();
+    renderLogoutBar();
+    const message = errorMessage(error);
+    setContent(`
+      <div class="panel panel-pad">
+        <div class="empty">
+          <strong>Akses data ditolak</strong>
+          <p style="margin:8px 0 16px;max-width:720px;">${esc(message)}</p>
+          <button class="btn btn-primary" id="retry-access-load" type="button">Coba Muat Data</button>
+        </div>
+      </div>
+    `);
+    const retry = document.getElementById('retry-access-load');
+    if (retry) {
+      retry.addEventListener('click', async function () {
+        retry.disabled = true;
+        retry.textContent = 'Memuat...';
+        state.bootstrap = null;
+        try {
+          await loadBootstrap({ throwOnError: true, silentError: true });
+        } catch (nextError) {
+          if (isAccessDeniedError_(nextError)) {
+            showAccessDeniedState_(nextError);
+          } else {
+            retry.disabled = false;
+            retry.textContent = 'Coba Muat Data';
+            showToast('Gagal memuat data: ' + errorMessage(nextError));
+          }
+        }
+      });
+    }
+  }
+
+</script>

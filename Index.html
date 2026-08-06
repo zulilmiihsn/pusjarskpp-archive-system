@@ -5,11 +5,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Portal Arsip PUSJARSKPP</title>
-  <?!= include('StylesBase'); ?>
-  <?!= include('StylesLayout'); ?>
-  <?!= include('StylesComponents'); ?>
-  <?!= include('StylesForms'); ?>
-  <?!= include('StylesTables'); ?>
+  <?!= include_('StylesBase'); ?>
+  <?!= include_('StylesLayout'); ?>
+  <?!= include_('StylesComponents'); ?>
+  <?!= include_('StylesForms'); ?>
+  <?!= include_('StylesTables'); ?>
 </head>
 <body>
   <div id="app" class="app-shell loading auth-pending">
@@ -181,22 +181,28 @@
   <div class="watermark-sosmed" aria-hidden="true">
     <img src="" alt="" id="watermark-logo-sosmed">
   </div>
-  <?!= include('ClientState'); ?>
-  <?!= include('ClientAssets'); ?>
-  <?!= include('ClientApi'); ?>
-  <?!= include('ClientRouter'); ?>
-  <?!= include('ClientDashboard'); ?>
-  <?!= include('ClientActivityDetail'); ?>
-  <?!= include('EditSubActivity'); ?>
-  <?!= include('ClientArchiveFolder'); ?>
-  <?!= include('ClientProcess'); ?>
-  <?!= include('ClientDocumentProcess'); ?>
-  <?!= include('ClientHistory'); ?>
-  <?!= include('ClientTemplates'); ?>
-  <?!= include('ClientAccounts'); ?>
-  <?!= include('ClientSettings'); ?>
-  <?!= include('ClientFolderPicker'); ?>
-  <?!= include('ClientLogin'); ?>
-  <?!= include('ClientUtils'); ?>
+  <?!= include_('ClientState'); ?>
+  <?!= include_('ClientAssets'); ?>
+  <?!= include_('ClientApi'); ?>
+  <?!= include_('ClientRouter'); ?>
+  <?!= include_('ClientRouteState'); ?>
+  <?!= include_('ClientNavigation'); ?>
+  <?!= include_('ClientRendering'); ?>
+  <?!= include_('ClientSearch'); ?>
+  <?!= include_('ClientLifecycle'); ?>
+  <?!= include_('ClientLoading'); ?>
+  <?!= include_('ClientDashboard'); ?>
+  <?!= include_('ClientActivityDetail'); ?>
+  <?!= include_('EditSubActivity'); ?>
+  <?!= include_('ClientArchiveFolder'); ?>
+  <?!= include_('ClientProcess'); ?>
+  <?!= include_('ClientDocumentProcess'); ?>
+  <?!= include_('ClientHistory'); ?>
+  <?!= include_('ClientTemplates'); ?>
+  <?!= include_('ClientAccounts'); ?>
+  <?!= include_('ClientSettings'); ?>
+  <?!= include_('ClientFolderPicker'); ?>
+  <?!= include_('ClientLogin'); ?>
+  <?!= include_('ClientUtils'); ?>
 </body>
 </html>

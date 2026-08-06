@@ -84,6 +84,7 @@
             } else {
               var srvErr = new Error(response.error || 'Terjadi kesalahan dari server');
               srvErr.code = response.errorCode || 'UNKNOWN_ERROR';
+              srvErr.requestId = response.requestId || '';
               handleSessionError_(srvErr);
               done(reject, srvErr);
             }
@@ -405,6 +406,8 @@
   function errorMessage(err) {
     if (!err) return 'Terjadi kesalahan tidak dikenal';
     if (typeof err === 'string') return err;
-    return err.message || String(err);
+    const base = err.message || String(err);
+    const requestId = String(err.requestId || '');
+    return requestId ? base + ' (Referensi: ' + requestId.slice(0, 8) + ')' : base;
   }
 </script>

@@ -140,9 +140,9 @@ function buildGlobalArchiveNumberPlan_(activities, subActivities) {
     activityById[String(activity.activity_id || '')] = activity;
   });
 
-  let globalNumber = 1;
   const assignments = [];
   activeActivities.forEach(function (activity) {
+    var globalNumber = 1;
     const rows = (subActivities || []).filter(function (subActivity) {
       return String(subActivity && subActivity.activity_id || '') === String(activity.activity_id || '');
     }).slice().sort(function (a, b) {
@@ -164,10 +164,11 @@ function buildGlobalArchiveNumberPlan_(activities, subActivities) {
     });
   });
 
+  const activeAssignments = assignments.filter(function (assignment) { return assignment.isActive; });
   return {
     assignments: assignments,
-    activeAssignments: assignments.filter(function (assignment) { return assignment.isActive; }),
-    totalActive: globalNumber - 1,
+    activeAssignments: activeAssignments,
+    totalActive: activeAssignments.length,
     activityById: activityById
   };
 }

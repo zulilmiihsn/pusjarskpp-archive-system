@@ -1,0 +1,256 @@
+<script>
+  function performSearch(query) {
+    const dropdown = document.getElementById('search-dropdown');
+    if (!dropdown || !query || query.length < 2 || !state.bootstrap) {
+      if (dropdown) dropdown.classList.remove('open');
+      return [];
+    }
+
+    const q = query.toLowerCase();
+    const results = [];
+    const isGuest = state.currentUser && state.currentUser.role === 'guest';
+    const seen = new Set();
+
+    if (!isGuest) {
+      const history = state.bootstrap.history || [];
+      const activities = state.bootstrap.activities || [];
+
+      history.forEach(function(item) {
+        const name = item.final_file_name || '';
+        if (name.toLowerCase().indexOf(q) !== -1 && !seen.has(name)) {
+          seen.add(name);
+          results.push({
+            type: 'dokumen',
+            label: name,
+            sublabel: getActivityName(item.activity_id) || 'Arsip',
+            go: async function() {
+              const isDraft = String(item.status || '').toUpperCase() === 'DRAFT';
+              if (isDraft) {
+                if (item.metadata_json) {
+                   state.draft = JSON.parse(item.metadata_json);
+                   try {
+                     const histYear = (state.bootstrap && state.bootstrap.settings && state.bootstrap.settings.currentYear) || 'default_year';
+                     localStorage.setItem('portal_arsip_' + histYear + '_process_state_general', JSON.stringify({ draft: state.draft, inputState: {} }));
+                   } catch(e) {}
+                   setView('process');
+                   if (typeof showProcessToast === 'function') showProcessToast('Melanjutkan draf...');
+                } else {
+                   if (typeof showToast === 'function') showToast('Data draf kosong.');
+                }
+              } else {
+                if (typeof showProcessToast === 'function') showProcessToast('Mengambil data metadata...');
+                try {
+                  const draftObj = await api('getArchiveMetadata', { archiveId: item.archive_id, year: item.year, logData: item });
+                  state.draft = draftObj;
+                  state.editMode = true;
+                  setView('process');
+                  if (typeof showProcessToast === 'function') showProcessToast('Memasuki mode edit metadata...');
+                } catch (e) {
+                  if (typeof showToast === 'function') showToast('Gagal memuat metadata: ' + (e.message || e));
+                }
+              }
+            }
+          });
+        }
+      });
+
+      activities.forEach(function(act) {
+        const an = act.activity_name || '';
+        if (an.toLowerCase().indexOf(q) !== -1) {
+          results.push({
+            type: 'kegiatan',
+            label: an,
+            sublabel: 'Kegiatan',
+            go: function() { setView('activity_detail', { activityId: act.activity_id }); }
+          });
+        }
+        (act.subActivities || []).forEach(function(sub) {
+          const sn = sub.sub_activity_name || '';
+          if (sn.toLowerCase().indexOf(q) !== -1) {
+            results.push({
+              type: 'subkegiatan',
+              label: sn,
+              sublabel: an || 'Sub-kegiatan',
+              go: function() { setView('activity_detail', { activityId: act.activity_id }); }
+            });
+          }
+        });
+      });
+    }
+
+    if (typeof _templatesData !== 'undefined' && _templatesData) {
+      if (_templatesData.categories) {
+        _templatesData.categories.forEach(function(cat) {
+          const cn = cat.name || '';
+          if (cn.toLowerCase().indexOf(q) !== -1) {
+            results.push({
+              type: 'kategori template',
+              label: cn,
+              sublabel: 'Kategori Templat',
+              go: function() {
+                state.templateActiveCategoryId = cat.id;
+                setView('templates');
+              }
+            });
+          }
+          (cat.files || []).forEach(function(file) {
+            const fn = file.name || '';
+            if (fn.toLowerCase().indexOf(q) !== -1 && !seen.has(fn)) {
+              seen.add(fn);
+              results.push({
+                type: 'template',
+                label: fn,
+                sublabel: cat.name || 'Templat',
+                go: function() {
+                  state.templateActiveCategoryId = cat.id;
+                  setView('templates');
+                }
+              });
+            }
+          });
+        });
+      }
+
+      if (_templatesData.uncategorized) {
+        _templatesData.uncategorized.forEach(function(file) {
+          const fn = file.name || '';
+          if (fn.toLowerCase().indexOf(q) !== -1 && !seen.has(fn)) {
+            seen.add(fn);
+            results.push({
+              type: 'template',
+              label: fn,
+              sublabel: 'Tanpa Kategori',
+              go: function() {
+                state.templateActiveCategoryId = '';
+                setView('templates');
+              }
+            });
+          }
+        });
+      }
+    }
+
+    return results;
+  }
+
+  function renderSearchResults(results) {
+    const dropdown = document.getElementById('search-dropdown');
+    if (!dropdown) return;
+
+    if (results.length === 0) {
+      const q = document.getElementById('search-input') ? document.getElementById('search-input').value : '';
+      dropdown.innerHTML = '<div class="search-dropdown-empty">Tidak ada hasil untuk &lsquo;' + esc(q) + '&rsquo;</div>';
+      dropdown.classList.add('open');
+      return;
+    }
+
+    const groups = {
+      'Item Arsip': [],
+      'Kegiatan': [],
+      'Templat Item': []
+    };
+
+    results.forEach(function(r) {
+      if (r.type === 'dokumen') {
+        groups['Item Arsip'].push(r);
+      } else if (r.type === 'kegiatan' || r.type === 'subkegiatan') {
+        groups['Kegiatan'].push(r);
+      } else if (r.type === 'template' || r.type === 'kategori template') {
+        groups['Templat Item'].push(r);
+      }
+    });
+
+    let html = '';
+    let count = 0;
+    const clickActions = [];
+
+    for (const groupName in groups) {
+      const items = groups[groupName];
+      if (items.length > 0) {
+        let groupHtml = '<div class="search-dropdown-group-header">' + esc(groupName) + '</div>';
+        let itemAdded = false;
+
+        items.forEach(function(r) {
+          if (count >= 10) return;
+          count++;
+          itemAdded = true;
+
+          const idx = clickActions.length;
+          clickActions.push(r.go);
+
+          let iconSvg = '';
+          if (r.type === 'dokumen') {
+            iconSvg = '<svg class="search-item-type-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>';
+          } else if (r.type === 'kegiatan' || r.type === 'subkegiatan') {
+            iconSvg = '<svg class="search-item-type-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+          } else {
+            iconSvg = '<svg class="search-item-type-icon" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>';
+          }
+
+          groupHtml += '<div class="search-dropdown-item" data-index="' + idx + '" data-type="' + esc(r.type) + '">' +
+            '<div class="search-dropdown-item-content">' +
+              iconSvg +
+              '<div class="search-dropdown-text-group">' +
+                '<div class="search-dropdown-label">' + esc(r.label) + '</div>' +
+                '<div class="search-dropdown-sublabel">' + esc(r.sublabel) + '</div>' +
+              '</div>' +
+            '</div>' +
+            '</div>';
+        });
+
+        if (itemAdded) {
+          html += groupHtml;
+        }
+      }
+    }
+
+    dropdown.innerHTML = html;
+    dropdown.classList.add('open');
+
+    dropdown.querySelectorAll('.search-dropdown-item').forEach(function(el) {
+      el.addEventListener('click', function() {
+        dropdown.classList.remove('open');
+        const idx = parseInt(el.dataset.index, 10);
+        if (clickActions[idx]) {
+          clickActions[idx]();
+        }
+      });
+    });
+  }
+
+  function bindSearchBar() {
+    const input = document.getElementById('search-input');
+    const dropdown = document.getElementById('search-dropdown');
+    if (!input || !dropdown) return;
+
+    let searchTimeout;
+    input.addEventListener('input', function() {
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(function() {
+        const results = performSearch(input.value);
+        renderSearchResults(results);
+      }, 250);
+    });
+
+    input.addEventListener('focus', function() {
+      if (input.value.length >= 2) {
+        const results = performSearch(input.value);
+        renderSearchResults(results);
+      }
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.search-bar')) {
+        dropdown.classList.remove('open');
+      }
+    });
+
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        dropdown.classList.remove('open');
+        input.blur();
+      }
+    });
+  }
+
+</script>

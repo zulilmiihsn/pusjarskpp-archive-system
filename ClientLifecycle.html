@@ -1,0 +1,164 @@
+<script>
+  function renderUnconfigured() {
+    setContent(`
+      <div class="panel panel-pad stack">
+        <h2 class="section-title">Pilih Ruang Kerja Arsip</h2>
+        <p class="muted">Pilih tahun kerja dan Folder Ruang Kerja. Aplikasi akan mengecek struktur arsip tahun itu, membuat bagian yang belum ada, lalu memakai folder yang sudah tersedia.</p>
+        ${settingsForm(state.bootstrap ? state.bootstrap.settings : {})}
+        ${workspaceSetupHtml(state.workspaceSetup || (state.bootstrap && state.bootstrap.workspaceSetup))}
+      </div>
+    `);
+    bindSettingsForm();
+    bindWorkspaceInit();
+    bindFolderPickerButtons();
+  }
+
+  /* ── Version Tracker (near-realtime sync) ── */
+
+  const _versionTracker = { version: 0, intervalId: null, fetching: false, pendingRefresh: false, modalObserver: null, flushScheduled: false };
+
+  function startVersionTracker() {
+    stopVersionTracker();
+    getVersionAsync();
+    _versionTracker.intervalId = setInterval(getVersionAsync, VERSION_POLL_INTERVAL_MS);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    setupModalObserver();
+  }
+
+  function stopVersionTracker() {
+    if (_versionTracker.intervalId) {
+      clearInterval(_versionTracker.intervalId);
+      _versionTracker.intervalId = null;
+    }
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    if (_versionTracker.modalObserver) {
+      _versionTracker.modalObserver.disconnect();
+      _versionTracker.modalObserver = null;
+    }
+  }
+
+  /* Observer terpusat: begitu modal/dialog ditutup (style/class berubah atau
+     node-nya dilepas dari DOM), langsung coba jalankan refresh yang tertunda.
+     Tanpa ini, refresh baru jalan pada poll berikutnya (delay sampai 10 detik).
+     Debounce 150ms supaya tidak terpicu berkali-kali saat ada burst perubahan DOM. */
+  function setupModalObserver() {
+    if (_versionTracker.modalObserver || typeof MutationObserver === 'undefined') return;
+    _versionTracker.modalObserver = new MutationObserver(function () {
+      if (_versionTracker.flushScheduled) return;
+      _versionTracker.flushScheduled = true;
+      setTimeout(function () {
+        _versionTracker.flushScheduled = false;
+        flushPendingRefreshIfIdle();
+      }, 150);
+    });
+    _versionTracker.modalObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['style', 'class'],
+      subtree: true,
+      childList: true
+    });
+  }
+
+  function onVisibilityChange() {
+    if (document.hidden) {
+      if (_versionTracker.intervalId) {
+        clearInterval(_versionTracker.intervalId);
+        _versionTracker.intervalId = null;
+      }
+    } else {
+      if (!_versionTracker.intervalId) {
+        getVersionAsync();
+        _versionTracker.intervalId = setInterval(getVersionAsync, VERSION_POLL_INTERVAL_MS);
+      }
+    }
+  }
+
+  async function getVersionAsync() {
+    if (_versionTracker.fetching) return;
+    _versionTracker.fetching = true;
+    try {
+      const v = await api('getSystemVersion');
+      if (!_versionTracker.version) { _versionTracker.version = v.version; return; }
+      if (v.version !== _versionTracker.version) {
+        _versionTracker.version = v.version;
+        _versionTracker.pendingRefresh = true;
+      }
+      await flushPendingRefreshIfIdle();
+    } catch (e) { /* silent */ }
+    finally { _versionTracker.fetching = false; }
+  }
+
+  /* Jalankan refresh yang tertunda HANYA saat tidak ada modal/dialog terbuka,
+     supaya form/scroll user tidak terganggu. Dipanggil oleh version poll dan
+     oleh MutationObserver (saat modal ditutup). Aman dipanggil berkali-kali:
+     pendingRefresh di-clear sebelum smartRefresh sehingga tidak dobel jalan. */
+  async function flushPendingRefreshIfIdle() {
+    if (!_versionTracker.pendingRefresh) return;
+    if (typeof isAnyModalOpen === 'function' && isAnyModalOpen()) return;
+    _versionTracker.pendingRefresh = false;
+    // Jangan wipe cache di sini. Versi yang sudah naik otomatis bikin entry
+    // "version-stale", dan getCachedOrFetch akan revalidasi via SWR (tampilkan
+    // data lama dulu, refetch di background). Blanket invalidate bikin cache
+    // kosong -> loadXContent jatuh ke spinner dingin tiap poll.
+    await smartRefresh();
+  }
+
+  /* ── Cache-aware data fetch ──
+     Returns { data, source: 'cache' | 'fresh' | 'stale-revalidated' }
+     - source='cache': hit, instant, do not refetch
+     - source='fresh': no cache, fetched from server
+     - source='stale-revalidated': cache was stale (>30s), returned cached, refetched in background
+  */
+  async function getCachedOrFetch(viewName, params, fetchFn) {
+    const entry = getCachedView(viewName, params);
+    const currentVersion = getCurrentDataVersion();
+    const versionOk = isCacheVersionValid(entry, currentVersion);
+
+    // Kasus 1: Cache ada, masih segar (di bawah 30s) DAN versinya valid.
+    // Langsung gunakan cache tanpa memanggil server di latar belakang.
+    if (entry && versionOk && isCacheFresh(entry)) {
+      return { data: entry.data, source: 'cache' };
+    }
+
+    // Kasus 2: Cache ada (baik stale, atau versinya sudah tidak valid).
+    // Tampilkan data cache lama secara instan, namun tetap lakukan revalidasi asinkron di background.
+    if (entry) {
+      // Folder arsip yang sudah memuat >1 halaman (infinite scroll) JANGAN
+      // direvalidasi otomatis: refetch latar hanya mengambil halaman-1 dan akan
+      // menimpa akumulasi multi-halaman, membuat daftar "lompat balik" ke 60 item.
+      // Andalkan refresh manual / bump versi untuk menyegarkan kasus ini.
+      const isAccumulatedFolder = viewName === 'archive_folder'
+        && entry.data && Array.isArray(entry.data.files)
+        && entry.data.files.length > ((params && params.pageSize) ? params.pageSize : 0);
+      if (!isAccumulatedFolder && !hasInflightFetch(viewName, params)) {
+        setInflightFetch(viewName, params);
+        fetchFn()
+          .then(function (data) {
+            setCachedView(viewName, params, data, getCurrentDataVersion());
+            if (state.view === viewName && paramsMatchCurrent(viewName, params)) {
+              rerenderCurrentView(viewName);
+            }
+          })
+          .catch(function () { /* silent — tetap pertahankan data lama */ })
+          .finally(function () { clearInflightFetch(viewName, params); });
+      }
+      return { data: entry.data, source: 'stale-revalidated' };
+    }
+
+    // Kasus 3: Tidak ada cache sama sekali (kunjungan pertama kali).
+    // Jalankan fetch sinkron di foreground (pengguna melihat spinner pemuatan).
+    if (hasInflightFetch(viewName, params)) {
+      const inflight = getCachedView(viewName, params);
+      if (inflight) return { data: inflight.data, source: 'cache' };
+    }
+    setInflightFetch(viewName, params);
+    try {
+      const data = await fetchFn();
+      setCachedView(viewName, params, data, getCurrentDataVersion());
+      return { data: data, source: 'fresh' };
+    } finally {
+      clearInflightFetch(viewName, params);
+    }
+  }
+
+</script>

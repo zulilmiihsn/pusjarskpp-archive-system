@@ -99,6 +99,7 @@ const ArchiveController = {
     // payload.logData dari client (bisa dipalsukan untuk menunjuk file/baris lain).
     const log = ConfigRepository.getArchiveLog(payload.archiveId);
     if (!log) throw new Error('Log arsip tidak ditemukan.');
+    if (log.final_file_id) requireWithinWorkspace_(log.final_file_id, year);
 
     const config = CacheHelper.getConfig(year);
     const activity = ConfigService.findActivity(config, log.activity_id);
@@ -179,6 +180,10 @@ const ArchiveController = {
     } catch (e) {
       throw new Error('Format draft state tidak valid');
     }
+
+    const draftSourceId = draftStateObj.sourceFile && draftStateObj.sourceFile.id;
+    if (draftSourceId) requireWithinWorkspace_(draftSourceId, year);
+    if (draftStateObj.targetFolderId) requireWithinWorkspace_(draftStateObj.targetFolderId, year);
 
     const draftUser = AuthService.getCurrentUser(payload);
     const draftCreatedBy = draftUser.displayName || draftUser.username || '';
@@ -502,6 +507,11 @@ const ArchiveController = {
     Validator.requireString(payload.targetFolderId, 'Target Folder ID');
     Validator.requireString(payload.finalFileName, 'Final File Name');
 
+    // Web app berjalan sebagai pemilik deployment. Karena itu setiap ID mentah
+    // dari client wajib dibatasi ke workspace portal sebelum DriveApp dipanggil.
+    requireWithinWorkspace_(payload.sourceFileId, payload.year);
+    requireWithinWorkspace_(payload.targetFolderId, payload.year);
+
     const sourceFile = DriveApp.getFileById(cleanId_(payload.sourceFileId));
     const finalFile = DriveService.copyToFinalFolder(
       sourceFile, payload.targetFolderId, payload.finalFileName, payload.year || ''
@@ -527,6 +537,10 @@ const ArchiveController = {
     Validator.requireString(payload.archiveId, 'Archive ID');
     Validator.requireString(payload.finalFileId, 'Final File ID');
     Validator.requireString(payload.sourceFileId, 'Source File ID');
+
+    requireWithinWorkspace_(payload.sourceFileId, year);
+    requireWithinWorkspace_(payload.finalFileId, year);
+    if (payload.targetFolderId) requireWithinWorkspace_(payload.targetFolderId, year);
 
     const finalFile = DriveApp.getFileById(cleanId_(payload.finalFileId));
     const metadata = payload.metadata || {};
@@ -716,6 +730,7 @@ const ArchiveController = {
 
     const log = ConfigRepository.getArchiveLog(payload.archiveId);
     if (!log) throw new Error('Log arsip tidak ditemukan.');
+    if (log.final_file_id) requireWithinWorkspace_(log.final_file_id, year);
 
     return withLock_(() => {
       // B4: jangan percaya nomor baris yang dibaca DI LUAR lock. Hapus/reorder arsip
@@ -1148,6 +1163,7 @@ const ArchiveController = {
     payload = payload || {};
     requireAuth_(payload);
     Validator.requireId(payload.fileId, 'File ID');
+    requireWithinWorkspace_(payload.fileId, payload.year);
     const log = ConfigRepository.getArchiveLogByFileId(payload.fileId);
     return log || null;
   }

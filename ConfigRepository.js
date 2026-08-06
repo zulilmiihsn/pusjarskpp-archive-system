@@ -938,3 +938,32 @@ const ConfigRepository = {
     }
   }
 };
+
+function ensureSchemaMigrations_() {
+  const props = PropertiesService.getScriptProperties();
+  const settings = ConfigService.getSettings();
+  if (!settings.configSpreadsheetId) return { migrated: false, version: 0, reason: 'no_workspace' };
+  const current = Number(props.getProperty(PROP_KEYS.SCHEMA_VERSION) || 0);
+  if (current >= CURRENT_SCHEMA_VERSION) return { migrated: false, version: current };
+  return withLock_(function () {
+    const lockedCurrent = Number(props.getProperty(PROP_KEYS.SCHEMA_VERSION) || 0);
+    if (lockedCurrent >= CURRENT_SCHEMA_VERSION) return { migrated: false, version: lockedCurrent };
+    const ss = ConfigRepository.getConfigSpreadsheet();
+    ensureHeaders_(getOrCreateSheet_(ss, CONFIG_SHEETS.ACCOUNTS), ACCOUNT_HEADERS);
+    ensureSubActivityHeaders_(getOrCreateSheet_(ss, CONFIG_SHEETS.SUB_ACTIVITIES));
+    ensureHeaders_(getOrCreateSheet_(ss, CONFIG_SHEETS.ADMIN_AUDIT_LOG), [
+      'created_at', 'actor', 'action', 'year', 'activity_id',
+      'sub_activity_id', 'folder_id', 'status', 'message'
+    ]);
+    ensureHeaders_(getOrCreateSheet_(ss, CONFIG_SHEETS.TEMPLATE_CATEGORIES), [
+      'category_id', 'name', 'color', 'sort_order', 'created_at', 'updated_at'
+    ]);
+    ensureHeaders_(getOrCreateSheet_(ss, CONFIG_SHEETS.TEMPLATE_CATEGORY_MAP), ['file_id', 'category_id']);
+    ensureHeaders_(getOrCreateSheet_(ss, CONFIG_SHEETS.DOCUMENT_TYPES), ConfigRepository.DOCUMENT_TYPE_HEADERS);
+    props.setProperty(PROP_KEYS.SCHEMA_VERSION, String(CURRENT_SCHEMA_VERSION));
+    CacheHelper.invalidateAll();
+    console.info('SCHEMA_MIGRATION completed: v' + CURRENT_SCHEMA_VERSION);
+    return { migrated: true, version: CURRENT_SCHEMA_VERSION };
+  });
+}
+

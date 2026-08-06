@@ -227,7 +227,7 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
     uraian_informasi_item: '',
     lokasi_simpan: fileName,
     kode_klasifikasi: typeof DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI !== 'undefined' ? DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI : 'PDP.07.1',
-    klasifikasi_akses: 'Terbatas',
+    klasifikasi_akses: 'Terbuka',
     jumlah: 1,
     satuan: 'Lembar',
     tanggal: '2026-06-08', // fixed for unit testing consistency

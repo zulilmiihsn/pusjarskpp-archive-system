@@ -14,10 +14,12 @@ const TemplateController = {
     payload = payload || {};
     const actor = requireAuth_(payload);
     Validator.requireId(payload.fileId, 'File ID');
-    invalidateTemplatesCache_(payload.year);
+    const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+    requireWithinTemplateWorkspace_(payload.fileId, year);
+    const r = DriveService.trashTemplateFile(payload.fileId, year);
+    invalidateTemplatesCache_(year);
     bumpVersion();
-    const r = DriveService.trashTemplateFile(payload.fileId);
-    auditAction_(actor, 'TEMPLATE_DELETED', { year: payload.year, folderId: payload.fileId, message: 'Menghapus template' });
+    auditAction_(actor, 'TEMPLATE_DELETED', { year: year, folderId: payload.fileId, message: 'Menghapus template' });
     return r;
   },
   saveTemplateCategory: function (payload) {

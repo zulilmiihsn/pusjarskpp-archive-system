@@ -1,0 +1,122 @@
+<script>
+  function render() {
+    window._renderId++;
+    applyRoleVisibility();
+    renderLogoutBar();
+
+    updateHeader();
+    if (!state.bootstrap || !state.bootstrap.configured) {
+      renderUnconfigured();
+      return;
+    }
+
+    const role = state.currentUser ? state.currentUser.role : 'guest';
+
+    if (isRestrictedForGuest(state.view)) {
+      showGuestLoginPrompt_(state.loginReturnRoute);
+      if (role === 'guest') {
+        // Pertahankan deep-link. UI utama tidak dirender sampai login sukses.
+        return;
+      }
+    }
+
+    if (isAdminView()) {
+      if (role !== 'admin') {
+        setContent(`<div class="panel panel-pad"><div class="empty">Akses ditolak. Halaman ini hanya untuk admin.</div></div>`);
+        updateHeader();
+        return;
+      }
+    }
+
+    populateDashboardNav();
+    updateNavActive();
+
+    if (state.view === 'process') renderProcess();
+    else if (state.view === 'document_process') renderDocumentProcess();
+    else if (state.view === 'templates') renderTemplates();
+    else if (state.view === 'history') renderHistory();
+    else if (state.view === 'inactive') renderInactiveSubActivities();
+    else if (state.view === 'audit') renderAuditLog();
+    else if (state.view === 'accounts') renderAccounts();
+    else if (state.view === 'settings') renderSettings();
+    else if (state.view === 'activity_detail') renderActivityDetail();
+    else if (state.view === 'archive_folder') renderArchiveFolder();
+    else renderDashboard();
+  }
+
+  function updateHeader() {
+    let title = {
+      dashboard:        'Dasbor',
+      process:          'Arsipkan Item',
+      document_process: 'Arsipkan Dokumen',
+      templates:        'Templat Item',
+      history:          'Riwayat & Draf Arsip',
+      inactive:         'Arsip Nonaktif',
+      audit:            'Catatan Aktivitas',
+      accounts:         'Manajemen Akun',
+      settings:         'Pengaturan Ruang Kerja',
+      archive_folder:   'Ruang Kerja Arsip'
+    }[state.view] || 'Portal Arsip PUSJARSKPP';
+
+    if (state.view === 'activity_detail') {
+      const activity = getActivity(state.selectedActivityId);
+      title = activity ? activity.activity_name : 'Detail Kegiatan';
+    }
+
+    document.getElementById('page-title').textContent = title;
+    const settings = state.bootstrap && state.bootstrap.settings;
+    const year = settings ? (settings.currentYear || '-') : '-';
+    const yearText = document.getElementById('year-pill-text');
+    if (yearText) yearText.textContent = 'Tahun ' + year;
+
+    renderYearDropdown();
+  }
+
+  function renderYearDropdown() {
+    const dropdown = document.getElementById('year-dropdown-menu');
+    if (!dropdown || !state.bootstrap || !state.bootstrap.years) return;
+    
+    const currentYear = state.bootstrap.settings.currentYear;
+    const years = state.bootstrap.years.map(y => Number(y.year)).sort((a,b) => b - a);
+    
+    let html = '';
+    if (years.length === 0) {
+       html = '<div class="search-dropdown-empty">Belum ada tahun</div>';
+    } else {
+       html = years.map(y => 
+         '<div class="search-dropdown-item" data-year="' + y + '">' +
+           '<div class="search-dropdown-label">Tahun ' + y + (y === currentYear ? ' (Aktif)' : '') + '</div>' +
+         '</div>'
+       ).join('');
+    }
+    dropdown.innerHTML = html;
+
+    dropdown.querySelectorAll('.search-dropdown-item').forEach(item => {
+      item.addEventListener('click', async () => {
+        const selectedYear = Number(item.dataset.year);
+        if (selectedYear === currentYear) return;
+        dropdown.classList.remove('open');
+        showYearLoading(selectedYear);
+        try {
+          state.bootstrap = await api('saveSettings', { currentYear: selectedYear });
+          state.selectedFolderId = null;
+          state.selectedFolderName = null;
+          state.selectedFolderBreadcrumb = [];
+          state.preselectedTargetFolderId = null;
+          state.preselectedTargetFolderName = null;
+          state.preselectedFolderBreadcrumb = [];
+          invalidateViewCache();
+          _versionTracker.version = (await api('getSystemVersion')).version;
+          populateDashboardNav();
+          render();
+        } catch (e) {
+          showToast('Gagal mengganti tahun: ' + errorMessage(e));
+          render();
+        } finally {
+          hideYearLoading();
+        }
+      });
+    });
+  }
+
+</script>

@@ -10,6 +10,11 @@
 function auditAction_(actor, action, opts) {
   opts = opts || {};
   try {
+    const context = typeof getApiRequestContext_ === 'function' ? getApiRequestContext_() : null;
+    let message = opts.message || '';
+    if (context && context.requestId) {
+      message += (message ? ' | ' : '') + 'request_id=' + context.requestId;
+    }
     ConfigRepository.appendAdminAudit({
       created_at: new Date().toISOString(),
       actor: (actor && (actor.displayName || actor.username)) || 'Sistem',
@@ -19,10 +24,11 @@ function auditAction_(actor, action, opts) {
       sub_activity_id: opts.subActivityId || '',
       folder_id: opts.folderId || '',
       status: opts.status || 'SUCCESS',
-      message: opts.message || ''
+      message: message
     });
   } catch (error) {
     console.error('audit gagal (' + action + '): ' + error.message);
+    try { SystemLogger.error('AUDIT_WRITE_FAILED', 'Audit gagal: ' + action, { message: error.message }); } catch (_) {}
   }
 }
 
@@ -274,3 +280,19 @@ function requireWithinWorkspace_(itemId, year, allowedRootIds) {
     throw accessDeniedError_('WORKSPACE_SCOPE', 'Akses ditolak. Item berada di luar ruang kerja.');
   }
 }
+
+function getTemplateWorkspaceRootId_(year) {
+  const activeYear = Validator.requireYear(year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+  const config = CacheHelper.getConfig(activeYear);
+  const yearConfig = ConfigService.getYearConfig(config, activeYear);
+  const rootId = cleanId_(yearConfig && yearConfig.template_folder_id);
+  if (!rootId) throw accessDeniedError_('TEMPLATE_ROOT', 'Akses ditolak. Folder template tidak dapat diverifikasi.');
+  return { year: activeYear, rootId: rootId };
+}
+
+function requireWithinTemplateWorkspace_(itemId, year) {
+  const scope = getTemplateWorkspaceRootId_(year);
+  requireWithinWorkspace_(itemId, scope.year, [scope.rootId]);
+  return scope;
+}
+

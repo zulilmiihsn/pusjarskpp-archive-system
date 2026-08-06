@@ -2,6 +2,11 @@
 
 const WorkspaceController = {
   getBootstrap: function () { return SettingsController.getBootstrap(); },
+  getClientBootstrap: function (payload) {
+    const full = SettingsController.getBootstrap();
+    const user = AuthService.getCurrentUser(payload || {});
+    return user && user.role !== 'guest' ? full : redactBootstrapForGuest_(full);
+  },
   getSystemVersion: function () { return getVersion(); },
 
   saveSettings: function (payload) {
@@ -53,3 +58,51 @@ const WorkspaceController = {
     return r;
   }
 };
+
+function redactBootstrapForGuest_(full) {
+  full = full || {};
+  const currentYear = full.settings && full.settings.currentYear
+    ? full.settings.currentYear
+    : (full.selectedYear || DEFAULT_YEAR);
+  const safeActivities = (full.activities || []).map(function (activity) {
+    return {
+      activity_id: activity.activity_id || '',
+      activity_name: activity.activity_name || '',
+      laci_no: activity.laci_no || '',
+      folder_no: activity.folder_no || '',
+      sort_order: activity.sort_order || '',
+      laciFolder: null,
+      targetFolder: null,
+      spreadsheetFile: {},
+      fields: [],
+      subActivities: (activity.subActivities || []).map(function (sub) {
+        return {
+          sub_activity_id: sub.sub_activity_id || '',
+          activity_id: sub.activity_id || activity.activity_id || '',
+          sub_activity_name: sub.sub_activity_name || '',
+          parent_folder_name: sub.parent_folder_name || '',
+          sort_order: sub.sort_order || '',
+          folder_id: '',
+          folder: null,
+          spreadsheetFile: {},
+          effective_formal_archive_name: sub.effective_formal_archive_name || '',
+          effective_target_sheet_name: sub.effective_target_sheet_name || ''
+        };
+      })
+    };
+  });
+  return {
+    configured: !!full.configured,
+    settings: { currentYear: currentYear },
+    selectedYear: full.selectedYear || currentYear,
+    years: (full.years || []).map(function (yearRow) { return { year: yearRow.year }; }),
+    activities: safeActivities,
+    documentTypes: full.documentTypes || [],
+    history: [],
+    historyMeta: { total: 0, page: 1, totalPages: 0 },
+    progress: full.progress || { total: 0, completed: 0, failed: 0, draft: 0, byActivity: {} },
+    maintenance: {},
+    message: full.message || ''
+  };
+}
+

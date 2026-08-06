@@ -30,7 +30,7 @@ const MetadataService = {
     normalized.satuan = normalized.satuan || 'Lembar';
     normalized.tingkat_perkembangan = normalized.tingkat_perkembangan || 'Asli';
     normalized.jumlah = metadata.jumlah !== undefined ? metadata.jumlah : 1;
-    normalized.klasifikasi_akses = normalized.klasifikasi_akses || 'Terbatas';
+    normalized.klasifikasi_akses = normalized.klasifikasi_akses || 'Terbuka';
     normalized.lokasi_simpan = normalized.lokasi_simpan || this.buildFinalFileName(normalized, sourceName);
     return normalized;
   },
@@ -262,7 +262,7 @@ function parseExistingFileName_(fileName, defaultActivity, defaultSubActivity) {
     uraian_informasi_item: '',
     lokasi_simpan: fileName,
     kode_klasifikasi: '',
-    klasifikasi_akses: 'Terbatas',
+    klasifikasi_akses: 'Terbuka',
     jumlah: 1,
     satuan: 'Lembar',
     tanggal: '',

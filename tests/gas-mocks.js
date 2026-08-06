@@ -127,11 +127,11 @@ global.UrlFetchApp = {
 function loadGasScripts() {
   const root = path.resolve(__dirname, '..');
   const files = [
-    'ConfigConstants.gs', 'ConfigHelpers.gs', 'PureFunctions.gs', 'ParseEngine.gs', 'SecurityHelpers.gs', 'ConfigRepository.gs',
-    'ConfigService.gs', 'CacheHelper.gs', 'DriveService.gs', 'SheetHelpers.gs', 'SpreadsheetService.gs', 
-    'WorkspaceSetup.gs', 'AuthService.gs', 'SystemLogger.gs', 'VersionService.gs', 'AccountController.gs', 'SettingsController.gs',
-    'WorkspaceController.gs', 'TemplateController.gs', 'SubActivityController.gs', 'ArchiveController.gs',
-    'DriveController.gs', 'Code.gs'
+    'ConfigConstants.js', 'ConfigHelpers.js', 'PureFunctions.js', 'ParseEngine.js', 'SecurityHelpers.js', 'ConfigRepository.js',
+    'ConfigService.js', 'CacheHelper.js', 'DriveService.js', 'SheetHelpers.js', 'SpreadsheetService.js', 
+    'WorkspaceSetupDriveHelpers.js', 'WorkspaceSetup.js', 'AuthService.js', 'SystemLogger.js', 'VersionService.js', 'AccountController.js', 'SettingsController.js',
+    'WorkspaceController.js', 'TemplateController.js', 'SubActivityController.js', 'ArchiveController.js',
+    'DriveController.js', 'Code.js'
   ];
   let fullCode = '';
   for (const f of files) {

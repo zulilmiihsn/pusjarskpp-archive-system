@@ -15,11 +15,13 @@ function buildDetailRowValues_(metadata) {
     if (key === 'uraian_informasi_item') {
       const parts = [];
       const nomor = String(metadata.nomor_surat || '').trim();
+      const jenis = String(metadata.jenis_naskah || '').trim();
       const uraian = String(metadata.uraian_informasi_item || '').trim();
       const kepada = String(metadata.kepada || '').trim();
       const dari = String(metadata.dari || '').trim();
       
       if (nomor) parts.push('No. Surat: ' + nomor);
+      if (jenis) parts.push('Jenis Naskah: ' + jenis);
       if (uraian) parts.push('Uraian: ' + uraian);
       if (kepada) parts.push('Kepada: ' + kepada);
       if (dari) parts.push('Dari: ' + dari);
@@ -37,6 +39,15 @@ function buildDetailRowValues_(metadata) {
     }
     if (key === 'jumlah_satuan') {
       return sanitizeCellValue_(metadata.satuan || metadata.jumlah_satuan || '');
+    }
+    if (key === 'no_berkas') {
+      return sanitizeCellValue_(metadata.no_folder || metadata.no_berkas || '');
+    }
+    if (key === 'tanggal') {
+      return sanitizeCellValue_(metadata.tanggal_naskah || metadata.tanggal || '');
+    }
+    if (key === 'kode_klasifikasi') {
+      return sanitizeCellValue_(metadata.kode_klasifikasi || 'PDP.07.1');
     }
     return sanitizeCellValue_(metadata[key]);
   });
@@ -441,13 +452,19 @@ const SpreadsheetService = {
       no_filing_cabinet: (showJsComputed ? '' : rekapFC) || (activity && activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '') || '',
       _no_filing_cabinet_path: activity && activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '',
       _no_filing_cabinet_url: (activity && activity.laci_folder_id) ? 'https://drive.google.com/drive/folders/' + activity.laci_folder_id : '',
+      kode_klasifikasi: '',
+      kurun_waktu: (showJsComputed ? '' : rekapKurunWaktu) || formatDateRange_(summary.startDate, summary.endDate),
+      jumlah: (showJsComputed ? '' : rekapJumlah) || ((summary.sumLembar || 0) + ' lembar'),
+      no_filing_cabinet: (showJsComputed ? '' : rekapFC) || (activity && activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '') || '',
+      _no_filing_cabinet_path: activity && activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '',
+      _no_filing_cabinet_url: (activity && activity.laci_folder_id) ? 'https://drive.google.com/drive/folders/' + activity.laci_folder_id : '',
       
       no_laci: (showJsComputed ? '' : rekapLaci) || (subActivity && subActivity.sub_activity_name) || '',
       _no_laci_path: (subActivity && subActivity.sub_activity_name) || '',
       _no_laci_url: (subActivity && subActivity.folder_id) ? 'https://drive.google.com/drive/folders/' + subActivity.folder_id : '',
       
       no_folder: (showJsComputed ? '' : rekapFolder) || (subActivity && subActivity.no_folder) || String(nextItemNum).padStart(2, '0'),
-      klasifikasi_akses: (showJsComputed ? '' : rekapAkses) || summary.akses || 'Terbatas',
+      klasifikasi_akses: (showJsComputed ? '' : rekapAkses) || summary.akses || 'Terbuka',
       ket: rekapKet || '',
       next_item_number: nextItemNum
     };
@@ -588,7 +605,7 @@ const SpreadsheetService = {
       sanitizeCellValue_(rawFcText),
       sanitizeCellValue_(rawLaciText),
       sanitizeCellValue_(nomorBerkas),
-      'Terbatas',
+      'Terbuka',
       '',
       '',
       '',

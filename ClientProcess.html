@@ -635,7 +635,7 @@
         if (f.field_name === 'kode_klasifikasi') val = '';
         if (f.field_name === 'no_berkas') val = (sub ? sub.sort_order : '') || '';
         if (f.field_name === 'nomor_item_arsip') val = '01';
-        if (f.field_name === 'klasifikasi_akses') val = 'Terbatas';
+        if (f.field_name === 'klasifikasi_akses') val = 'Terbuka';
         metadata[f.field_name] = val;
       });
 
@@ -1001,7 +1001,7 @@
         if (key === 'no_berkas') val = sub.sort_order || '';
         if (key === 'kode_klasifikasi') val = '';
         if (key === 'nomor_item_arsip') val = '01';
-        if (key === 'klasifikasi_akses') val = 'Terbatas';
+        if (key === 'klasifikasi_akses') val = 'Terbuka';
         newMetadata[key] = val;
       }
     });

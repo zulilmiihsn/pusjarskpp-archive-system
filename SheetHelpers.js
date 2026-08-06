@@ -485,7 +485,7 @@ function buildRekapSummary_(ss, activity, subActivity, metadata) {
     jumlah: detailSummary.sumLembar ? detailSummary.sumLembar + ' lembar' : '',
     noLaci: metadata.no_laci || activity.laci_no || '',
     noFolder: resolveSubActivityArchiveNumber_(subActivity, activity),
-    akses: detailSummary.akses || metadata.klasifikasi_akses || 'Terbatas',
+    akses: detailSummary.akses || metadata.klasifikasi_akses || 'Terbuka',
     ket: metadata.ket || ''
   };
 }
@@ -524,7 +524,7 @@ function writeRekapIdentity_(sheet, rowIndex, activity, subActivity, options) {
     uraian: getSubActivityFormalName_(subActivity),
     noLaci: activity && activity.laci_no ? activity.laci_no : '',
     noFolder: noFolder,
-    akses: 'Terbatas'
+    akses: 'Terbuka'
   };
 
   setRekapSummaryCell_(sheet, rowIndex, headerMap, REKAP_SUMMARY_COLUMNS.nomorBerkas, identity.nomorBerkas, true);
@@ -1185,7 +1185,7 @@ function buildAksesFormula_(detailSheet) {
   const colLetter = getDetailColumnLetter_(detailSheet, 'klasifikasi_akses', 'M');
   const rangeRef = ref + '!' + colLetter + '9:' + colLetter;
   const s = formulaSep_(detailSheet);
-  return "=IFERROR(TEXTJOIN(\" & \"" + s + " TRUE" + s + " UNIQUE(FILTER(" + rangeRef + s + " " + rangeRef + "<>\"\")))" + s + " \"Terbatas\")";
+  return "=IFERROR(TEXTJOIN(\" & \"" + s + " TRUE" + s + " UNIQUE(FILTER(" + rangeRef + s + " " + rangeRef + "<>\"\")))" + s + " \"Terbuka\")";
 }
 
 function setRekapFormulaCell_(sheet, rowIndex, headerMap, aliases, formula) {

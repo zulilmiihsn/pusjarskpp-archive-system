@@ -267,11 +267,10 @@ function verifyPassword_(password, username, storedHash) {
 }
 
 function generatePassword_(length) {
-  const len = length || 6;
-  // Charset tanpa simbol & karakter ambigu (0/O/1/I/l) agar password 6-karakter
-  // mudah dibaca & diketik saat login.
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  // Sumber indeks dari entropi UUID, bukan Math.random.
+  const len = Math.max(12, Number(length) || 16);
+  // Tanpa karakter ambigu (0/O/1/I/l), namun tetap memakai huruf besar,
+  // huruf kecil, dan angka agar password awal tidak mudah ditebak.
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
   let pool = '';
   while (pool.length < len * 2) pool += Utilities.getUuid().replace(/-/g, '');
   let result = '';

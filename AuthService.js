@@ -8,7 +8,10 @@ const LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 10;
 let _requestPortalUser_ = null;
 
 function resetRequestPortalUser_() { _requestPortalUser_ = null; }
-function setRequestPortalUser_(user) { _requestPortalUser_ = user || null; }
+function setRequestPortalUser_(user) {
+  _requestPortalUser_ = user || null;
+  if (typeof updateApiRequestActor_ === 'function') updateApiRequestActor_(_requestPortalUser_);
+}
 function getRequestPortalUser_() { return _requestPortalUser_; }
 
 function detectedGoogleEmailForDiagnostics_() {
@@ -16,26 +19,35 @@ function detectedGoogleEmailForDiagnostics_() {
   catch (_) { return ''; }
 }
 
+function loginRateLimitKey_(username) {
+  return 'login_attempts_' + String(username || '').trim().toLowerCase();
+}
+
 function checkLoginRateLimit_(username) {
-  const props = PropertiesService.getScriptProperties();
-  const key = 'login_attempts_' + String(username || '').toLowerCase();
-  const raw = props.getProperty(key);
-  const now = Date.now();
-  if (raw) {
-    try {
-      const entries = JSON.parse(raw).filter(function (t) { return now - t < LOGIN_RATE_LIMIT_WINDOW_MS; });
-      if (entries.length >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS) {
-        throw new Error('Terlalu banyak percobaan login. Coba lagi dalam 1 menit.');
-      }
-      entries.push(now);
-      props.setProperty(key, JSON.stringify(entries));
-    } catch (e) {
-      if (e.message.indexOf('Terlalu banyak') >= 0) throw e;
-      props.setProperty(key, JSON.stringify([now]));
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) throw new Error('Layanan login sedang sibuk. Coba lagi beberapa saat.');
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const key = loginRateLimitKey_(username);
+    const now = Date.now();
+    let entries = [];
+    const raw = props.getProperty(key);
+    if (raw) {
+      try { entries = JSON.parse(raw); } catch (_) { entries = []; }
     }
-  } else {
-    props.setProperty(key, JSON.stringify([now]));
+    entries = entries.filter(function (t) { return now - Number(t) < LOGIN_RATE_LIMIT_WINDOW_MS; });
+    if (entries.length >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS) {
+      throw new Error('Terlalu banyak percobaan login. Coba lagi dalam 1 menit.');
+    }
+    entries.push(now);
+    props.setProperty(key, JSON.stringify(entries));
+  } finally {
+    lock.releaseLock();
   }
+}
+
+function clearLoginRateLimit_(username) {
+  try { PropertiesService.getScriptProperties().deleteProperty(loginRateLimitKey_(username)); } catch (_) {}
 }
 
 function cleanupExpiredSessions_() {
@@ -92,6 +104,31 @@ function deleteSession_(sessionId) {
   const key = 'sess_' + sessionId;
   PropertiesService.getScriptProperties().deleteProperty(key);
   try { CacheService.getScriptCache().remove(key); } catch (_) {}
+}
+
+
+function deleteSessionsForAccount_(accountId) {
+  if (!accountId) return 0;
+  const props = PropertiesService.getScriptProperties();
+  const keys = props.getKeys();
+  let deleted = 0;
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (key.indexOf('sess_') !== 0) continue;
+    try {
+      const raw = props.getProperty(key);
+      const session = raw ? JSON.parse(raw) : null;
+      if (session && session.accountId === accountId) {
+        const sessionId = key.slice(5);
+        deleteSession_(sessionId);
+        deleted++;
+      }
+    } catch (_) {
+      props.deleteProperty(key);
+      try { CacheService.getScriptCache().remove(key); } catch (_) {}
+    }
+  }
+  return deleted;
 }
 
 /**
@@ -190,6 +227,8 @@ const AuthService = {
       console.info('LOGIN_PERF ' + JSON.stringify(loginPerf));
       throw new Error('Username atau password salah.');
     }
+
+    clearLoginRateLimit_(found.username);
 
     const sessionId = Utilities.getUuid();
     const now = new Date();

@@ -13,11 +13,11 @@ function doGet() {
 }
 
 /**
- * Load partial HTML file for <?!= include() ?>.
+ * Load partial HTML file for <?!= include_() ?>.
  * @param {string} filename
  * @return {string} Raw HTML content
  */
-function include(filename) {
+function include_(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
 
@@ -33,10 +33,11 @@ function sanitizeError_(message) {
   // Strip Google Drive / Spreadsheet IDs (25+ char base64url-like strings).
   // Ambang disamakan dengan cleanId_ ({25,}) agar ID 25-32 char tidak lolos.
   msg = msg.replace(/\b[A-Za-z0-9_-]{25,}\b/g, '[ID]');
+  // Strip URLs before file paths; otherwise "//host/path" could be
+  // consumed by the path regex and leave the scheme visible.
+  msg = msg.replace(/https?:\/\/[^\s"']+/g, '[URL]');
   // Strip file paths
   msg = msg.replace(/(?:\/|[A-Z]:\\)[^\s"']+/g, '[path]');
-  // Strip URLs
-  msg = msg.replace(/https?:\/\/[^\s"']+/g, '[URL]');
   // Strip stack traces
   msg = msg.replace(/\n\s*at\s+.+/g, '');
   if (msg.length > 500) msg = msg.slice(0, 500) + '...';
@@ -68,10 +69,19 @@ function getErrorCode_(errorOrMessage) {
  * @param {function(): *} action
  * @return {{success: boolean, data?: *, error?: string, errorCode?: string}}
  */
-function wrapApi(action) {
+function wrapApi_(action) {
   if (typeof resetRequestPortalUser_ === 'function') resetRequestPortalUser_();
+  const requestContext = typeof beginApiRequestContext_ === 'function'
+    ? beginApiRequestContext_()
+    : null;
   try {
-    return { success: true, data: action() };
+    const data = action();
+    try { if (typeof logSlowApiRequest_ === 'function') logSlowApiRequest_(requestContext); } catch (_) {}
+    return {
+      success: true,
+      data: data,
+      requestId: requestContext && requestContext.requestId ? requestContext.requestId : ''
+    };
   } catch (error) {
     console.error(error.message);
     const errorCode = getErrorCode_(error);
@@ -80,17 +90,25 @@ function wrapApi(action) {
       const diagnostic = logAccessDiagnostic_(error);
       clientMessage = formatAccessDeniedMessage_(error, diagnostic);
     }
+    try {
+      if (typeof logFailedApiRequest_ === 'function') {
+        logFailedApiRequest_(requestContext, error, errorCode);
+      }
+    } catch (_) {}
     const sanitizedMsg = sanitizeError_(clientMessage);
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: sanitizedMsg,
-      errorCode: errorCode
+      errorCode: errorCode,
+      requestId: requestContext && requestContext.requestId ? requestContext.requestId : ''
     };
+  } finally {
+    try { if (typeof finishApiRequestContext_ === 'function') finishApiRequestContext_(); } catch (_) {}
   }
 }
 
-function getBootstrap() {
-  return wrapApi(() => WorkspaceController.getBootstrap());
+function getBootstrap(payload) {
+  return wrapApi_(() => WorkspaceController.getClientBootstrap(payload || {}));
 }
 
 /**
@@ -99,205 +117,205 @@ function getBootstrap() {
  * @return {{success: boolean, data?: {gedungUtama: string, ornamen: string}, error?: string}}
  */
 function getDecorativeAssets() {
-  return wrapApi(() => JSON.parse(HtmlService.createHtmlOutputFromFile('ClientAssetsHeavy').getContent()));
+  return wrapApi_(() => JSON.parse(HtmlService.createHtmlOutputFromFile('ClientAssetsHeavy').getContent()));
 }
 
 function saveSettings(payload) {
-  return wrapApi(() => WorkspaceController.saveSettings(payload));
+  return wrapApi_(() => WorkspaceController.saveSettings(payload));
 }
 
 function installMaintenanceTrigger(payload) {
-  return wrapApi(() => WorkspaceController.installMaintenanceTrigger(payload || {}));
+  return wrapApi_(() => WorkspaceController.installMaintenanceTrigger(payload || {}));
 }
 
 function getArchiveMetadataDefaults(payload) {
-  return wrapApi(() => ArchiveController.getArchiveMetadataDefaults(payload || {}));
+  return wrapApi_(() => ArchiveController.getArchiveMetadataDefaults(payload || {}));
 }
 
 function getArchiveMetadata(payload) {
-  return wrapApi(() => ArchiveController.getArchiveMetadata(payload || {}));
+  return wrapApi_(() => ArchiveController.getArchiveMetadata(payload || {}));
 }
 
 function saveDraftToLog(payload) {
-  return wrapApi(() => ArchiveController.saveDraftToLog(payload));
+  return wrapApi_(() => ArchiveController.saveDraftToLog(payload));
 }
 
 function deleteDraft(payload) {
-  return wrapApi(() => ArchiveController.deleteDraft(payload));
+  return wrapApi_(() => ArchiveController.deleteDraft(payload));
 }
 
 function finalizeArchive(payload) {
-  return wrapApi(() => ArchiveController.finalizeArchive(payload));
+  return wrapApi_(() => ArchiveController.finalizeArchive(payload));
 }
 
 function archiveStep_validate(payload) {
-  return wrapApi(() => ArchiveController.archiveStep_validate(payload || {}));
+  return wrapApi_(() => ArchiveController.archiveStep_validate(payload || {}));
 }
 
 function archiveStep_copyFile(payload) {
-  return wrapApi(() => ArchiveController.archiveStep_copyFile(payload || {}));
+  return wrapApi_(() => ArchiveController.archiveStep_copyFile(payload || {}));
 }
 
 function archiveStep_writeAndLog(payload) {
-  return wrapApi(() => ArchiveController.archiveStep_writeAndLog(payload || {}));
+  return wrapApi_(() => ArchiveController.archiveStep_writeAndLog(payload || {}));
 }
 
 function validateArchiveFields(payload) {
-  return wrapApi(() => ArchiveController.validateArchiveFields(payload || {}));
+  return wrapApi_(() => ArchiveController.validateArchiveFields(payload || {}));
 }
 
 function editMetadata(payload) {
-  return wrapApi(() => ArchiveController.editMetadata(payload || {}));
+  return wrapApi_(() => ArchiveController.editMetadata(payload || {}));
 }
 
 function adoptExistingArchives(payload) {
-  return wrapApi(() => ArchiveController.adoptExistingArchives(payload || {}));
+  return wrapApi_(() => ArchiveController.adoptExistingArchives(payload || {}));
 }
 
 function previewExistingArchives(payload) {
   payload = payload || {};
   payload.dryRun = true;
-  return wrapApi(() => ArchiveController.adoptExistingArchives(payload));
+  return wrapApi_(() => ArchiveController.adoptExistingArchives(payload));
 }
 
 function initInboxResumableUpload(payload) {
-  return wrapApi(() => ArchiveController.initInboxResumableUpload(payload || {}));
+  return wrapApi_(() => ArchiveController.initInboxResumableUpload(payload || {}));
 }
 
 function initTemplateResumableUpload(payload) {
-  return wrapApi(() => {
+  return wrapApi_(() => {
     requireAuth_(payload || {});
     return DriveService.initTemplateResumableUpload(payload || {});
   });
 }
 
 function uploadResumableChunk(payload) {
-  return wrapApi(() => {
+  return wrapApi_(() => {
     requireAuth_(payload || {});
     return DriveService.uploadResumableChunk(payload || {});
   });
 }
 
 function uploadSourceFile(payload) {
-  return wrapApi(() => ArchiveController.uploadSourceFile(payload));
+  return wrapApi_(() => ArchiveController.uploadSourceFile(payload));
 }
 
 function parseDocumentContent(payload) {
-  return wrapApi(() => ArchiveController.parseDocumentContent(payload));
+  return wrapApi_(() => ArchiveController.parseDocumentContent(payload));
 }
 
 function addSubActivity(payload) {
-  return wrapApi(() => SubActivityController.addSubActivity(payload));
+  return wrapApi_(() => SubActivityController.addSubActivity(payload));
 }
 
 function syncSubActivities(payload) {
-  return wrapApi(() => SubActivityController.syncSubActivities(payload));
+  return wrapApi_(() => SubActivityController.syncSubActivities(payload));
 }
 
 function getHistory(payload) {
-  return wrapApi(() => AccountController.getHistory(payload || {}));
+  return wrapApi_(() => AccountController.getHistory(payload || {}));
 }
 
 function uploadTemplate(payload) {
-  return wrapApi(() => TemplateController.uploadTemplate(payload || {}));
+  return wrapApi_(() => TemplateController.uploadTemplate(payload || {}));
 }
 
 function deleteTemplate(payload) {
-  return wrapApi(() => TemplateController.deleteTemplate(payload || {}));
+  return wrapApi_(() => TemplateController.deleteTemplate(payload || {}));
 }
 
 function saveTemplateCategory(payload) {
-  return wrapApi(() => TemplateController.saveTemplateCategory(payload || {}));
+  return wrapApi_(() => TemplateController.saveTemplateCategory(payload || {}));
 }
 
 function renameTemplateCategory(payload) {
-  return wrapApi(() => TemplateController.renameTemplateCategory(payload || {}));
+  return wrapApi_(() => TemplateController.renameTemplateCategory(payload || {}));
 }
 
 function deleteTemplateCategory(payload) {
-  return wrapApi(() => TemplateController.deleteTemplateCategory(payload || {}));
+  return wrapApi_(() => TemplateController.deleteTemplateCategory(payload || {}));
 }
 
 function setTemplateCategory(payload) {
-  return wrapApi(() => TemplateController.setTemplateCategory(payload || {}));
+  return wrapApi_(() => TemplateController.setTemplateCategory(payload || {}));
 }
 
 function getTemplatesData(payload) {
-  return wrapApi(() => TemplateController.getTemplatesData(payload || {}));
+  return wrapApi_(() => TemplateController.getTemplatesData(payload || {}));
 }
 
 function initializeWorkspace(payload) {
-  return wrapApi(() => WorkspaceController.initializeWorkspace(payload || {}));
+  return wrapApi_(() => WorkspaceController.initializeWorkspace(payload || {}));
 }
 
 function deleteYear(payload) {
-  return wrapApi(() => WorkspaceController.deleteYear(payload || {}));
+  return wrapApi_(() => WorkspaceController.deleteYear(payload || {}));
 }
 
 function updateSubActivityMapping(payload) {
-  return wrapApi(() => WorkspaceController.updateSubActivityMapping(payload || {}));
+  return wrapApi_(() => WorkspaceController.updateSubActivityMapping(payload || {}));
 }
 
 function renameDriveItem(payload) {
-  return wrapApi(() => DriveController.renameDriveItem(payload || {}));
+  return wrapApi_(() => DriveController.renameDriveItem(payload || {}));
 }
 
 function listDriveFolders(payload) {
-  return wrapApi(() => DriveController.listDriveFolders(payload || {}));
+  return wrapApi_(() => DriveController.listDriveFolders(payload || {}));
 }
 
 function listArchiveFolder(payload) {
-  return wrapApi(() => DriveController.listArchiveFolder(payload || {}));
+  return wrapApi_(() => DriveController.listArchiveFolder(payload || {}));
 }
 
 function addArchiveChildFolder(payload) {
-  return wrapApi(() => DriveController.addArchiveChildFolder(payload || {}));
+  return wrapApi_(() => DriveController.addArchiveChildFolder(payload || {}));
 }
 
 function bulkAddArchiveDocumentLinks(payload) {
-  return wrapApi(() => ArchiveController.bulkAddArchiveDocumentLinks(payload || {}));
+  return wrapApi_(() => ArchiveController.bulkAddArchiveDocumentLinks(payload || {}));
 }
 
 function addArchiveDocumentLink(payload) {
-  return wrapApi(() => ArchiveController.addArchiveDocumentLink(payload || {}));
+  return wrapApi_(() => ArchiveController.addArchiveDocumentLink(payload || {}));
 }
 
 function getShortcutTargetInfo(payload) {
-  return wrapApi(() => ArchiveController.getShortcutTargetInfo(payload || {}));
+  return wrapApi_(() => ArchiveController.getShortcutTargetInfo(payload || {}));
 }
 
 function updateArchiveDocumentLink(payload) {
-  return wrapApi(() => ArchiveController.updateArchiveDocumentLink(payload || {}));
+  return wrapApi_(() => ArchiveController.updateArchiveDocumentLink(payload || {}));
 }
 
 function renameArchiveFolder(payload) {
-  return wrapApi(() => DriveController.renameArchiveFolder(payload || {}));
+  return wrapApi_(() => DriveController.renameArchiveFolder(payload || {}));
 }
 
 function trashArchiveFolder(payload) {
-  return wrapApi(() => DriveController.trashArchiveFolder(payload || {}));
+  return wrapApi_(() => DriveController.trashArchiveFolder(payload || {}));
 }
 
 function renameArchiveFile(payload) {
-  return wrapApi(() => DriveController.renameArchiveFile(payload || {}));
+  return wrapApi_(() => DriveController.renameArchiveFile(payload || {}));
 }
 
 function trashArchiveFile(payload) {
-  return wrapApi(() => DriveController.trashArchiveFile(payload || {}));
+  return wrapApi_(() => DriveController.trashArchiveFile(payload || {}));
 }
 
 function deleteSubActivity(payload) {
-  return wrapApi(() => SubActivityController.deleteSubActivity(payload || {}));
+  return wrapApi_(() => SubActivityController.deleteSubActivity(payload || {}));
 }
 
 function trashSubActivityFolder(payload) {
-  return wrapApi(() => SubActivityController.trashSubActivityFolder(payload || {}));
+  return wrapApi_(() => SubActivityController.trashSubActivityFolder(payload || {}));
 }
 
 function cleanupTrashedSubActivities(payload) {
   // Guard di sini (endpoint user), BUKAN di controller — sebab runArchiveMaintenance
   // (time-trigger, konteks owner tanpa sesi) memanggil controller-nya langsung.
-  return wrapApi(() => {
+  return wrapApi_(() => {
     requireAdmin_(payload || {});
     return SubActivityController.cleanupTrashedSubActivities(payload || {});
   });
@@ -327,6 +345,11 @@ function runArchiveMaintenance() {
     }
   } catch (error) {
     console.error('runArchiveMaintenance: sweep orphan gagal: ' + error.message);
+  }
+  try {
+    runSystemHealthMonitor_();
+  } catch (error) {
+    console.error('runArchiveMaintenance: health check gagal: ' + error.message);
   }
 }
 
@@ -414,74 +437,74 @@ function onRekapSheetEdit(e) {
 }
 
 function getInactiveSubActivities(payload) {
-  return wrapApi(() => SubActivityController.getInactiveSubActivities(payload || {}));
+  return wrapApi_(() => SubActivityController.getInactiveSubActivities(payload || {}));
 }
 
 function restoreSubActivity(payload) {
-  return wrapApi(() => SubActivityController.restoreSubActivity(payload || {}));
+  return wrapApi_(() => SubActivityController.restoreSubActivity(payload || {}));
 }
 
 function purgeSubActivity(payload) {
-  return wrapApi(() => SubActivityController.purgeSubActivity(payload || {}));
+  return wrapApi_(() => SubActivityController.purgeSubActivity(payload || {}));
 }
 
 function getSystemVersion() {
-  return wrapApi(() => WorkspaceController.getSystemVersion());
+  return wrapApi_(() => WorkspaceController.getSystemVersion());
 }
 
 function getAdminAuditLogs(payload) {
-  return wrapApi(() => AccountController.getAdminAuditLogs(payload || {}));
+  return wrapApi_(() => AccountController.getAdminAuditLogs(payload || {}));
 }
 
 function login(payload) {
-  return wrapApi(() => AccountController.login(payload || {}));
+  return wrapApi_(() => AccountController.login(payload || {}));
 }
 
 function logout(payload) {
-  return wrapApi(() => AccountController.logout(payload || {}));
+  return wrapApi_(() => AccountController.logout(payload || {}));
 }
 
 function getCurrentUser(payload) {
-  return wrapApi(() => AccountController.getCurrentUser(payload || {}));
+  return wrapApi_(() => AccountController.getCurrentUser(payload || {}));
 }
 
 function resetWorkspace(payload) {
-  return wrapApi(() => WorkspaceController.resetWorkspace(payload || {}));
+  return wrapApi_(() => WorkspaceController.resetWorkspace(payload || {}));
 }
 
 function renameSubActivity(payload) {
-  return wrapApi(() => SubActivityController.renameSubActivity(payload || {}));
+  return wrapApi_(() => SubActivityController.renameSubActivity(payload || {}));
 }
 
 function updateSubActivityMetadata(payload) {
-  return wrapApi(() => SubActivityController.updateSubActivityMetadata(payload || {}));
+  return wrapApi_(() => SubActivityController.updateSubActivityMetadata(payload || {}));
 }
 
 function listAccounts(payload) {
-  return wrapApi(() => AccountController.listAccounts(payload || {}));
+  return wrapApi_(() => AccountController.listAccounts(payload || {}));
 }
 
 function saveAccount(payload) {
-  return wrapApi(() => AccountController.saveAccount(payload || {}));
+  return wrapApi_(() => AccountController.saveAccount(payload || {}));
 }
 
 function deleteAccount(payload) {
-  return wrapApi(() => AccountController.deleteAccount(payload || {}));
+  return wrapApi_(() => AccountController.deleteAccount(payload || {}));
 }
 
 function getArchiveLogByFileId(payload) {
-  return wrapApi(() => ArchiveController.getArchiveLogByFileId(payload || {}));
+  return wrapApi_(() => ArchiveController.getArchiveLogByFileId(payload || {}));
 }
 
 function createParentFolder(payload) {
-  return wrapApi(() => SubActivityController.createParentFolder(payload || {}));
+  return wrapApi_(() => SubActivityController.createParentFolder(payload || {}));
 }
 
 function convertSubActivityToParent(payload) {
-  return wrapApi(() => SubActivityController.convertSubActivityToParent(payload || {}));
+  return wrapApi_(() => SubActivityController.convertSubActivityToParent(payload || {}));
 }
 
 function syncExistingPhysicalFiles(payload) {
-  return wrapApi(() => ArchiveController.syncExistingPhysicalFiles(payload || {}));
+  return wrapApi_(() => ArchiveController.syncExistingPhysicalFiles(payload || {}));
 }
 

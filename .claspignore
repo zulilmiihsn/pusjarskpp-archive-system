@@ -3,6 +3,7 @@
 
 # Allow Google Apps Script source files
 !*.gs
+!*.js
 !*.html
 !appsscript.json
 

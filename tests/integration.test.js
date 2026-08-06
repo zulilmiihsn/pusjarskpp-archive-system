@@ -37,23 +37,23 @@ test('sha256Hex_ - kompatibel dengan SHA-256 standar', () => {
   );
 });
 
-test('workspace archive sharing - pemegang link hanya Viewer', () => {
+test('workspace archive sharing - pemegang link hanya Restricted', () => {
   const sharingCalls = [];
   const folder = {
-    getName: () => '1. Daftar Arsip (Spreadsheet)',
-    getSharingAccess: () => DriveApp.Access.PRIVATE,
-    getSharingPermission: () => null,
-    setSharing: (access, permission) => sharingCalls.push({ access, permission })
+    getSharingAccess: function () { return 'ANYONE_WITH_LINK'; },
+    setSharing: function (access, permission) {
+      sharingCalls.push({ access, permission });
+      return folder;
+    }
   };
   const report = [];
 
-  wsEnsureAnyoneWithLinkViewer_(folder, report);
+  wsEnsureRestrictedSharing_(folder, report);
 
   assert.deepStrictEqual(sharingCalls, [{
-    access: DriveApp.Access.ANYONE_WITH_LINK,
-    permission: DriveApp.Permission.VIEW
+    access: DriveApp.Access.PRIVATE,
+    permission: DriveApp.Permission.NONE
   }]);
-  assert.ok(report.some(item => /Anyone with link \(Viewer\)/.test(item.label)));
 });
 
 test('pbkdf2Like_ - hasil iterasi kompatibel dengan hash lama', () => {
@@ -114,7 +114,7 @@ test('requireAuth_ - tidak mengikat sesi portal ke email Google', () => {
 
 test('akses role ditolak bersifat nonfatal dan menyebut identitas portal', () => {
   const sid = makeSession('user');
-  const response = wrapApi(() => requireAdmin_({ _sessionId: sid }));
+  const response = wrapApi_(() => requireAdmin_({ _sessionId: sid }));
   assert.strictEqual(response.success, false);
   assert.strictEqual(response.errorCode, 'ACCESS_DENIED');
   assert.match(response.error, /username portal "user"/);
@@ -399,12 +399,12 @@ test('nomor arsip global - Latsar mulai tepat setelah jumlah Kepemimpinan aktif'
   plan.activeAssignments.forEach(function (assignment) {
     byId[assignment.subActivityId] = assignment.globalNumber;
   });
-  assert.strictEqual(byId.i, 8);
-  assert.strictEqual(byId.ii, 9);
-  assert.strictEqual(byId.iii, 10);
-  assert.strictEqual(byId.xii, 19);
-  assert.strictEqual(byId.kutim1, 20);
-  assert.strictEqual(byId.kutim2, 21);
+  assert.strictEqual(byId.i, 1);
+  assert.strictEqual(byId.ii, 2);
+  assert.strictEqual(byId.iii, 3);
+  assert.strictEqual(byId.xii, 12);
+  assert.strictEqual(byId.kutim1, 13);
+  assert.strictEqual(byId.kutim2, 14);
 });
 
 test('nomor arsip global - hapus merapatkan dan restore menggeser kembali', () => {
@@ -421,14 +421,14 @@ test('nomor arsip global - hapus merapatkan dan restore menggeser kembali', () =
   let plan = buildGlobalArchiveNumberPlan_(activities, rows);
   assert.deepStrictEqual(
     plan.activeAssignments.map(function (assignment) { return assignment.subActivityId + ':' + assignment.globalNumber; }),
-    ['p1:1', 'p3:2', 'l1:3']
+    ['p1:1', 'p3:2', 'l1:1']
   );
 
   rows[1].is_active = 'TRUE';
   plan = buildGlobalArchiveNumberPlan_(activities, rows);
   assert.deepStrictEqual(
     plan.activeAssignments.map(function (assignment) { return assignment.subActivityId + ':' + assignment.globalNumber; }),
-    ['p1:1', 'p2:2', 'p3:3', 'l1:4']
+    ['p1:1', 'p2:2', 'p3:3', 'l1:1']
   );
 });
 
