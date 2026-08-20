@@ -156,7 +156,7 @@ const WorkspaceSetupImpl_ = {
           subFolder.getId(),
           entry.folderPath,
           noFolder,
-          activity.defaultCode || DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI,
+          activity.defaultCode || getDefaultKodeKlasifikasiForActivity_(activity.id, subFolder.getName()),
           activity.allowNonLetter ? 'TRUE' : 'FALSE',
           'TRUE',
           existingSub.sort_order ? Number(existingSub.sort_order) : (globalSortOrder++),

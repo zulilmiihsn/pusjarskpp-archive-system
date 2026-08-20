@@ -192,6 +192,10 @@
           c.classList.toggle('active', c.id === tabId);
         });
 
+        if (typeof window.updateSubmappingDirtyTracker === 'function') {
+          window.updateSubmappingDirtyTracker();
+        }
+
         const contentEl = document.getElementById('content');
         if (contentEl) contentEl.scrollTop = 0;
       });
@@ -483,7 +487,7 @@
             </div>
 
             <!-- Row 2: Pembersihan Sampah Konfigurasi -->
-            <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
               <div style="flex: 1; min-width: 250px;">
                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
                   <h4 style="font-size: 14px; font-weight: 700; color: var(--text); margin: 0;">Pembersihan Sampah Konfigurasi</h4>
@@ -526,9 +530,26 @@
 
     const selectedActivityId = state.mappingActivityId || (activities[0] && activities[0].activity_id) || '';
     const selectedActivity = activities.find(activity => activity.activity_id === selectedActivityId) || activities[0];
-    const rows = selectedActivity
-      ? (selectedActivity.subActivities || []).map(sub => ({ activity: selectedActivity, sub }))
-      : [];
+    const draftOrder = (state.submappingDraftOrder && state.submappingDraftOrder[selectedActivityId]) || null;
+    const rawSubs = selectedActivity ? (selectedActivity.subActivities || []).slice() : [];
+
+    if (draftOrder && Array.isArray(draftOrder)) {
+      rawSubs.sort((a, b) => {
+        const idxA = draftOrder.indexOf(String(a.sub_activity_id));
+        const idxB = draftOrder.indexOf(String(b.sub_activity_id));
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        return Number(a.effective_sort_order || a.sort_order || 999) - Number(b.effective_sort_order || b.sort_order || 999);
+      });
+    } else {
+      rawSubs.sort((a, b) => {
+        const o1 = parseInt(a.effective_sort_order || a.sort_order || '99999', 10);
+        const o2 = parseInt(b.effective_sort_order || b.sort_order || '99999', 10);
+        return o1 - o2;
+      });
+    }
+    const rows = rawSubs.map(sub => ({ activity: selectedActivity, sub }));
     const allSubs = [];
     activities.forEach(activity => (activity.subActivities || []).forEach(sub => allSubs.push(sub)));
     const readyCount = allSubs.filter(sub => (sub.effective_mapping_status || sub.mapping_status) === 'SIAP').length;
@@ -586,11 +607,11 @@
 
         ${adoptPreview ? existingArchivePreviewHtml(adoptPreview) : ''}
 
-        <div style="display:grid; grid-template-columns:repeat(${activities.length},minmax(0,1fr)); gap:8px; margin-bottom:16px;">
+        <div style="display:grid; grid-template-columns:repeat(${activities.length},minmax(0,1fr)); gap:10px; margin-bottom:20px;">
           ${activities.map(activity => `
-            <button class="btn btn-sm ${activity.activity_id === (selectedActivity && selectedActivity.activity_id) ? 'btn-primary' : ''}"
+            <button class="btn ${activity.activity_id === (selectedActivity && selectedActivity.activity_id) ? 'btn-primary' : 'btn-secondary'}"
               data-mapping-activity="${esc(activity.activity_id)}"
-              style="width:100%;">
+              style="width:100%; height:42px; font-size:13.5px; font-weight:700; border-radius:var(--radius); transition:all 150ms ease;">
               ${esc(activity.activity_name || activity.activity_id)}
             </button>
           `).join('')}
@@ -665,6 +686,22 @@
     const status = sub.effective_mapping_status || sub.mapping_status || 'PERLU_REVIEW';
     const statusLabel = status === 'SIAP' ? 'Siap' : (status === 'AUTO_MATCHED' ? 'Otomatis' : 'Perlu Tinjauan');
     const statusColor = status === 'SIAP' ? 'var(--ok)' : (status === 'AUTO_MATCHED' ? 'var(--warn)' : 'var(--danger)');
+
+    const initialFormal = sub.formal_archive_name || '';
+    const initialSheet = sub.target_sheet_name || '';
+    const initialKode = sub.default_kode_klasifikasi || '';
+    const initialSort = sub.effective_sort_order || sub.sort_order || '';
+    const initialFolder = sub.no_folder || '';
+    const initialRekap = sub.rekap_row_number || '';
+
+    const drafts = (state.submappingDrafts && state.submappingDrafts[rowId]) || {};
+    const currentFormal = drafts.formalArchiveName !== undefined ? drafts.formalArchiveName : initialFormal;
+    const currentSheet = drafts.targetSheetName !== undefined ? drafts.targetSheetName : initialSheet;
+    const currentKode = drafts.defaultKodeKlasifikasi !== undefined ? drafts.defaultKodeKlasifikasi : initialKode;
+    const currentSort = drafts.sortOrder !== undefined ? drafts.sortOrder : initialSort;
+    const currentFolder = drafts.noFolder !== undefined ? drafts.noFolder : initialFolder;
+    const currentRekap = drafts.rekapRowNumber !== undefined ? drafts.rekapRowNumber : initialRekap;
+
     return `
       <div data-mapping-row="${esc(rowId)}"
         data-year="${esc((state.bootstrap.settings && state.bootstrap.settings.currentYear) || 2026)}"
@@ -677,102 +714,207 @@
         data-parent-folder-name="${esc(sub.parent_folder_name || '')}"
         data-parent-folder-path="${esc(sub.parent_folder_path || '')}"
         data-spreadsheet-file-id="${esc(sub.spreadsheet_file_id || activity.spreadsheet_file_id || '')}"
-        style="border: 1px solid var(--border); border-left: 4px solid ${statusColor}; border-radius: var(--radius-md); background: var(--surface); overflow: hidden; transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1); box-shadow: var(--shadow-xs); margin-bottom: 4px;">
+        style="border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); margin-bottom: 10px; padding: 16px 20px; transition: border-color 200ms ease, box-shadow 200ms ease;">
 
-        <!-- Header -->
-        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-soft);">
-          <div style="min-width: 0;">
-            <div style="font-size: 13.5px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.01em;">${esc(sub.sub_activity_name || '-')}</div>
-            ${sub.folder_path ? '<div style="font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;" title="' + esc(sub.folder_path) + '"><svg style="display: inline-block; vertical-align: -2px; margin-right: 4px; opacity: 0.7;" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>' + esc(sub.folder_path) + '</div>' : ''}
+        <!-- Baris Rekap & No. Folder: hidden inputs -->
+        <input class="mapping-input" data-field="rekapRowNumber" type="hidden" value="${esc(initialRekap)}" data-initial-val="${esc(initialRekap)}">
+        <input class="mapping-input" data-field="noFolder" type="hidden" value="${esc(initialFolder)}" data-initial-val="${esc(initialFolder)}">
+
+        <style>
+          .mapping-sort-input::-webkit-outer-spin-button,
+          .mapping-sort-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          .mapping-sort-input {
+            -moz-appearance: textfield;
+          }
+        </style>
+
+        <!-- Header: Nomor Berkas (#) + Nama Sub-Kegiatan + Status Badge / Indicator -->
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px;">
+          <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+            <!-- Blue Highlighted Stepper Badge -->
+            <div style="display: flex; align-items: center; background: #EFF6FF; border: 1.5px solid #2563EB; border-radius: 8px; padding: 4px 8px 4px 12px; gap: 8px; flex-shrink: 0; box-shadow: 0 1px 3px rgba(37, 99, 235, 0.12);" title="Urutan Berkas Rekap (Gunakan panah untuk tukar posisi)">
+              <span style="font-size: 14px; font-weight: 900; color: #2563EB;">#</span>
+              <input class="mapping-input mapping-sort-input" data-field="sortOrder"
+                value="${esc(currentSort)}"
+                data-initial-val="${esc(initialSort)}"
+                placeholder="1"
+                type="number"
+                min="1"
+                style="min-width: 50px; width: 50px; height: 34px; border: 1.5px solid #BFDBFE; background: #FFFFFF; border-radius: 6px; color: #1E40AF; font-size: 15px; font-weight: 800; text-align: center; outline: none; padding: 0 2px;"
+                onfocus="this.style.borderColor='#2563EB';this.style.boxShadow='0 0 0 2px #BFDBFE'"
+                onblur="this.style.borderColor='#BFDBFE';this.style.boxShadow='none'"
+                onwheel="this.blur()">
+              
+              <!-- Up / Down Stepper Buttons (Swap Cards) -->
+              <div style="display: flex; flex-direction: column; gap: 3px; flex-shrink: 0;">
+                <button type="button" class="stepper-up-btn" title="Pindah Ke Atas"
+                  style="width: 28px; height: 17px; background: #FFFFFF; border: 1.5px solid #BFDBFE; border-radius: 4px 4px 2px 2px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #2563EB; padding: 0; transition: all 120ms ease;"
+                  onclick="if(window.swapSubActivityRows) window.swapSubActivityRows(this, 'up');"
+                  onmouseenter="this.style.background='#2563EB';this.style.color='#FFFFFF';this.style.borderColor='#2563EB'"
+                  onmouseleave="this.style.background='#FFFFFF';this.style.color='#2563EB';this.style.borderColor='#BFDBFE'">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+                </button>
+                <button type="button" class="stepper-down-btn" title="Pindah Ke Bawah"
+                  style="width: 28px; height: 17px; background: #FFFFFF; border: 1.5px solid #BFDBFE; border-radius: 2px 2px 4px 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #2563EB; padding: 0; transition: all 120ms ease;"
+                  onclick="if(window.swapSubActivityRows) window.swapSubActivityRows(this, 'down');"
+                  onmouseenter="this.style.background='#2563EB';this.style.color='#FFFFFF';this.style.borderColor='#2563EB'"
+                  onmouseleave="this.style.background='#FFFFFF';this.style.color='#2563EB';this.style.borderColor='#BFDBFE'">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+              </div>
+            </div>
+            <span style="font-size: 15px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${esc(sub.sub_activity_name || '-')}</span>
+            <span class="dirty-row-badge" style="display: none; font-size: 11px; font-weight: 700; color: #2563EB; background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 99px; padding: 2px 8px; flex-shrink: 0;">
+              • Ada Perubahan
+            </span>
           </div>
-          <span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: ${statusColor}; background: ${statusColor}10; border: 1px solid ${statusColor}30; border-radius: 99px; padding: 3px 10px; white-space: nowrap;">
-            <span style="width: 6px; height: 6px; border-radius: 99px; background: ${statusColor}; display: inline-block;"></span>
+          <span style="display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: ${statusColor}; background: ${statusColor}0f; border: 1px solid ${statusColor}25; border-radius: 99px; padding: 3px 10px; flex-shrink: 0;">
+            <span style="width: 5px; height: 5px; border-radius: 50%; background: ${statusColor};"></span>
             ${esc(statusLabel)}
           </span>
         </div>
 
-        <!-- Main Settings Content -->
-        <div style="padding: 24px; display: flex; flex-direction: column; gap: 24px; background: var(--surface);">
+        <!-- Nama Formal Arsip (Full Width) -->
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px;">Nama Formal Arsip</div>
+          <input class="mapping-input" data-field="formalArchiveName"
+            value="${esc(currentFormal)}"
+            data-initial-val="${esc(initialFormal)}"
+            placeholder="${esc(sub.effective_formal_archive_name || sub.sub_activity_name || 'Otomatis dari nama folder')}"
+            style="width: 100%; height: 40px; font-size: 13px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-soft); color: var(--text);"
+            onfocus="this.style.borderColor='var(--accent)';this.style.background='var(--surface)'"
+            onblur="this.style.borderColor='var(--border)';this.style.background='var(--surface-soft)'">
+        </div>
 
-          <!-- Primary Row -->
-          <div style="display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr) 90px; gap: 20px; align-items: start;">
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <label style="font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em;">Nama Formal Rangkuman</label>
-              <input class="mapping-input" data-field="formalArchiveName"
-                value="${esc(sub.formal_archive_name || '')}"
-                placeholder="${esc(sub.effective_formal_archive_name || sub.sub_activity_name || 'otomatis')}"
-                style="font-size: 13.5px; padding: 10px 14px; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: var(--surface); color: var(--text); transition: border-color 150ms ease, box-shadow 150ms ease; width: 100%;">
-            </div>
-            
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <label style="font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em;">Lembar Rincian</label>
-              <input class="mapping-input" data-field="targetSheetName"
-                value="${esc(sub.target_sheet_name || '')}"
-                placeholder="${esc(sub.effective_target_sheet_name || sub.sub_activity_name || 'otomatis')}"
-                style="font-size: 13.5px; padding: 10px 14px; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: var(--surface); color: var(--text); transition: border-color 150ms ease, box-shadow 150ms ease; width: 100%;">
-            </div>
-
-            <div style="display: flex; flex-direction: column; gap: 8px;">
-              <label style="font-size: 11.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; text-align: center;">No. Folder</label>
-              <input class="mapping-input" data-field="noFolder"
-                value="${esc(sub.no_folder || '')}"
-                placeholder="Otomatis"
-                style="font-size: 13.5px; padding: 10px 14px; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: var(--surface); color: var(--text); text-align: center; transition: border-color 150ms ease, box-shadow 150ms ease; width: 100%;">
-            </div>
+        <!-- Row Grid: Nama Sheet Rincian | Kode Klasifikasi (2 Kolom Bersih) -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div>
+            <div style="font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px;">Nama Sheet Rincian</div>
+            <input class="mapping-input" data-field="targetSheetName"
+              value="${esc(currentSheet)}"
+              data-initial-val="${esc(initialSheet)}"
+              placeholder="${esc(sub.effective_target_sheet_name || 'Otomatis')}"
+              style="width: 100%; height: 40px; font-size: 13px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-soft); color: var(--text);"
+              onfocus="this.style.borderColor='var(--accent)';this.style.background='var(--surface)'"
+              onblur="this.style.borderColor='var(--border)';this.style.background='var(--surface-soft)'">
           </div>
-
-          <hr style="border: 0; border-top: 1px dashed var(--border); margin: 0;">
-
-          <!-- Advanced Row + Save Button -->
-          <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px;">
-            
-            <!-- Info & Input Config -->
-            <div style="display: flex; flex-direction: column; gap: 10px; max-width: 500px;">
-              <p style="font-size: 12.5px; font-weight: 700; color: var(--text); margin: 0; display: flex; align-items: center; gap: 6px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted);"><path d="M12 20v-8"/><path d="M12 8h.01"/><path d="M22 12A10 10 0 1 1 2 12a10 10 0 0 1 20 0Z"/></svg>
-                Pengaturan Baris Otomatis
-              </p>
-              
-              <div style="display: flex; align-items: center; gap: 16px;">
-                <input class="mapping-input" data-field="rekapRowNumber"
-                  value="${esc(sub.rekap_row_number || '')}"
-                  placeholder="Otomatis"
-                  style="font-size: 13.5px; padding: 10px 14px; width: 110px; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: var(--surface); color: var(--text); text-align: center; transition: border-color 150ms ease, box-shadow 150ms ease; flex-shrink: 0;">
-                <p style="font-size: 11.5px; color: var(--muted); margin: 0; line-height: 1.5;">
-                  Sistem otomatis melacak baris data spreadsheet. Jika terjadi kesalahan pencatatan, isi nomor baris secara manual di sini untuk memaksa penyimpanan ke baris tersebut.
-                </p>
-              </div>
-            </div>
-
-            <!-- Save Button -->
-            <button class="btn btn-primary" data-save-sub-mapping style="padding: 10px 24px; font-weight: 700; font-size: 13.5px; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15); transition: all 200ms ease; flex-shrink: 0;">
-              Simpan Pemetaan
-            </button>
+          <div>
+            <div style="font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 5px;">Kode Klasifikasi</div>
+            <input class="mapping-input" data-field="defaultKodeKlasifikasi"
+              value="${esc(currentKode)}"
+              data-initial-val="${esc(initialKode)}"
+              placeholder=""
+              style="width: 100%; height: 40px; font-size: 13px; padding: 0 12px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-soft); color: var(--text);"
+              onfocus="this.style.borderColor='var(--accent)';this.style.background='var(--surface)'"
+              onblur="this.style.borderColor='var(--border)';this.style.background='var(--surface-soft)'">
           </div>
         </div>
+
       </div>
     `;
   }
 
   function bindSubActivityMappingSettings() {
-    document.querySelectorAll('[data-mapping-activity]').forEach(button => {
-      button.addEventListener('click', () => {
-        state.mappingActivityId = button.dataset.mappingActivity;
-        renderSettings();
-      });
-    });
+    window.swapSubActivityRows = (btn, direction) => {
+      const row = btn.closest('[data-mapping-row]');
+      if (!row) return;
 
-    document.querySelectorAll('[data-save-sub-mapping]').forEach(button => {
-      button.addEventListener('click', async () => {
-        const row = button.closest('[data-mapping-row]');
-        if (!row) return;
+      const targetRow = direction === 'up' ? row.previousElementSibling : row.nextElementSibling;
+      if (!targetRow || !targetRow.matches('[data-mapping-row]')) return;
+
+      const rowInput = row.querySelector('[data-field="sortOrder"]');
+      const targetInput = targetRow.querySelector('[data-field="sortOrder"]');
+
+      if (rowInput && targetInput) {
+        const v1 = parseInt(rowInput.value) || 0;
+        const v2 = parseInt(targetInput.value) || 0;
+        if (v1 > 0 && v2 > 0) {
+          rowInput.value = v2;
+          targetInput.value = v1;
+        } else if (direction === 'up' && v1 > 1) {
+          rowInput.value = v1 - 1;
+          targetInput.value = v1;
+        } else if (direction === 'down') {
+          rowInput.value = (v1 || 1) + 1;
+          targetInput.value = v1 || 1;
+        }
+      }
+
+      // Smooth swap animation
+      row.style.transition = 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease';
+      targetRow.style.transition = 'transform 180ms cubic-bezier(0.16, 1, 0.3, 1), opacity 150ms ease';
+      
+      const rowHeight = (row.offsetHeight || 120) + 10;
+      row.style.transform = direction === 'up' ? `translateY(-${rowHeight}px)` : `translateY(${rowHeight}px)`;
+      targetRow.style.transform = direction === 'up' ? `translateY(${rowHeight}px)` : `translateY(-${rowHeight}px)`;
+
+      setTimeout(() => {
+        row.style.transition = '';
+        targetRow.style.transition = '';
+        row.style.transform = '';
+        targetRow.style.transform = '';
+
+        if (direction === 'up') {
+          row.parentNode.insertBefore(row, targetRow);
+        } else {
+          row.parentNode.insertBefore(targetRow, row);
+        }
+
+        if (rowInput) rowInput.dispatchEvent(new Event('input', { bubbles: true }));
+        if (targetInput) targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }, 180);
+    };
+
+    // Inject floating bar into DOM if not present
+    let floatingBar = document.getElementById('submapping-floating-bar');
+    if (!floatingBar) {
+      floatingBar = document.createElement('div');
+      floatingBar.id = 'submapping-floating-bar';
+      floatingBar.style.cssText = 'position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(100px); opacity: 0; pointer-events: none; transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1); z-index: 999; background: #0F172A; color: #FFFFFF; padding: 12px 20px; border-radius: 14px; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.35); display: flex; align-items: center; gap: 20px; border: 1px solid rgba(255,255,255,0.1);';
+      floatingBar.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="width: 8px; height: 8px; border-radius: 50%; background: #3B82F6; display: inline-block;"></span>
+          <span id="submapping-dirty-count" style="font-size: 13.5px; font-weight: 600;">0 perubahan belum disimpan</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button id="submapping-cancel-btn" type="button" class="btn" style="background: rgba(255,255,255,0.12); color: #FFFFFF; border: 0; padding: 7px 16px; font-size: 13px; font-weight: 600; border-radius: 8px; height: 36px; cursor: pointer;">Batal</button>
+          <button id="submapping-save-btn" type="button" class="btn btn-primary" style="padding: 7px 18px; font-size: 13px; font-weight: 700; border-radius: 8px; height: 36px; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3); cursor: pointer; display: inline-flex; align-items: center; gap: 8px;" title="Atau tekan Ctrl + S untuk menyimpan">
+            <span>Simpan Semua Perubahan</span>
+            <kbd style="font-family: inherit; font-size: 10.5px; font-weight: 800; background: rgba(255,255,255,0.22); color: #FFFFFF; border-radius: 4px; padding: 2px 6px; border: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.05em; display: inline-block;">Ctrl + S</kbd>
+          </button>
+        </div>
+      `;
+      document.body.appendChild(floatingBar);
+    } else {
+      // Hide bar on fresh render
+      floatingBar.style.transform = 'translateX(-50%) translateY(100px)';
+      floatingBar.style.opacity = '0';
+      floatingBar.style.pointerEvents = 'none';
+    }
+
+    const saveDraftsToState = () => {
+      state.submappingDrafts = state.submappingDrafts || {};
+      document.querySelectorAll('[data-mapping-row]').forEach(row => {
+        const rowId = row.dataset.mappingRow;
         const getValue = field => {
           const input = row.querySelector(`[data-field="${field}"]`);
           return input ? input.value.trim() : '';
         };
-        try {
-          button.disabled = true;
-          const payload = {
+
+        let isRowDirty = false;
+        row.querySelectorAll('.mapping-input').forEach(input => {
+          const val = input.value.trim();
+          const init = (input.dataset.initialVal || '').trim();
+          if (val !== init) {
+            isRowDirty = true;
+          }
+        });
+
+        if (isRowDirty) {
+          state.submappingDrafts[rowId] = {
             year: Number(row.dataset.year || 2026),
             activityId: row.dataset.activityId,
             subActivityId: row.dataset.subId,
@@ -783,23 +925,196 @@
             targetSheetName: getValue('targetSheetName'),
             noFolder: getValue('noFolder'),
             rekapRowNumber: getValue('rekapRowNumber'),
+            sortOrder: getValue('sortOrder'),
+            defaultKodeKlasifikasi: getValue('defaultKodeKlasifikasi'),
             parentFolderId: row.dataset.parentFolderId,
             parentFolderName: row.dataset.parentFolderName,
             parentFolderPath: row.dataset.parentFolderPath,
             spreadsheetFileId: row.dataset.spreadsheetFileId
           };
-          payload.mappingStatus = (payload.formalArchiveName && payload.targetSheetName) ? 'SIAP' : 'PERLU_REVIEW';
-          await api('updateSubActivityMapping', payload);
-          state.bootstrap = await api('getBootstrap', {});
-          renderSettings();
-          showToast('Pemetaan sub-kegiatan disimpan.');
-        } catch (error) {
-          showToast(errorMessage(error));
-        } finally {
-          button.disabled = false;
+        } else {
+          delete state.submappingDrafts[rowId];
         }
       });
+
+      const currentRows = document.querySelectorAll('[data-mapping-row]');
+      if (currentRows.length > 0) {
+        const actId = currentRows[0].dataset.activityId;
+        if (actId) {
+          state.submappingDraftOrder = state.submappingDraftOrder || {};
+          state.submappingDraftOrder[actId] = Array.from(currentRows).map(r => String(r.dataset.subId));
+        }
+      }
+    };
+
+    const updateDirtyTracker = () => {
+      const isMappingTab = (state.activeSettingsTab === 'tab-mapping');
+      const isSettingsView = (!state.view || state.view === 'settings');
+      const isVisibleContext = isSettingsView && isMappingTab;
+
+      // Sync current DOM rows to state drafts first
+      saveDraftsToState();
+
+      // Highlight current DOM rows and badges
+      document.querySelectorAll('[data-mapping-row]').forEach(row => {
+        let isRowDirty = false;
+        row.querySelectorAll('.mapping-input').forEach(input => {
+          const val = input.value.trim();
+          const init = (input.dataset.initialVal || '').trim();
+          if (val !== init) {
+            isRowDirty = true;
+          }
+        });
+        const badge = row.querySelector('.dirty-row-badge');
+        if (isRowDirty) {
+          row.style.borderColor = 'var(--accent)';
+          if (badge) badge.style.display = 'inline-block';
+        } else {
+          row.style.borderColor = 'var(--border)';
+          if (badge) badge.style.display = 'none';
+        }
+      });
+
+      // Total dirty count across ALL activities stored in state.submappingDrafts
+      const dirtyCount = Object.keys(state.submappingDrafts || {}).length;
+
+      const countSpan = document.getElementById('submapping-dirty-count');
+      if (countSpan) {
+        countSpan.textContent = `${dirtyCount} perubahan belum disimpan`;
+      }
+
+      if (isVisibleContext && dirtyCount > 0) {
+        floatingBar.style.transform = 'translateX(-50%) translateY(0)';
+        floatingBar.style.opacity = '1';
+        floatingBar.style.pointerEvents = 'auto';
+      } else {
+        floatingBar.style.transform = 'translateX(-50%) translateY(100px)';
+        floatingBar.style.opacity = '0';
+        floatingBar.style.pointerEvents = 'none';
+      }
+    };
+
+    window.updateSubmappingDirtyTracker = updateDirtyTracker;
+
+    document.querySelectorAll('.mapping-input').forEach(input => {
+      input.addEventListener('input', updateDirtyTracker);
+      input.addEventListener('change', updateDirtyTracker);
     });
+
+    document.querySelectorAll('[data-mapping-activity]').forEach(button => {
+      button.addEventListener('click', () => {
+        state.mappingActivityId = button.dataset.mappingActivity;
+        renderSettings();
+      });
+    });
+
+    const cancelBtn = document.getElementById('submapping-cancel-btn');
+    if (cancelBtn) {
+      cancelBtn.onclick = () => {
+        state.submappingDrafts = null;
+        state.submappingDraftOrder = null;
+        const currentScrollY = window.scrollY;
+        renderSettings();
+        window.scrollTo({ top: currentScrollY, behavior: 'instant' });
+        showToast('Perubahan dibatalkan. Mengembalikan ke posisi awal.');
+      };
+    }
+
+    const saveBtn = document.getElementById('submapping-save-btn');
+    if (saveBtn) {
+      saveBtn.onclick = async () => {
+        saveDraftsToState();
+
+        const items = Object.values(state.submappingDrafts || {});
+        if (items.length === 0) return;
+
+        items.forEach(payload => {
+          payload.mappingStatus = (payload.formalArchiveName && payload.targetSheetName) ? 'SIAP' : 'PERLU_REVIEW';
+        });
+
+        let processToast = null;
+        try {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Menyimpan...';
+
+          saveBtn.textContent = `Menyimpan ${items.length} perubahan...`;
+          const savedRowIds = items.map(p => [p.activityId, p.subActivityId].map(v => String(v || '').replace(/[^a-zA-Z0-9_-]/g, '_')).join('__'));
+          const currentScrollY = window.scrollY;
+
+          // Floating process toast yang terus aktif sampai proses selesai
+          if (typeof showProcessToast === 'function') {
+            processToast = showProcessToast(`Menyimpan ${items.length} perubahan sub-kegiatan...`);
+          }
+
+          const res = await api('batchUpdateSubActivityMappings', {
+            year: Number(items[0].year || 2026),
+            items: items
+          });
+
+          state.submappingDrafts = null;
+          state.submappingDraftOrder = null;
+
+          if (res && res.bootstrap) {
+            state.bootstrap = res.bootstrap;
+          } else {
+            state.bootstrap = await api('getBootstrap', {});
+          }
+          renderSettings();
+          window.scrollTo({ top: currentScrollY, behavior: 'instant' });
+
+          // Highlight saved cards with subtle green emerald pulse
+          savedRowIds.forEach(rowId => {
+            const card = document.querySelector(`[data-mapping-row="${rowId}"]`);
+            if (card) {
+              card.style.transition = 'none';
+              card.style.borderColor = '#10B981';
+              card.style.background = '#ECFDF5';
+              card.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.25)';
+              setTimeout(() => {
+                card.style.transition = 'border-color 800ms ease, background 800ms ease, box-shadow 800ms ease';
+                card.style.borderColor = 'var(--border)';
+                card.style.background = 'var(--surface)';
+                card.style.boxShadow = 'none';
+              }, 2200);
+            }
+          });
+
+          const successMsg = `Berhasil menyimpan ${items.length} pemetaan sub-kegiatan.`;
+          if (processToast && typeof processToast.success === 'function') {
+            processToast.success(successMsg);
+          } else {
+            showToast(successMsg);
+          }
+        } catch (error) {
+          const errText = errorMessage(error);
+          if (processToast && typeof processToast.error === 'function') {
+            processToast.error(errText);
+          } else {
+            showToast(errText);
+          }
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.innerHTML = '<span>Simpan Semua Perubahan</span> <kbd style="font-family: inherit; font-size: 10.5px; font-weight: 800; background: rgba(255,255,255,0.22); color: #FFFFFF; border-radius: 4px; padding: 2px 6px; border: 1px solid rgba(255,255,255,0.3); letter-spacing: 0.05em; display: inline-block;">Ctrl + S</kbd>';
+        }
+      };
+    // Shortcut Keyboard: Ctrl + S / Cmd + S
+    if (window._settingsCtrlSHandler) {
+      window.removeEventListener('keydown', window._settingsCtrlSHandler);
+    }
+    window._settingsCtrlSHandler = function (e) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        const currentSaveBtn = document.getElementById('submapping-save-btn');
+        if (currentSaveBtn && !currentSaveBtn.disabled) {
+          currentSaveBtn.click();
+        }
+      }
+    };
+    window.addEventListener('keydown', window._settingsCtrlSHandler);
+
+    // Initial evaluation on bind
+    updateDirtyTracker();
+  }
 
     const previewButton = document.getElementById('preview-existing-archives');
     if (previewButton) {
@@ -891,6 +1206,28 @@
           showToast(errorMessage(e));
           btnRunCleanup.disabled = false;
           btnRunCleanup.innerHTML = `${iconSvg('trash')} Bersihkan Sekarang`;
+        }
+      });
+    }
+
+    const btnCleanupLainLain = document.getElementById('cleanup-orphaned-lainlain');
+    if (btnCleanupLainLain) {
+      btnCleanupLainLain.addEventListener('click', async () => {
+        if (!await showConfirmModal('Jalankan pembersihan dan perbaikan otomatis di seluruh spreadsheet kegiatan (Kepemimpinan, Latsar, Teknis, Lain-lain)?')) return;
+        btnCleanupLainLain.disabled = true;
+        btnCleanupLainLain.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> Memeriksa & Membersihkan...';
+        try {
+          const res = await api('cleanupAllOrphanedSheets');
+          if (res && res.bootstrap) state.bootstrap = res.bootstrap;
+          else state.bootstrap = await api('getBootstrap', {});
+          const sheetMsg = (res.removedSheets && res.removedSheets.length) ? ('Menghapus ' + res.removedSheets.length + ' sheet detail sisa (' + res.removedSheets.join(', ') + '). ') : 'Seluruh sheet detail valid. ';
+          const rowMsg = 'Memperbaiki & menghapus ' + (res.removedRows || 0) + ' baris sisa Rekap.';
+          showToast('Sapu bersih & pemulihan selesai. ' + sheetMsg + rowMsg);
+          renderSettings();
+        } catch (e) {
+          showToast(errorMessage(e));
+          btnCleanupLainLain.disabled = false;
+          btnCleanupLainLain.innerHTML = `${iconSvg('sparkles')} Sapu Bersih & Perbaiki Semua Sheet`;
         }
       });
     }

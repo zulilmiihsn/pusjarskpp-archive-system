@@ -49,6 +49,14 @@ const WorkspaceController = {
     auditAction_(actor, 'SUBACT_MAPPING_UPDATED', { year: payload.year, activityId: payload.activityId, subActivityId: payload.subActivityId, folderId: payload.folderId, message: 'Memperbarui mapping sub-kegiatan' });
     return r;
   },
+  batchUpdateSubActivityMappings: function (payload) {
+    payload = payload || {};
+    const actor = requireAdmin_(payload);
+    const r = SettingsController.batchUpdateSubActivityMappings(payload);
+    bumpVersion();
+    auditAction_(actor, 'SUBACT_MAPPING_BATCH_UPDATED', { year: payload.year, count: (payload.items || []).length, message: 'Memperbarui ' + (payload.items || []).length + ' mapping sub-kegiatan sekaligus' });
+    return r;
+  },
   resetWorkspace: function (payload) {
     SystemLogger.error('WORKSPACE_RESET', 'Workspace completely reset by admin', {});
     const actor = requireAdmin_(payload);

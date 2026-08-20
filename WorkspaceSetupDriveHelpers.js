@@ -52,19 +52,19 @@ function wsFindOrCreateChildFolder_(parent, candidates, createName, report) {
 function wsFindChildFolder_(parent, candidates) {
   const items = wsListChildFolders_(parent);
   
-  // exact match first
-  for (let i = 0; i < items.length; i++) {
-    const name = items[i].getName();
-    for (let j = 0; j < candidates.length; j++) {
-      if (name === candidates[j]) return items[i];
+  // exact match first (candidate order priority)
+  for (let j = 0; j < candidates.length; j++) {
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].getName() === candidates[j]) return items[i];
     }
   }
-  // fuzzy match second
-  for (let i = 0; i < items.length; i++) {
-    const name = items[i].getName();
-    const normalized = wsNormalize_(name);
-    for (let j = 0; j < candidates.length; j++) {
-      if (normalized.indexOf(wsNormalize_(candidates[j])) >= 0) return items[i];
+  // fuzzy match second (candidate order priority)
+  for (let j = 0; j < candidates.length; j++) {
+    const candNorm = wsNormalize_(candidates[j]);
+    if (!candNorm) continue;
+    for (let i = 0; i < items.length; i++) {
+      const normalized = wsNormalize_(items[i].getName());
+      if (normalized.indexOf(candNorm) >= 0) return items[i];
     }
   }
   

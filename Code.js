@@ -1,4 +1,5 @@
 'use strict';
+// Clasp sync trigger
 
 /**
  * Entrypoint: serve SPA shell.
@@ -212,6 +213,10 @@ function syncSubActivities(payload) {
   return wrapApi_(() => SubActivityController.syncSubActivities(payload));
 }
 
+function repairActivityMapping(payload) {
+  return wrapApi_(() => SubActivityController.repairActivityMapping(payload || {}));
+}
+
 function getHistory(payload) {
   return wrapApi_(() => AccountController.getHistory(payload || {}));
 }
@@ -254,6 +259,10 @@ function deleteYear(payload) {
 
 function updateSubActivityMapping(payload) {
   return wrapApi_(() => WorkspaceController.updateSubActivityMapping(payload || {}));
+}
+
+function batchUpdateSubActivityMappings(payload) {
+  return wrapApi_(() => WorkspaceController.batchUpdateSubActivityMappings(payload || {}));
 }
 
 function renameDriveItem(payload) {
@@ -506,5 +515,13 @@ function convertSubActivityToParent(payload) {
 
 function syncExistingPhysicalFiles(payload) {
   return wrapApi_(() => ArchiveController.syncExistingPhysicalFiles(payload || {}));
+}
+
+function cleanupOrphanedLainLainSheets(payload) {
+  return wrapApi_(() => SubActivityController.cleanupOrphanedLainLainSheets(payload || {}));
+}
+
+function cleanupAllOrphanedSheets(payload) {
+  return wrapApi_(() => SubActivityController.cleanupAllOrphanedSheets(payload || {}));
 }
 

@@ -52,6 +52,7 @@
     updateLockUI_('akses', _currentMetadataLocks.akses !== false);
     updateLockUI_('jumlah', _currentMetadataLocks.jumlah !== false);
     updateLockUI_('nomorBerkas', _currentMetadataLocks.nomorBerkas !== false);
+    updateLockUI_('kodeKlasifikasi', _currentMetadataLocks.kodeKlasifikasi !== false);
     updateLockUI_('filingCabinet', _currentMetadataLocks.filingCabinet !== false);
     updateLockUI_('noLaci', _currentMetadataLocks.noLaci !== false);
     updateLockUI_('noFolder', _currentMetadataLocks.noFolder !== false);
@@ -99,6 +100,7 @@
       var nfEl = document.getElementById('rename-sub-no-folder');
       
       if (nEl) nEl.value = meta.no_berkas || sub.sort_order || '';
+      if (kEl) kEl.value = meta.kode_klasifikasi || sub.default_kode_klasifikasi || '';
       var kurunParts = String(meta.kurun_waktu || '').trim().split(/\s+-\s+/);
       if (ksEl) ksEl.value = parseKurunDate_(kurunParts[0] || '');
       if (keEl) keEl.value = parseKurunDate_(kurunParts[1] || '');
@@ -198,6 +200,9 @@
     } else if (field === 'nomorBerkas') {
       var nbEl = document.getElementById('rename-sub-nomor-berkas');
       if (nbEl) nbEl.disabled = isLocked;
+    } else if (field === 'kodeKlasifikasi') {
+      var kkEl = document.getElementById('rename-sub-kode-klasifikasi');
+      if (kkEl) kkEl.disabled = isLocked;
     } else if (field === 'filingCabinet') {
       var fcEl = document.getElementById('rename-sub-no-filing-cabinet');
       if (fcEl) fcEl.disabled = isLocked;
@@ -276,6 +281,7 @@
           activityId: activity.activity_id,
           subActivityId: targetSubId,
           nomorBerkas: document.getElementById('rename-sub-nomor-berkas').value.trim(),
+          kodeKlasifikasi: document.getElementById('rename-sub-kode-klasifikasi') ? document.getElementById('rename-sub-kode-klasifikasi').value.trim() : '',
           kurunWaktu: kurunWaktu,
           noFilingCabinet: document.getElementById('rename-sub-no-filing-cabinet').value.trim(),
           noLaci: document.getElementById('rename-sub-no-laci').value.trim(),
@@ -292,6 +298,8 @@
 
       if (state.view === 'archive_folder' && typeof renderArchiveFolder === 'function') {
         renderArchiveFolder();
+      } else if (typeof window.renderActivityDetail === 'function') {
+        window.renderActivityDetail();
       } else if (typeof renderActivityDetail === 'function') {
         renderActivityDetail();
       } else if (typeof render === 'function') {
@@ -333,13 +341,20 @@
         <fieldset id="rename-sub-metadata-section" style="border: none; padding: 0; margin: 0; min-width: 0; transition: opacity 0.2s ease;">
           <hr style="margin: 18px 0; border: none; border-top: 1px solid var(--border);">
 
-          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;">
+          <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px;" class="mt-12">
             <div class="form-field" style="margin:0;">
               <label for="rename-sub-nomor-berkas">
                 <span>Nomor Berkas</span>
                 <button class="metadata-lock-btn" id="btn-lock-nomorBerkas" type="button" onclick="toggleLock_('nomorBerkas')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></button>
               </label>
               <input type="text" id="rename-sub-nomor-berkas" placeholder="Otomatis" autocomplete="off">
+            </div>
+            <div class="form-field" style="margin:0;">
+              <label for="rename-sub-kode-klasifikasi">
+                <span>Kode Klasifikasi</span>
+                <button class="metadata-lock-btn" id="btn-lock-kodeKlasifikasi" type="button" onclick="toggleLock_('kodeKlasifikasi')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></button>
+              </label>
+              <input type="text" id="rename-sub-kode-klasifikasi" placeholder="Misal: PDP.07.1" autocomplete="off">
             </div>
             <div class="form-field" style="margin:0;">
               <label for="rename-sub-jumlah">

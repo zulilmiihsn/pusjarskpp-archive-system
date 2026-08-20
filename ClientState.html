@@ -36,7 +36,9 @@
     uploadTemplate: 120000,
     uploadResumableChunk: 120000,
     deleteYear: 120000,
-    purgeSubActivity: 120000
+    purgeSubActivity: 120000,
+    updateSubActivityMapping: 180000,
+    batchUpdateSubActivityMappings: 330000
   });
   const viewCache = Object.create(null);
 
@@ -180,7 +182,7 @@
     perihal: 'Perihal',
     kepada: 'Kepada',
     dari: 'Dari',
-    kode_klasifikasi: 'Kode Klasifikasi (Jika Surat Keluar)',
+    kode_klasifikasi: 'Kode Klasifikasi',
     uraian_informasi_item: 'Uraian Informasi Item',
     tanggal: 'Tanggal',
     tingkat_perkembangan: 'Tingkat Perkembangan',
@@ -189,12 +191,14 @@
     no_filing_cabinet: 'Nomor Filing Cabinet',
     no_laci: 'Nomor Laci',
     no_folder: 'Nomor Folder',
+    jenis_naskah: 'Jenis Naskah',
     klasifikasi_akses: 'Klasifikasi Keamanan & Akses Arsip',
     ket: 'Keterangan',
     lokasi_simpan: 'Lokasi Simpan'
   };
 
   const SELECT_OPTIONS = {
+    jenis_naskah: ['Naskah Masuk', 'Surat Keluar', 'Surat Tugas', 'Surat Keputusan', 'Nota Dinas', 'Berita Acara', 'Perjanjian', 'Surat Undangan', 'Lainnya'],
     tingkat_perkembangan: ['Asli', 'Salinan'],
     klasifikasi_akses: ['Terbuka', 'Terbatas', 'Rahasia'],
     satuan: ['Lembar', 'Dokumen', 'Berkas', 'Paket']

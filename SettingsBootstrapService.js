@@ -2,7 +2,7 @@
 
 /** @private Bootstrap and workspace settings operations. */
 const SettingsBootstrapImpl_ = {
-  getBootstrap: function() {
+  getBootstrap: function(year, configOverride) {
     ensureSchemaMigrations_();
     const perfStartedAt = Date.now();
     const bootstrapPerf = {
@@ -18,6 +18,7 @@ const SettingsBootstrapImpl_ = {
     };
     let phaseStartedAt = Date.now();
     const settings = ConfigService.getSettings();
+    const targetYear = year || settings.currentYear || DEFAULT_YEAR;
     bootstrapPerf.settingsMs = Date.now() - phaseStartedAt;
     if (!settings.configSpreadsheetId) {
       bootstrapPerf.outcome = 'NOT_CONFIGURED';
@@ -31,7 +32,7 @@ const SettingsBootstrapImpl_ = {
     }
 
     phaseStartedAt = Date.now();
-    const config = CacheHelper.getConfig(settings.currentYear);
+    const config = configOverride || CacheHelper.getConfig(targetYear);
     bootstrapPerf.configMs = Date.now() - phaseStartedAt;
     if (!config || !config.activities || config.activities.length === 0) {
       bootstrapPerf.outcome = 'EMPTY_CONFIG';
@@ -67,14 +68,28 @@ const SettingsBootstrapImpl_ = {
     bootstrapPerf.adminCheckMs = Date.now() - phaseStartedAt;
 
     phaseStartedAt = Date.now();
+
+
+    const globalPlan = buildGlobalArchiveNumberPlan_(config.activities, config.subActivities);
+    const globalNumberMap = {};
+    (globalPlan.activeAssignments || []).forEach(a => {
+      if (a.subActivityId) {
+        globalNumberMap[String(a.subActivityId)] = a.globalNumber;
+      }
+    });
+
     const activities = config.activities.map((activity) => {
       const subs = config.subActivities
         .filter(sub => sub.activity_id === activity.activity_id)
         .map((sub) => {
+          const globalNum = globalNumberMap[String(sub.sub_activity_id)];
+          const effectiveSortOrder = globalNum || sub.sort_order || '';
           const effectiveFormalName = sub.formal_archive_name || sub.sub_activity_name || '';
           const effectiveSheetName = sub.target_sheet_name || sub.sub_activity_name || '';
           const mappingStatus = sub.mapping_status || inferSubActivityMappingStatus_(sub);
           return Object.assign({}, sub, {
+            sort_order: effectiveSortOrder,
+            effective_sort_order: effectiveSortOrder,
             effective_formal_archive_name: effectiveFormalName,
             effective_target_sheet_name: effectiveSheetName,
             effective_mapping_status: mappingStatus,
@@ -86,6 +101,11 @@ const SettingsBootstrapImpl_ = {
             )
           });
         });
+      subs.sort((a, b) => {
+        const o1 = parseInt(a.effective_sort_order || a.sort_order || '99999', 10);
+        const o2 = parseInt(b.effective_sort_order || b.sort_order || '99999', 10);
+        return o1 - o2;
+      });
       const fields = config.fields.filter(
         field => field.activity_id === activity.activity_id && isTrue_(field.is_visible_in_form)
       );

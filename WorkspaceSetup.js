@@ -64,8 +64,8 @@ const WORKSPACE_ACTIVITIES = [
     sortOrder: 3,
     laciFolderName: 'LACI NO 3 (TEKNIS)',
     targetFolderName: 'Folder 3 (Pelatihan Teknis dan Lainnya)',
-    laciCandidates: ['LACI NO 3', 'TEKNIS'],
-    targetCandidates: ['Folder 3', 'Teknis'],
+    laciCandidates: ['LACI NO 3 (TEKNIS)', 'LACI NO 3', 'TEKNIS'],
+    targetCandidates: ['Folder 3 (Pelatihan Teknis dan Lainnya)', 'Folder 3', 'Pelatihan Teknis'],
     hasRekapSheet: true,
     allowNonLetter: true,
     defaultSubActivities: [
@@ -84,8 +84,8 @@ const WORKSPACE_ACTIVITIES = [
     sortOrder: 4,
     laciFolderName: 'LACI NO 4 (LAIN-LAIN)',
     targetFolderName: 'Folder 4 (Lain-lain)',
-    laciCandidates: ['LACI NO 4', 'LAIN-LAIN'],
-    targetCandidates: ['Folder 4', 'Lain-lain'],
+    laciCandidates: ['LACI NO 4 (LAIN-LAIN)', 'LACI NO 4', 'LAIN-LAIN'],
+    targetCandidates: ['Folder 4 (Lain-lain)', 'Folder 4', 'Lain-lain'],
     hasRekapSheet: true,
     allowNonLetter: true,
     defaultSubActivities: [

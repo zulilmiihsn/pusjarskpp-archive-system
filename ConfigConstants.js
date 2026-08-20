@@ -20,7 +20,7 @@ const SESSION_TTL_MS = 2 * 24 * 60 * 60 * 1000;
 // CacheService mempercepat validasi request. Script Properties tetap menjadi
 // penyimpanan durable selama 2 hari; cache 6 jam hanya lapisan baca cepat.
 const SESSION_CACHE_TTL_SECONDS = 6 * 60 * 60;
-const DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI = 'PDP.07.1';
+const DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI = '';
 
 const HASH_ITERATIONS = 800;
 const HASH_ITERATIONS_V2 = 50000;

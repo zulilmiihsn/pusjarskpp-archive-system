@@ -632,7 +632,7 @@
         if (f.field_name === 'no_filing_cabinet') val = (activity ? activity.laci_folder_id : '') || '';
         if (f.field_name === 'no_laci') val = '';
         if (f.field_name === 'no_folder') val = '';
-        if (f.field_name === 'kode_klasifikasi') val = '';
+        if (f.field_name === 'kode_klasifikasi') val = (sub ? sub.default_kode_klasifikasi : '') || (typeof getDefaultKodeKlasifikasiForActivity_ === 'function' ? getDefaultKodeKlasifikasiForActivity_(activity && activity.activity_id, sub && sub.sub_activity_name) : '');
         if (f.field_name === 'no_berkas') val = (sub ? sub.sort_order : '') || '';
         if (f.field_name === 'nomor_item_arsip') val = '01';
         if (f.field_name === 'klasifikasi_akses') val = 'Terbuka';
@@ -999,7 +999,7 @@
           val = '01';
         }
         if (key === 'no_berkas') val = sub.sort_order || '';
-        if (key === 'kode_klasifikasi') val = '';
+        if (key === 'kode_klasifikasi') val = (sub ? sub.default_kode_klasifikasi : '') || (typeof getDefaultKodeKlasifikasiForActivity_ === 'function' ? getDefaultKodeKlasifikasiForActivity_(activity && activity.activity_id, sub && sub.sub_activity_name) : '');
         if (key === 'nomor_item_arsip') val = '01';
         if (key === 'klasifikasi_akses') val = 'Terbuka';
         newMetadata[key] = val;
@@ -1192,7 +1192,7 @@
     const metadata = draft.metadata;
     const fields = orderMetadataFields_(draft.fields || []).filter(f => f.field_name !== 'ket' && f.field_name !== 'no_berkas');
 
-    const section2 = ['nomor_item_arsip', 'nomor_surat', 'kode_klasifikasi', 'perihal', 'kepada', 'dari', 'uraian_informasi_item', 'tanggal'];
+    const section2 = ['nomor_item_arsip', 'nomor_surat', 'jenis_naskah', 'kode_klasifikasi', 'perihal', 'kepada', 'dari', 'uraian_informasi_item', 'tanggal'];
     const section3 = ['tingkat_perkembangan', 'jumlah', 'satuan', 'no_filing_cabinet', 'no_laci', 'no_folder', 'klasifikasi_akses'];
 
     const section2Fields = fields.filter(f => section2.includes(f.field_name));

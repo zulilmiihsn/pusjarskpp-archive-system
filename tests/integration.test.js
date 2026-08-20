@@ -399,12 +399,12 @@ test('nomor arsip global - Latsar mulai tepat setelah jumlah Kepemimpinan aktif'
   plan.activeAssignments.forEach(function (assignment) {
     byId[assignment.subActivityId] = assignment.globalNumber;
   });
-  assert.strictEqual(byId.i, 1);
-  assert.strictEqual(byId.ii, 2);
-  assert.strictEqual(byId.iii, 3);
-  assert.strictEqual(byId.xii, 12);
-  assert.strictEqual(byId.kutim1, 13);
-  assert.strictEqual(byId.kutim2, 14);
+  assert.strictEqual(byId.i, 8);
+  assert.strictEqual(byId.ii, 9);
+  assert.strictEqual(byId.iii, 10);
+  assert.strictEqual(byId.xii, 19);
+  assert.strictEqual(byId.kutim1, 20);
+  assert.strictEqual(byId.kutim2, 21);
 });
 
 test('nomor arsip global - hapus merapatkan dan restore menggeser kembali', () => {
@@ -421,14 +421,14 @@ test('nomor arsip global - hapus merapatkan dan restore menggeser kembali', () =
   let plan = buildGlobalArchiveNumberPlan_(activities, rows);
   assert.deepStrictEqual(
     plan.activeAssignments.map(function (assignment) { return assignment.subActivityId + ':' + assignment.globalNumber; }),
-    ['p1:1', 'p3:2', 'l1:1']
+    ['p1:1', 'p3:2', 'l1:3']
   );
 
   rows[1].is_active = 'TRUE';
   plan = buildGlobalArchiveNumberPlan_(activities, rows);
   assert.deepStrictEqual(
     plan.activeAssignments.map(function (assignment) { return assignment.subActivityId + ':' + assignment.globalNumber; }),
-    ['p1:1', 'p2:2', 'p3:3', 'l1:1']
+    ['p1:1', 'p2:2', 'p3:3', 'l1:4']
   );
 });
 
@@ -478,11 +478,11 @@ test('ParseEngine.detectDirection - tanpa KOP itu = masuk', () => {
   assert.strictEqual(ParseEngine.detectDirection('Dinas Pendidikan Provinsi\nNomor: 2', ''), 'masuk');
 });
 
-test('ParseEngine.analyze - surat MASUK tidak mengisi kode_klasifikasi', () => {
+test('ParseEngine.analyze - surat MASUK boleh mengisi kode_klasifikasi', () => {
   const txt = 'Dinas X\nNomor: 100/AB.02/2025\nKode: KP.01.02\nPerihal: Undangan rapat\n\nIsi surat...';
   const r = ParseEngine.analyze(txt, 'surat.pdf', {});
   assert.strictEqual(r.documentDirection, 'masuk');
-  assert.ok(!r.fields.kode_klasifikasi, 'kode_klasifikasi harus kosong untuk surat masuk');
+  assert.ok(r.fields.kode_klasifikasi && r.fields.kode_klasifikasi.value, 'kode_klasifikasi boleh terisi untuk surat masuk');
 });
 
 test('ParseEngine.analyze - surat KELUAR boleh mengisi kode_klasifikasi', () => {

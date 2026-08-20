@@ -163,7 +163,7 @@ assert(read('ClientHistory.html').includes('Folder Tujuan'), 'History UI must sh
 assert(spreadsheetService.includes("detailSummary.sumLembar ? detailSummary.sumLembar + ' lembar'"), 'Rekap Jumlah must be the SUM of detail-sheet "jumlah" (lembar), not a row count.');
 assert(spreadsheetService.includes('sumLembar += n') && spreadsheetService.includes('SUM('), 'Rekap Jumlah must sum the detail "jumlah" (lembar) with consistent JS snapshot and formula.');
 assert(!spreadsheetService.includes('detailSummary.filingCabinet'), 'Rekap location columns must strictly inherit top-down and NOT prefer values summarized from the detail sheet.');
-assert(spreadsheetService.includes('formatAccessSummary_') && spreadsheetService.includes("values.join(' & ')"), 'Rekap security access must aggregate unique detail-sheet values with ampersand formatting.');
+assert(read('SheetHelpers.js').includes('formatAccessSummary_') && read('SheetHelpers.js').includes("return 'Terbuka'"), 'Rekap security access must use tier priority (Terbuka > Terbatas > Rahasia).');
 assert(read('ArchiveController.js').includes('SpreadsheetService.updateRekapSummary(activity, subActivity, {})'), 'Existing-data adoption must refresh rekap summaries from filled detail sheets.');
 assert(spreadsheetService.includes('getDetailMetadataDefaults'), 'Archive form defaults must be readable from the detail sheet.');
 assert(read('Code.js').includes('function getArchiveMetadataDefaults'), 'Archive metadata defaults must be exposed to the client.');

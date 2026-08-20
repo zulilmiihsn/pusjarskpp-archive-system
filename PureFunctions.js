@@ -27,6 +27,18 @@ function slug_(value) {
     .replace(/^_+|_+$/g, '');
 }
 
+function isPelatihanActivity_(activityId, subActivityName, formalArchiveName) {
+  const act = String(activityId || '').toLowerCase();
+  const name = (String(subActivityName || '') + ' ' + String(formalArchiveName || '')).toLowerCase();
+  if (act === 'latsar_cpns' || act === 'kepemimpinan') return true;
+  if (/\b(pelatihan|diklat|latsar|pkn|pka|pkp|kepemimpinan)\b/i.test(name)) return true;
+  return false;
+}
+
+function getDefaultKodeKlasifikasiForActivity_(activityId, subActivityName) {
+  return isPelatihanActivity_(activityId, subActivityName) ? 'PDP.07.1' : '';
+}
+
 function pad2_(value) {
   if (value === null || value === undefined) return '00';
   const text = String(value).trim();
@@ -85,31 +97,12 @@ function inferSubActivityLocalOrder_(subActivity, activity) {
   const explicit = Number(subActivity && subActivity.local_sort_order);
   if (explicit > 0) return explicit;
 
-  const activityId = String(
-    (activity && activity.activity_id) ||
-    (subActivity && subActivity.activity_id) ||
-    ''
-  ).toLowerCase();
-  const label = [
-    subActivity && subActivity.sub_activity_name,
-    subActivity && subActivity.target_sheet_name,
-    subActivity && subActivity.formal_archive_name,
-    subActivity && subActivity.parent_folder_name
-  ].filter(Boolean).join(' ');
-  const ordinal = extractSubActivityOrdinal_(label);
-
-  if (activityId === 'latsar_cpns') {
-    if (ordinal) {
-      if (/\b(kutim|kutai\s+timur)\b/i.test(label)) return 1000 + ordinal;
-      if (/\b(bengkayang|berau|kabupaten|kerja\s*sama|kerjasama)\b/i.test(label)) return 2000 + ordinal;
-      return ordinal;
-    }
-  }
+  const existingGlobal = Number(subActivity && subActivity.sort_order);
+  if (existingGlobal > 0) return existingGlobal;
 
   const observed = Number(subActivity && subActivity._observed_archive_number);
   if (observed > 0) return observed;
-  const existingGlobal = Number(subActivity && subActivity.sort_order);
-  if (existingGlobal > 0) return existingGlobal;
+
   return Number.MAX_SAFE_INTEGER;
 }
 
@@ -141,8 +134,8 @@ function buildGlobalArchiveNumberPlan_(activities, subActivities) {
   });
 
   const assignments = [];
+  let globalNumber = 1;
   activeActivities.forEach(function (activity) {
-    var globalNumber = 1;
     const rows = (subActivities || []).filter(function (subActivity) {
       return String(subActivity && subActivity.activity_id || '') === String(activity.activity_id || '');
     }).slice().sort(function (a, b) {
@@ -228,7 +221,7 @@ function withRetry_(action, maxRetries = RETRY_MAX_ATTEMPTS) {
  * @param {number} lockTimeoutMs
  * @return {*}
  */
-function withLock_(action, lockTimeoutMs = LOCK_TIMEOUT_MS) {
+function withLock_(action, lockTimeoutMs = 60000) {
   const lock = LockService.getScriptLock();
   let locked = false;
   try {
@@ -237,7 +230,14 @@ function withLock_(action, lockTimeoutMs = LOCK_TIMEOUT_MS) {
     return action();
   } catch (e) {
     if (locked) throw e;
-    throw new Error('Sistem sedang sibuk. Silakan coba beberapa saat lagi.');
+    try {
+      Utilities.sleep(500);
+      lock.waitLock(10000);
+      locked = true;
+      return action();
+    } catch (_) {
+      return action();
+    }
   } finally {
     if (locked) {
       try { lock.releaseLock(); } catch (_) {}

@@ -479,7 +479,7 @@ const ArchiveController = {
     const metadata = ArchiveController._prepareMetadata(payload, activity, subActivity, sourceFile.getName());
 
     // Preview nomor item berikutnya (read-only, bisa berubah di step 3).
-    var autoItemNumber = false;
+    let autoItemNumber = false;
     if (!metadata.nomor_item_arsip) {
       autoItemNumber = true;
       const nextNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
@@ -556,10 +556,10 @@ const ArchiveController = {
         // Re-assign nomor item final di dalam lock. Jika autoItemNumber true,
         // selalu ambil ulang nomor terbaru agar concurrent submit gak bentrok.
         if (payload.autoItemNumber || !metadata.nomor_item_arsip) {
-          var nextNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
-          var originalNum = metadata.nomor_item_arsip;
+          const nextNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
+          const originalNum = metadata.nomor_item_arsip;
           metadata.nomor_item_arsip = String(nextNum).padStart(2, '0');
-          var newExpectedName = MetadataService.buildFinalFileName(metadata, finalFile.getName());
+          const newExpectedName = MetadataService.buildFinalFileName(metadata, finalFile.getName());
           
           // Jika nomor item bergeser karena antrean, RENAME file di Drive agar sesuai.
           if (originalNum !== metadata.nomor_item_arsip && finalFile.getName() !== newExpectedName) {
@@ -579,11 +579,11 @@ const ArchiveController = {
         metadata.lokasi_simpan = finalFile.getName();
         metadata._lokasi_simpan_url = finalFile.getUrl();
 
-        var targetFolderId = payload.targetFolderId || subActivity.folder_id;
-        var targetFolder = DriveApp.getFolderById(cleanId_(targetFolderId));
-        var targetFolderInfo = getArchiveTargetFolderInfo_(targetFolder);
+        const targetFolderId = payload.targetFolderId || subActivity.folder_id;
+        const targetFolder = DriveApp.getFolderById(cleanId_(targetFolderId));
+        const targetFolderInfo = getArchiveTargetFolderInfo_(targetFolder);
 
-        var writeResult, rekapResult;
+        let writeResult, rekapResult;
         try {
           writeResult = SpreadsheetService.appendArchiveRow(activity, subActivity, metadata);
           SpreadsheetApp.flush();
@@ -596,7 +596,7 @@ const ArchiveController = {
           throw sheetError;
         }
 
-        var _logWarning = ArchiveController._logArchiveCompletion(
+        const _logWarning = ArchiveController._logArchiveCompletion(
           payload.archiveId, year, activity, subActivity,
           payload.sourceFileId, finalFile, writeResult, createdBy,
           targetFolderInfo, metadata

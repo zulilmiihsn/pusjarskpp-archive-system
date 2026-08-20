@@ -3,8 +3,8 @@
 // Keep in sync with: PureFunctions.gs, MetadataService.gs, ConfigHelpers.gs
 
 function extractNomorSurat_(text) {
-  let str = String(text || '');
-  let patterns = [
+  const str = String(text || '');
+  const patterns = [
     /(?:No(?:mor)?\.?)\s*[:.]?\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i,
     /(?:No(?:mor)?\.?)\s*[:.]\s*([A-Z0-9][A-Z0-9.\/\-]+(?:\/[A-Z0-9.\-]+)+)/i,
     /\b([A-Z]{1,3}-\d{1,6}(?:\/[A-Z0-9.]+)+\/[12]\d{3}(?:\/[A-Z0-9.\-]+)?)/i,
@@ -14,7 +14,7 @@ function extractNomorSurat_(text) {
     new RegExp('\\b((?:[A-Z]{1,3}-\\d{1,6}|\\d{1,6})\\/[A-Z0-9.\\-]+(?:\\/[A-Z0-9.\\-]+)*)\\b')
   ];
   for (let i = 0; i < patterns.length; i++) {
-    let match = str.match(patterns[i]);
+    const match = str.match(patterns[i]);
     if (match) {
       if (i === 4) return match[1] + '/Tahun/' + match[2];
       if (i === 5) return match[1].replace(/[\s_]+/g, '/').trim();
@@ -25,29 +25,29 @@ function extractNomorSurat_(text) {
 }
 
 function extractKodeKlasifikasi_(text) {
-  let str = String(text || '');
-  let ctx = str.match(/(?:Kode|Klasifikasi)\s*[:.]?\s*([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?|\d{3}(?:\.\d{1,3})*)/i);
+  const str = String(text || '');
+  const ctx = str.match(/(?:Kode|Klasifikasi)\s*[:.]?\s*([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?|\d{3}(?:\.\d{1,3})*)/i);
   if (ctx) return ctx[1].toUpperCase().trim();
-  let raw = str.match(/\b([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?|\d{3}\.\d{1,3}(?:\.\d{1,3})*)\b/);
+  const raw = str.match(/\b([A-Z]{1,4}\.\d{2}(?:\.\d{1,2})?|\d{3}\.\d{1,3}(?:\.\d{1,3})*)\b/);
   return raw ? raw[1].trim() : '';
 }
 
-let _MONTH_NAMES = {
+const _MONTH_NAMES = {
   januari: '01', februari: '02', maret: '03', april: '04',
   mei: '05', juni: '06', juli: '07', agustus: '08',
   september: '09', oktober: '10', november: '11', desember: '12'
 };
-let _MONTH_RE = 'Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember';
+const _MONTH_RE = 'Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember';
 
 function extractDate_(text) {
-  let str = String(text || '');
-  let ctxRe = new RegExp(
+  const str = String(text || '');
+  const ctxRe = new RegExp(
     '(?:tanggal|ditetapkan|ditandatangani)\\D{0,20}?' +
     '(?:' +
       '(\\d{1,2})\\s+(' + _MONTH_RE + ')\\s+(20\\d{2})' +
       '|(20\\d{2})[-/.](\\d{1,2})[-/.](\\d{1,2})' +
     ')', 'i');
-  let ctx = str.match(ctxRe);
+  const ctx = str.match(ctxRe);
   if (ctx) {
     if (ctx[1] && ctx[2] && ctx[3]) {
       return [ctx[3], _MONTH_NAMES[ctx[2].toLowerCase()], pad2_(ctx[1])].join('-');
@@ -56,15 +56,15 @@ function extractDate_(text) {
       return [ctx[4], pad2_(ctx[5]), pad2_(ctx[6])].join('-');
     }
   }
-  let iso = str.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  const iso = str.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
   if (iso) return [iso[1], pad2_(iso[2]), pad2_(iso[3])].join('-');
-  let idRe = new RegExp('(?:[A-Za-z\\s]+,\\s*)?\\b(\\d{1,2})\\s+(' + _MONTH_RE + ')\\s+(20\\d{2})\\b', 'i');
-  let id = str.match(idRe);
+  const idRe = new RegExp('(?:[A-Za-z\\s]+,\\s*)?\\b(\\d{1,2})\\s+(' + _MONTH_RE + ')\\s+(20\\d{2})\\b', 'i');
+  const id = str.match(idRe);
   if (id) return [id[3], _MONTH_NAMES[id[2].toLowerCase()], pad2_(id[1])].join('-');
-  let myRe = new RegExp('\\b(' + _MONTH_RE + ')\\s+(20\\d{2})\\b', 'i');
-  let my = str.match(myRe);
+  const myRe = new RegExp('\\b(' + _MONTH_RE + ')\\s+(20\\d{2})\\b', 'i');
+  const my = str.match(myRe);
   if (my) return [my[2], _MONTH_NAMES[my[1].toLowerCase()], '01'].join('-');
-  let dmy = str.match(/\b(\d{1,2})[.\-](\d{1,2})[.\-](20\d{2})\b/);
+  const dmy = str.match(/\b(\d{1,2})[.\-](\d{1,2})[.\-](20\d{2})\b/);
   if (dmy) return [dmy[3], pad2_(dmy[2]), pad2_(dmy[1])].join('-');
   return '';
 }
@@ -78,11 +78,11 @@ function extractTingkatPerkembangan_(name) {
 }
 
 function extractKlasifikasiAkses_(text) {
-  let str = String(text || '');
-  let upper = str.toUpperCase();
-  let ctx = str.match(/(?:bersifat|klasifikasi\s*akses|tingkat\s*akses|sifat\s*dokumen)\s*[:.]?\s*(Rahasia|Terbatas|Biasa|Terbuka|Umum)/i);
+  const str = String(text || '');
+  const upper = str.toUpperCase();
+  const ctx = str.match(/(?:bersifat|klasifikasi\s*akses|tingkat\s*akses|sifat\s*dokumen)\s*[:.]?\s*(Rahasia|Terbatas|Biasa|Terbuka|Umum)/i);
   if (ctx) {
-    let val = ctx[1].toLowerCase();
+    const val = ctx[1].toLowerCase();
     if (val === 'rahasia') return 'Rahasia';
     if (val === 'terbatas') return 'Terbatas';
     return 'Terbuka';
@@ -94,14 +94,14 @@ function extractKlasifikasiAkses_(text) {
 }
 
 function extractUraian_(text, sourceName, activity, subActivity) {
-  let str = String(text || '');
-  let perihal = str.match(/(?:Perihal|Hal)\s*[:.]?\s*(.+?)(?=\n(?:Ke(?:pada)?|Lampiran|Yth|Nomor|Tanggal|$)|\n\n|$)/is);
+  const str = String(text || '');
+  const perihal = str.match(/(?:Perihal|Hal)\s*[:.]?\s*(.+?)(?=\n(?:Ke(?:pada)?|Lampiran|Yth|Nomor|Tanggal|$)|\n\n|$)/is);
   if (perihal && perihal[1].trim().length > 3) return cleanUraian_(perihal[1]);
-  let perihalSimple = str.match(/(?:Perihal|Hal)\s*[:.]?\s*(.+)/i);
+  const perihalSimple = str.match(/(?:Perihal|Hal)\s*[:.]?\s*(.+)/i);
   if (perihalSimple && perihalSimple[1].trim().length > 3) return cleanUraian_(perihalSimple[1]);
-  let tentang = str.match(/\b[Tt]entang\s+(.+?)(?=\n|$)/);
+  const tentang = str.match(/\b[Tt]entang\s+(.+?)(?=\n|$)/);
   if (tentang && tentang[1].trim().length > 3) return cleanUraian_(tentang[1]);
-  let cleanedName = String(sourceName || '')
+  const cleanedName = String(sourceName || '')
     .replace(/\.[a-z0-9]+$/i, '')
     .replace(/[_-]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -300,7 +300,7 @@ function normalizeHexColor_(value, fallback) {
 
 // ═══ ParseEngine testable functions (mirrored from ParseEngine.gs) ═══
 
-let _PE_DOC_TYPE_KEYWORDS = {
+const _PE_DOC_TYPE_KEYWORDS = {
   'Surat Keputusan': ['surat keputusan', 'keputusan kepala', 'keputusan direktur', 'keputusan ketua', 'menetapkan', 'mengingat', 'memutuskan', 'kesatu', 'kedua', 'ketiga'],
   'Surat Undangan': ['surat undangan', 'undangan', 'mengharapkan kehadiran', 'dimohon hadir', 'harap hadir', 'menghadiri'],
   'Surat Edaran': ['surat edaran', 'edaran', 'untuk diketahui', 'untuk menjadi perhatian'],
@@ -315,12 +315,12 @@ let _PE_DOC_TYPE_KEYWORDS = {
 };
 
 function classifyDocumentType_(text, fileName) {
-  let combined = (String(text || '') + ' ' + String(fileName || '')).toLowerCase();
-  let scores = {};
-  let types = Object.keys(_PE_DOC_TYPE_KEYWORDS);
+  const combined = (String(text || '') + ' ' + String(fileName || '')).toLowerCase();
+  const scores = {};
+  const types = Object.keys(_PE_DOC_TYPE_KEYWORDS);
   for (let i = 0; i < types.length; i++) {
-    let type = types[i];
-    let keywords = _PE_DOC_TYPE_KEYWORDS[type];
+    const type = types[i];
+    const keywords = _PE_DOC_TYPE_KEYWORDS[type];
     let score = 0;
     for (let j = 0; j < keywords.length; j++) {
       let count = 0;
@@ -332,7 +332,7 @@ function classifyDocumentType_(text, fileName) {
   }
   let bestType = '';
   let bestScore = 0;
-  let keys = Object.keys(scores);
+  const keys = Object.keys(scores);
   for (let k = 0; k < keys.length; k++) {
     if (scores[keys[k]] > bestScore) {
       bestScore = scores[keys[k]];
@@ -342,7 +342,7 @@ function classifyDocumentType_(text, fileName) {
   return bestScore >= 3 ? bestType : '';
 }
 
-let _PE_OCR_FIXES = [
+const _PE_OCR_FIXES = [
   [/[\u200B-\u200D\uFEFF]/g, ''],
   [/\r\n/g, '\n'],
   [/[ \t]{2,}/g, ' '],

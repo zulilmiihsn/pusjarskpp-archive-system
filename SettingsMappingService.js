@@ -87,6 +87,8 @@ const SettingsMappingImpl_ = {
       targetSheetName: payload.targetSheetName,
       formalArchiveName: payload.formalArchiveName,
       noFolder: payload.noFolder,
+      sortOrder: payload.sortOrder,
+      defaultKodeKlasifikasi: payload.defaultKodeKlasifikasi,
       mappingStatus: payload.mappingStatus || inferSubActivityMappingStatus_({
         sub_activity_name: payload.subActivityName,
         formal_archive_name: payload.formalArchiveName,
@@ -102,8 +104,47 @@ const SettingsMappingImpl_ = {
     });
     SpreadsheetService.ensureSubActivitySheet(activity, updated);
     SpreadsheetService.updateRekapSubActivityIdentity(activity, previous, updated);
+    SpreadsheetService.reconcileGlobalArchiveNumbers(year, { apply: true });
     CacheHelper.invalidate(year);
     return { subActivity: updated, bootstrap: this.getBootstrap() };
+  },
+
+  batchUpdateSubActivityMappings: function (payload) {
+    payload = payload || {};
+    const items = payload.items || [];
+    if (!items.length) return { success: true, bootstrap: this.getBootstrap() };
+    const year = Validator.requireYear(payload.year || items[0].year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+
+    return withLock_(() => {
+      const config = CacheHelper.getConfig(year);
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const activity = ConfigService.findActivity(config, item.activityId);
+        if (!activity) continue;
+        const previous = ConfigService.findSubActivity(config, item.activityId, item.subActivityId);
+        if (!previous) continue;
+
+        if (item.targetSheetName && previous.target_sheet_name && item.targetSheetName !== previous.target_sheet_name) {
+          SpreadsheetService.renameSubActivitySheet(activity, previous.target_sheet_name, item.targetSheetName, previous);
+        }
+        if (item.sortOrder !== undefined) previous.sort_order = item.sortOrder;
+        if (item.formalArchiveName !== undefined) previous.formal_archive_name = item.formalArchiveName;
+        if (item.targetSheetName !== undefined) previous.target_sheet_name = item.targetSheetName;
+        if (item.defaultKodeKlasifikasi !== undefined) {
+          previous.default_kode_klasifikasi = item.defaultKodeKlasifikasi;
+        } else if (!isPelatihanActivity_(item.activityId, previous.sub_activity_name, previous.formal_archive_name) && String(previous.default_kode_klasifikasi || '').trim() === 'PDP.07.1') {
+          previous.default_kode_klasifikasi = '';
+          item.defaultKodeKlasifikasi = '';
+        }
+        if (item.noFolder !== undefined) previous.no_folder = item.noFolder;
+      }
+
+      ConfigRepository.updateSubActivityMappingsBatch(items);
+      SpreadsheetService.reconcileGlobalArchiveNumbers(year, { apply: true, quick: true });
+      CacheHelper.invalidate(year);
+      const freshConfig = CacheHelper.getConfig(year);
+      return { success: true, bootstrap: this.getBootstrap(year, freshConfig) };
+    }, 30000);
   },
 
   renameDriveItem: function (payload) {

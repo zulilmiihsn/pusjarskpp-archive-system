@@ -1,9 +1,9 @@
 <script>
   const _apiQueue = [];
   let _apiQueueRunning = false;
-  // Token autentikasi sengaja hanya hidup di memori halaman. Jangan simpan token
-  // ke localStorage/sessionStorage/cookie: web app GAS berjalan dalam iframe.
-  let _sessionToken = '';
+  let _sessionToken = (function() {
+    try { return sessionStorage.getItem('pa_session_token') || localStorage.getItem('pa_session_token') || ''; } catch (e) { return ''; }
+  })();
   let _authGeneration = 0;
 
   function getSessionToken() { return _sessionToken; }
@@ -11,10 +11,23 @@
   function setSessionToken(token) {
     _sessionToken = String(token || '');
     _authGeneration++;
+    try {
+      if (_sessionToken) {
+        sessionStorage.setItem('pa_session_token', _sessionToken);
+        localStorage.setItem('pa_session_token', _sessionToken);
+      } else {
+        sessionStorage.removeItem('pa_session_token');
+        localStorage.removeItem('pa_session_token');
+      }
+    } catch (e) {}
   }
   function clearSessionToken() {
     _sessionToken = '';
     _authGeneration++;
+    try {
+      sessionStorage.removeItem('pa_session_token');
+      localStorage.removeItem('pa_session_token');
+    } catch (e) {}
   }
 
   function api(name, payload, options) {

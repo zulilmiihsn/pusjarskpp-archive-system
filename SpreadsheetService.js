@@ -428,6 +428,7 @@ const SpreadsheetService = {
           
           const cell = function (col) { return col ? String(rowValues[col - 1] || '').trim() : ''; };
 
+          rekapKode        = cell(kodeCol);
           rekapFC          = cell(fcCol);
           rekapLaci        = cell(laciCol);
           rekapFolder      = cell(folderCol);
@@ -446,23 +447,15 @@ const SpreadsheetService = {
     const nextItemNum = SpreadsheetService.getNextItemNumber(activity, subActivity);
     const meta = {
       no_berkas: rekapNomorBerkas || resolveSubActivityArchiveNumber_(subActivity, activity),
-      kode_klasifikasi: '',
+      kode_klasifikasi: (showJsComputed ? '' : rekapKode) || (subActivity && subActivity.default_kode_klasifikasi) || '',
       kurun_waktu: (showJsComputed ? '' : rekapKurunWaktu) || formatDateRange_(summary.startDate, summary.endDate),
       jumlah: (showJsComputed ? '' : rekapJumlah) || ((summary.sumLembar || 0) + ' lembar'),
       no_filing_cabinet: (showJsComputed ? '' : rekapFC) || (activity && activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '') || '',
       _no_filing_cabinet_path: activity && activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '',
       _no_filing_cabinet_url: (activity && activity.laci_folder_id) ? 'https://drive.google.com/drive/folders/' + activity.laci_folder_id : '',
-      kode_klasifikasi: '',
-      kurun_waktu: (showJsComputed ? '' : rekapKurunWaktu) || formatDateRange_(summary.startDate, summary.endDate),
-      jumlah: (showJsComputed ? '' : rekapJumlah) || ((summary.sumLembar || 0) + ' lembar'),
-      no_filing_cabinet: (showJsComputed ? '' : rekapFC) || (activity && activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '') || '',
-      _no_filing_cabinet_path: activity && activity.laci_no ? String(activity.laci_no).padStart(2, '0') + '. Laci ' + activity.activity_name : '',
-      _no_filing_cabinet_url: (activity && activity.laci_folder_id) ? 'https://drive.google.com/drive/folders/' + activity.laci_folder_id : '',
-      
       no_laci: (showJsComputed ? '' : rekapLaci) || (subActivity && subActivity.sub_activity_name) || '',
       _no_laci_path: (subActivity && subActivity.sub_activity_name) || '',
       _no_laci_url: (subActivity && subActivity.folder_id) ? 'https://drive.google.com/drive/folders/' + subActivity.folder_id : '',
-      
       no_folder: (showJsComputed ? '' : rekapFolder) || (subActivity && subActivity.no_folder) || String(nextItemNum).padStart(2, '0'),
       klasifikasi_akses: (showJsComputed ? '' : rekapAkses) || summary.akses || 'Terbuka',
       ket: rekapKet || '',

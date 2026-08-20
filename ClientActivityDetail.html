@@ -23,9 +23,19 @@
     if (el) hideElementAnimated(el);
   }
 
+  function safeRenderActivityDetail_() {
+    if (typeof window.renderActivityDetail === 'function') {
+      window.renderActivityDetail();
+    } else if (typeof renderActivityDetail === 'function') {
+      renderActivityDetail();
+    } else if (typeof renderApp === 'function') {
+      renderApp();
+    }
+  }
+
   window._navigateToFolder = function(folderName) {
     state.currentParentFolderView = folderName;
-    renderActivityDetail();
+    safeRenderActivityDetail_();
   };
 
 
@@ -82,7 +92,7 @@
         const hasInteraction = document.querySelector('.sub-dropdown-menu.open') ||
           Array.from(document.querySelectorAll('[id$="-modal"]')).some(m => m.style.display === 'flex');
         if (!(_syncIsSilent && hasInteraction)) {
-          renderActivityDetail();
+          safeRenderActivityDetail_();
         }
       }
 
@@ -120,6 +130,30 @@
     }
   }
 
+  async function repairDrive_(activity) {
+    const repairBtn = document.getElementById('btn-repair-drive');
+    const repairText = document.getElementById('repair-text');
+    if (repairBtn) repairBtn.disabled = true;
+    if (repairText) repairText.textContent = 'Memperbaiki...';
+    showToast('Memperbaiki pemetaan folder & sub-kegiatan di Google Drive...');
+    try {
+      const result = await api('repairActivityMapping', {
+        activityId: activity.activity_id,
+        year: state.bootstrap.settings.currentYear
+      });
+      if (result.bootstrap) {
+        state.bootstrap = result.bootstrap;
+        populateDashboardNav();
+      }
+      showToast('Berhasil diperbaiki! Terhubung ke ' + (result.repairedFolder || 'folder Drive') + ' dengan ' + (result.subCount || 0) + ' sub-kegiatan.');
+      safeRenderActivityDetail_();
+    } catch (error) {
+      showToast('Gagal perbaiki: ' + errorMessage(error));
+      if (repairBtn) repairBtn.disabled = false;
+      if (repairText) repairText.textContent = 'Perbaiki Pemetaan Folder';
+    }
+  }
+
 
   async function submitDeleteSub_(deleteModal, deleteSubmitBtn, currentDeleteSubId) {
     if (deleteSubmitBtn) {
@@ -138,7 +172,7 @@
       });
       state.bootstrap = result.bootstrap;
       if (state.view === 'activity_detail' && state.selectedActivityId === getActivity(state.selectedActivityId)?.activity_id) {
-        renderActivityDetail();
+        safeRenderActivityDetail_();
       }
       showToast('Sub-kegiatan dinonaktifkan dari menu aktif.');
     } catch (error) {
@@ -170,7 +204,7 @@
       if (trashSubToast) removeToast(trashSubToast);
       state.bootstrap = result.bootstrap;
       if (state.view === 'activity_detail' && state.selectedActivityId === getActivity(state.selectedActivityId)?.activity_id) {
-        renderActivityDetail();
+        safeRenderActivityDetail_();
       }
       showToast('Sub-kegiatan dihapus.');
     } catch (error) {
@@ -284,6 +318,7 @@
     // Jangan jalankan silent sync untuk guest: AUTH_ERROR akan memasang
     // auth-pending dan menyembunyikan halaman publik di belakang modal login.
     if (!isGuest()) {
+      document.getElementById('btn-repair-drive')?.addEventListener('click', () => repairDrive_(activity));
       document.getElementById('btn-sync-drive')?.addEventListener('click', () => syncDrive_(activity, false));
       syncDrive_(activity, true);
     }
@@ -436,7 +471,7 @@
     });
   }
 
-  function renderActivityDetail() {
+  window.renderActivityDetail = function renderActivityDetail() {
     const activity = getActivity(state.selectedActivityId);
     if (!activity) {
       setView('dashboard');

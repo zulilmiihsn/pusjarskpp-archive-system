@@ -32,9 +32,21 @@ const ConfigRepository = {
     const activities = readSheetObjects_(ss, CONFIG_SHEETS.ACTIVITIES)
       .filter(row => Number(row.year) === selectedYear && isTrue_(row.is_active))
       .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
-    const subActivities = readSheetObjects_(ss, CONFIG_SHEETS.SUB_ACTIVITIES)
+    const subActivitiesRaw = readSheetObjects_(ss, CONFIG_SHEETS.SUB_ACTIVITIES)
       .filter(row => Number(row.year) === selectedYear && isTrue_(row.is_active))
       .sort(compareSubActivitiesByArchiveNumber_);
+    const seenSubs = {};
+    const subActivities = subActivitiesRaw.filter(row => {
+      const key = (row.activity_id || '') + '::' + (row.folder_id || row.sub_activity_id || row.sub_activity_name);
+      if (seenSubs[key]) return false;
+      seenSubs[key] = true;
+      return true;
+    });
+    subActivities.forEach(sub => {
+      if (!isPelatihanActivity_(sub.activity_id, sub.sub_activity_name, sub.formal_archive_name) && String(sub.default_kode_klasifikasi || '').trim() === 'PDP.07.1') {
+        sub.default_kode_klasifikasi = '';
+      }
+    });
     const fields = readSheetObjects_(ss, CONFIG_SHEETS.METADATA_FIELDS)
       .filter(row => Number(row.year) === selectedYear)
       .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0));
@@ -447,18 +459,11 @@ const ConfigRepository = {
       const number = Number(row.sort_order) || 0;
       return number > max ? number : max;
     }, 0) + 1;
-    const inferredLocalOrder = inferSubActivityLocalOrder_({
-      activity_id: payload.activityId,
-      sub_activity_name: payload.subActivityName,
-      target_sheet_name: payload.targetSheetName,
-      parent_folder_name: payload.parentFolderName
-    }, { activity_id: payload.activityId });
     const maxLocalOrder = existingRows.reduce(function (max, row) {
       const number = Number(row.local_sort_order) || 0;
       return number > max ? number : max;
     }, 0);
-    const localSortOrder = payload.localSortOrder ||
-      (inferredLocalOrder < Number.MAX_SAFE_INTEGER ? inferredLocalOrder : maxLocalOrder + 1);
+    const localSortOrder = payload.localSortOrder || (maxLocalOrder + 1);
     const shiftedSubActivities = [];
 
     const values = {
@@ -553,6 +558,73 @@ const ConfigRepository = {
       local_sort_order: payload.localSortOrder
     });
     return objectFromHeaders_(getHeaders_(sheet), sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getDisplayValues()[0]);
+    });
+  },
+
+  updateSubActivityMappingsBatch: function(items) {
+    if (!items || !items.length) return true;
+    return withLock_(() => {
+      const ss = this.getConfigSpreadsheet();
+      const sheet = ss.getSheetByName(CONFIG_SHEETS.SUB_ACTIVITIES);
+      if (!sheet) throw new Error('Sheet config_sub_activities tidak ditemukan.');
+      ensureSubActivityHeaders_(sheet);
+
+      const headers = getHeaders_(sheet);
+      const data = sheet.getDataRange().getValues();
+      if (data.length <= 1) return true;
+
+      const itemMap = {};
+      items.forEach(payload => {
+        const key = [payload.year, payload.activityId, payload.subActivityId].join('|');
+        itemMap[key] = payload;
+      });
+
+      const yearIdx = headers.indexOf('year');
+      const actIdx = headers.indexOf('activity_id');
+      const subIdx = headers.indexOf('sub_activity_id');
+      let modified = false;
+
+      for (let r = 1; r < data.length; r++) {
+        const row = data[r];
+        const key = [row[yearIdx], row[actIdx], row[subIdx]].join('|');
+        const payload = itemMap[key];
+        if (payload) {
+          modified = true;
+          const updates = {
+            folder_id: payload.folderId ? cleanId_(payload.folderId) : undefined,
+            folder_path: payload.folderPath,
+            target_sheet_name: payload.targetSheetName,
+            formal_archive_name: payload.formalArchiveName,
+            no_folder: payload.noFolder,
+            mapping_status: payload.mappingStatus,
+            mapping_note: payload.mappingNote,
+            rekap_row_number: payload.rekapRowNumber,
+            sub_activity_name: payload.subActivityName,
+            parent_folder_id: payload.parentFolderId,
+            parent_folder_name: payload.parentFolderName,
+            parent_folder_path: payload.parentFolderPath,
+            spreadsheet_file_id: payload.spreadsheetFileId ? cleanId_(payload.spreadsheetFileId) : undefined,
+            is_active: payload.isActive === undefined ? undefined : (payload.isActive ? 'TRUE' : 'FALSE'),
+            inactive_reason: payload.inactiveReason,
+            inactive_at: payload.inactiveAt,
+            metadata_locks: payload.metadataLocks,
+            default_kode_klasifikasi: payload.defaultKodeKlasifikasi,
+            sort_order: payload.sortOrder,
+            local_sort_order: payload.localSortOrder
+          };
+          Object.keys(updates).forEach(field => {
+            if (updates[field] !== undefined) {
+              const c = headers.indexOf(field);
+              if (c !== -1) row[c] = updates[field];
+            }
+          });
+        }
+      }
+
+      if (modified) {
+        sheet.getRange(1, 1, data.length, data[0].length).setValues(data);
+      }
+      return true;
     });
   },
 
@@ -702,6 +774,49 @@ const ConfigRepository = {
     }
 
     return count;
+    });
+  },
+
+  deduplicateSubActivitySheetRows: function(year, activityId) {
+    return withLock_(() => {
+      const ss = this.getConfigSpreadsheet();
+      const sheet = ss.getSheetByName(CONFIG_SHEETS.SUB_ACTIVITIES);
+      if (!sheet) return 0;
+      ensureSubActivityHeaders_(sheet);
+      const values = sheet.getDataRange().getDisplayValues();
+      if (values.length < 2) return 0;
+      const headers = values[0].map(normalizeHeader_);
+      const yearCol = headers.indexOf('year');
+      const activityCol = headers.indexOf('activity_id');
+      const folderIdCol = headers.indexOf('folder_id');
+      const subNameCol = headers.indexOf('sub_activity_name');
+      const isActiveCol = headers.indexOf('is_active');
+      if (folderIdCol === -1 || isActiveCol === -1) return 0;
+
+      const seen = {};
+      let deactivated = 0;
+      for (let i = 1; i < values.length; i++) {
+        const row = values[i];
+        const rYear = String(row[yearCol] || '');
+        const rAct = String(row[activityCol] || '');
+        const rActive = String(row[isActiveCol] || '').toUpperCase();
+        if (rYear !== String(year) || (activityId && rAct !== activityId) || rActive !== 'TRUE') continue;
+
+        const fId = String(row[folderIdCol] || '').trim();
+        const sName = String(row[subNameCol] || '').trim();
+        const key = rAct + '::' + (fId || sName);
+        if (seen[key]) {
+          updateConfigRow_(sheet, i + 1, {
+            is_active: 'FALSE',
+            inactive_reason: 'DUPLICATE_CLEANUP',
+            inactive_at: new Date().toISOString()
+          });
+          deactivated++;
+        } else {
+          seen[key] = true;
+        }
+      }
+      return deactivated;
     });
   },
 

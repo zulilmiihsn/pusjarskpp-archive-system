@@ -22,12 +22,6 @@ const SubActivityController = {
         if (!subActivityName.toLowerCase().startsWith('angkatan') && !subActivityName.toLowerCase().startsWith('latsar')) {
           subActivityName = 'Angkatan ' + subActivityName;
         }
-      } else if (activity.activity_id === 'kepemimpinan') {
-        subActivityName = subActivityName;
-      } else {
-        if (!/^\d+\.\s*/.test(subActivityName)) {
-          subActivityName = nextIndex + '. ' + subActivityName;
-        }
       }
 
       const targetFolder = DriveApp.getFolderById(activity.target_folder_id);
@@ -44,7 +38,7 @@ const SubActivityController = {
         subActivityName: subActivityName,
         formalArchiveName: formalArchiveName,
         noFolder: payload.noFolder || WorkspaceSetupService.parseLeadingNumber(subActivityName) || activity.folder_no,
-        defaultKodeKlasifikasi: payload.defaultKodeKlasifikasi || DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI,
+        defaultKodeKlasifikasi: payload.defaultKodeKlasifikasi !== undefined ? payload.defaultKodeKlasifikasi : getDefaultKodeKlasifikasiForActivity_(activity.activity_id, subActivityName),
         allowNonLetterDocument: payload.allowNonLetterDocument,
         targetSheetName: targetSheetName,
         mappingStatus: payload.mappingStatus || wsInferMappingStatus_(subActivityName, formalArchiveName, targetSheetName),
@@ -284,7 +278,30 @@ const SubActivityController = {
       const activity = ConfigService.findActivity(config, payload.activityId);
       if (!activity) throw new Error('Kegiatan tidak ditemukan.');
 
-      const targetFolder = DriveApp.getFolderById(activity.target_folder_id);
+      let targetFolder = DriveApp.getFolderById(activity.target_folder_id);
+      if (activity.activity_id === 'lain_lain' && targetFolder && targetFolder.getName().indexOf('Folder 3') >= 0) {
+        try {
+          const yearConfig = (config.years || []).find(function (y) { return Number(y.year) === Number(year); }) || (config.years || [])[0];
+          const tahunFolder = yearConfig && yearConfig.persuratan_year_folder_id ? DriveApp.getFolderById(yearConfig.persuratan_year_folder_id) : null;
+          const correctFolder = tahunFolder ? wsFindChildFolder_(tahunFolder, ['Folder 4 (Lain-lain)', 'Folder 4', 'Lain-lain']) : null;
+          if (correctFolder && correctFolder.getId() !== targetFolder.getId()) {
+            targetFolder = correctFolder;
+            activity.target_folder_id = correctFolder.getId();
+            ConfigRepository.updateActivityMapping({
+              year: year,
+              activityId: activity.activity_id,
+              targetFolderId: correctFolder.getId()
+            });
+            const oldSubs = ConfigRepository.getSubActivitiesForSync(year, activity.activity_id);
+            oldSubs.forEach(function (sub) {
+              ConfigRepository.deactivateSubActivity(year, activity.activity_id, sub.sub_activity_id, 'RE_LINKED');
+            });
+          }
+        } catch (e) {
+          console.warn('Auto-repair targetFolder failed: ' + e.message);
+        }
+      }
+
       const subFolderEntries = buildSyncSubActivityEntries_(targetFolder, activity);
       const liveFolderIds = subFolderEntries.map(function (entry) { return entry.folder.getId(); });
       const entryByFolderId = {};
@@ -325,6 +342,62 @@ const SubActivityController = {
       return {
         updated: updated,
         rekapRepair: rekapRepair,
+        bootstrap: WorkspaceController.getBootstrap()
+      };
+    }, 30000);
+  },
+
+  repairActivityMapping: function (payload) {
+    payload = payload || {};
+    const actor = requireAuth_(payload);
+    const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+    Validator.requireString(payload.activityId, 'Activity ID');
+
+    return withLock_(() => {
+      const config = CacheHelper.getConfig(year);
+      const activity = ConfigService.findActivity(config, payload.activityId);
+      if (!activity) throw new Error('Kegiatan tidak ditemukan.');
+
+      const yearConfig = (config.years || []).find(function (y) { return Number(y.year) === Number(year); }) || (config.years || [])[0];
+      if (!yearConfig || !yearConfig.persuratan_year_folder_id) throw new Error('Folder tahun persuratan tidak dikonfigurasi.');
+      const tahunFolder = DriveApp.getFolderById(yearConfig.persuratan_year_folder_id);
+      const actDef = WORKSPACE_ACTIVITIES.find(function (a) { return a.id === payload.activityId; });
+      const candidates = actDef ? actDef.targetCandidates : ['Folder 4 (Lain-lain)', 'Folder 4', 'Lain-lain'];
+      
+      const correctFolder = wsFindChildFolder_(tahunFolder, candidates);
+      if (!correctFolder) throw new Error('Folder target di Google Drive tidak ditemukan.');
+
+      ConfigRepository.updateActivityMapping({
+        year: year,
+        activityId: payload.activityId,
+        targetFolderId: correctFolder.getId()
+      });
+
+      const currentSubs = ConfigRepository.getSubActivitiesForSync(year, payload.activityId);
+      const activeFolderIds = currentSubs.filter(function (s) { return isTrue_(s.is_active); }).map(function (s) { return s.folder_id; }).filter(Boolean);
+      if (activeFolderIds.length > 0) {
+        ConfigRepository.deactivateSubActivityRows(year, payload.activityId, activeFolderIds, 'MANUAL_REPAIR');
+      }
+
+      activity.target_folder_id = correctFolder.getId();
+      const liveEntries = buildSyncSubActivityEntries_(correctFolder, activity);
+      liveEntries.forEach(function (entry) {
+        _syncProcessEntry_(entry, activity, year, []);
+      });
+
+      ConfigRepository.deduplicateSubActivitySheetRows(year, payload.activityId);
+      CacheHelper.invalidate(year);
+
+      auditAction_(actor, 'ACTIVITY_REPAIRED', {
+        year: year,
+        activityId: payload.activityId,
+        message: 'Memperbaiki pemetaan folder & sub-kegiatan: ' + correctFolder.getName()
+      });
+
+      return {
+        success: true,
+        repairedFolder: correctFolder.getName(),
+        subCount: liveEntries.length,
         bootstrap: WorkspaceController.getBootstrap()
       };
     }, 30000);
@@ -398,6 +471,30 @@ const SubActivityController = {
       reason: SUB_ACTIVITY_INACTIVE_REASON.DRIVE_TRASHED,
       retentionDays: payload.retentionDays || TRASHED_SUB_ACTIVITY_RETENTION_DAYS
     });
+  },
+
+  cleanupOrphanedLainLainSheets: function (payload) {
+    payload = payload || {};
+    requireAdmin_(payload);
+    const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+    return withLock_(() => {
+      const result = SpreadsheetService.cleanupOrphanedLainLainSheets(year);
+      return Object.assign({}, result, {
+        bootstrap: WorkspaceController.getBootstrap()
+      });
+    }, 30000);
+  },
+
+  cleanupAllOrphanedSheets: function (payload) {
+    payload = payload || {};
+    requireAdmin_(payload);
+    const year = Validator.requireYear(payload.year || ConfigService.getSettings().currentYear || DEFAULT_YEAR);
+    return withLock_(() => {
+      const result = SpreadsheetService.cleanupAllOrphanedSheets(year);
+      return Object.assign({}, result, {
+        bootstrap: WorkspaceController.getBootstrap()
+      });
+    }, 30000);
   },
 
   renameSubActivity: function (payload) {
@@ -655,13 +752,8 @@ function _syncDeactivateMissing_(year, activity, existingSubs, liveFolderIds, mi
       if (!isTrue_(sub.is_active)) return false;             // hanya yang masih aktif
       if (liveFolderIds.indexOf(sub.folder_id) !== -1) return false; // masih leaf
       if (migratedHeirIds[sub.folder_id]) return false;      // sudah dimigrasi ke heir
-      // Nonaktifkan HANYA jika folder benar-benar hilang dari Drive (terhapus/trashed),
-      // bukan sekadar berubah jadi parent (itu sudah ditangani _syncMigrateParents_).
-      try {
-        return DriveApp.getFolderById(sub.folder_id).isTrashed();
-      } catch (e) {
-        return true; // tidak ditemukan
-      }
+      // Nonaktifkan jika folder tidak ada di daftar liveFolderIds laci ini (terhapus atau mis-mapped ke laci lain)
+      return true;
     })
     .map(function (sub) { return sub.folder_id; });
   if (deletedIds.length === 0) return false;

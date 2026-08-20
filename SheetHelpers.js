@@ -311,8 +311,11 @@ function writeDetailArchiveNumber_(sheet, archiveNumber) {
   if (!data || !data.columnMap.no_berkas) return { changedRows: 0, dataRows: 0 };
 
   const numberCol = data.columnMap.no_berkas;
+  const noFolderCol = data.columnMap.no_folder;
   const target = Number(archiveNumber);
-  const output = [];
+  const formattedNoFolder = pad2_(target);
+  const outputNumber = [];
+  const outputFolder = [];
   let changedRows = 0;
   let meaningfulRows = 0;
 
@@ -322,18 +325,28 @@ function writeDetailArchiveNumber_(sheet, archiveNumber) {
       const col = data.columnMap[field] || (DETAIL_FALLBACK_START_COL + fallbackIndex);
       metadata[field] = row[col - 1];
     });
-    const current = row[numberCol - 1];
+    const currentNumber = row[numberCol - 1];
+    const currentFolder = noFolderCol ? row[noFolderCol - 1] : '';
+
     if (!hasMeaningfulDetailData_(metadata)) {
-      output.push([current]);
+      outputNumber.push([currentNumber]);
+      if (noFolderCol) outputFolder.push([currentFolder]);
       return;
     }
+
     meaningfulRows++;
-    if (String(current || '').trim() !== String(target)) changedRows++;
-    output.push([target]);
+    if (String(currentNumber || '').trim() !== String(target) || String(currentFolder || '').trim() !== String(formattedNoFolder)) {
+      changedRows++;
+    }
+    outputNumber.push([target]);
+    if (noFolderCol) outputFolder.push([formattedNoFolder]);
   });
 
   if (changedRows) {
-    sheet.getRange(DETAIL_DATA_START_ROW, numberCol, output.length, 1).setValues(output);
+    sheet.getRange(DETAIL_DATA_START_ROW, numberCol, outputNumber.length, 1).setValues(outputNumber);
+    if (noFolderCol) {
+      sheet.getRange(DETAIL_DATA_START_ROW, noFolderCol, outputFolder.length, 1).setValues(outputFolder);
+    }
   }
   return { changedRows: changedRows, dataRows: meaningfulRows };
 }
@@ -479,7 +492,7 @@ function buildRekapSummary_(ss, activity, subActivity, metadata) {
 
   return {
     nomorBerkas: resolveSubActivityArchiveNumber_(subActivity, activity),
-    kodeKlasifikasi: subActivity.default_kode_klasifikasi || (typeof DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI !== 'undefined' ? DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI : ''),
+    kodeKlasifikasi: subActivity.default_kode_klasifikasi !== undefined && subActivity.default_kode_klasifikasi !== null && subActivity.default_kode_klasifikasi !== '' ? subActivity.default_kode_klasifikasi : getDefaultKodeKlasifikasiForActivity_(activity && activity.activity_id, subActivity && subActivity.sub_activity_name),
     uraian: getSubActivityFormalName_(subActivity) || metadata.uraian_informasi_item || '',
     kurunWaktu: formatDateRange_(startDate, endDate),
     jumlah: detailSummary.sumLembar ? detailSummary.sumLembar + ' lembar' : '',
@@ -520,7 +533,7 @@ function writeRekapIdentity_(sheet, rowIndex, activity, subActivity, options) {
   );
   const identity = {
     nomorBerkas: noFolder,
-    kodeKlasifikasi: (subActivity && subActivity.default_kode_klasifikasi) || (typeof DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI !== 'undefined' ? DEFAULT_SUB_ACTIVITY_KODE_KLASIFIKASI : ''),
+    kodeKlasifikasi: (subActivity && subActivity.default_kode_klasifikasi) || getDefaultKodeKlasifikasiForActivity_(activity && activity.activity_id, subActivity && subActivity.sub_activity_name),
     uraian: getSubActivityFormalName_(subActivity),
     noLaci: activity && activity.laci_no ? activity.laci_no : '',
     noFolder: noFolder,
@@ -571,7 +584,7 @@ function setRekapFilingCabinetCell_(sheet, rowIndex, headerMap, activity, overwr
   const cell = sheet.getRange(rowIndex, column);
   const formula = buildFilingCabinetFormula_(activity, sheet);
   if (formula) {
-    if (!overwrite && (cell.getFormula() || cell.getDisplayValue())) return;
+    if (!overwrite && cell.getFormula()) return;
     cell.setFormula(formula);
     return;
   }
@@ -673,15 +686,12 @@ function normalizeAccessSummaryValue_(value) {
 }
 
 function formatAccessSummary_(aksesByKey) {
-  const priority = ['terbuka', 'biasa', 'terbatas', 'rahasia'];
-  const values = [];
-  priority.forEach(function (key) {
-    if (aksesByKey[key]) values.push(aksesByKey[key]);
-  });
-  Object.keys(aksesByKey).sort().forEach(function (key) {
-    if (priority.indexOf(key) === -1) values.push(aksesByKey[key]);
-  });
-  return values.join(' & ');
+  if (aksesByKey['terbuka'] || aksesByKey['biasa']) return 'Terbuka';
+  if (aksesByKey['terbatas']) return 'Terbatas';
+  if (aksesByKey['rahasia']) return 'Rahasia';
+
+  const keys = Object.keys(aksesByKey);
+  return keys.length ? (aksesByKey[keys[0]] || 'Terbuka') : 'Terbuka';
 }
 
 function parseDateCell_(value) {
@@ -945,18 +955,23 @@ function writeBasicDetailNotes_(sheet, startRow) {
 }
 
 function findWritableDetailRow_(sheet) {
-  const noteRow = findNoteRow_(sheet) || sheet.getLastRow() + 1;
+  ensureInstructionNoteSpacing_(sheet);
+  const noteRow = findNoteRow_(sheet) || (sheet.getLastRow() + 1);
   const startCol = getDetailStartColumn_(sheet);
+  const maxWritableRow = Math.max(noteRow - 2, DETAIL_DATA_START_ROW);
   const blank = findFirstBlankInRange_(
     sheet,
     DETAIL_DATA_START_ROW,
-    noteRow - 1,
+    maxWritableRow,
     startCol + DETAIL_WRITABLE_CHECK_OFFSET
   );
   if (blank) return blank;
+
   sheet.insertRowBefore(noteRow);
   invalidateNoteRowCache_(sheet);
-  return noteRow;
+  ensureInstructionNoteSpacing_(sheet);
+  const newNoteRow = findNoteRow_(sheet) || (sheet.getLastRow() + 1);
+  return Math.max(newNoteRow - 2, DETAIL_DATA_START_ROW);
 }
 
 // Global execution cache for note rows to prevent repeated spreadsheet reads
@@ -983,6 +998,42 @@ function findNoteRow_(sheet) {
   }
   noteRowCache_[sheetId] = null;
   return null;
+}
+
+function ensureInstructionNoteSpacing_(sheet) {
+  if (!sheet) return false;
+  invalidateNoteRowCache_(sheet);
+  const noteRow = findNoteRow_(sheet);
+  if (!noteRow || noteRow <= 2) return false;
+
+  const prevRowIndex = noteRow - 1;
+  const prevRowValues = sheet.getRange(prevRowIndex, 1, 1, Math.min(sheet.getLastColumn(), 15)).getDisplayValues()[0];
+
+  const hasContentAbove = prevRowValues.some(function (val) {
+    return String(val || '').trim() !== '';
+  });
+
+  const sheetName = sheet.getName();
+  const isRekap = (sheetName === REKAP_SHEET_NAME || sheetName === 'Daftar Berkas Arsip Aktip' || sheetName === 'Daftar Berkas Arsip Aktif');
+
+  let isTouchingTableGrid = false;
+  if (isRekap && noteRow <= 22) {
+    isTouchingTableGrid = true;
+  } else if (!isRekap && noteRow <= 33) {
+    isTouchingTableGrid = true;
+  }
+
+  if (hasContentAbove || isTouchingTableGrid) {
+    sheet.insertRowBefore(noteRow);
+    const gapRow = noteRow;
+    try {
+      sheet.getRange(gapRow, 1, 1, Math.max(sheet.getLastColumn(), 15)).clearBorders();
+    } catch (_) {}
+    invalidateNoteRowCache_(sheet);
+    return true;
+  }
+
+  return false;
 }
 
 function findFirstBlankInRange_(sheet, startRow, endRow, col) {
@@ -1135,7 +1186,7 @@ function getDetailColumnLetter_(sheet, field, fallbackLetter) {
 // Project ini standalone, jadi Document Properties dapat null. Gunakan locale
 // langsung dan memo per-eksekusi; jangan menulis sel spreadsheet sebagai probe.
 function formulaSep_(ssOrSheet) {
-  var ss;
+  let ss;
   if (!ssOrSheet) return ';';
   if (typeof ssOrSheet.getParent === 'function') {
     try { ss = ssOrSheet.getParent(); } catch (e) { return ';'; }
@@ -1146,13 +1197,13 @@ function formulaSep_(ssOrSheet) {
 
   // Memo per-eksekusi
   if (!formulaSep_._m) formulaSep_._m = {};
-  var ssId;
+  let ssId;
   try { ssId = ss.getId(); } catch (e) { return ';'; }
   if (formulaSep_._m[ssId] !== undefined) return formulaSep_._m[ssId];
 
-  var sep = ';';
+  let sep = ';';
   try {
-    var locale = String(ss.getSpreadsheetLocale() || '').toLowerCase();
+    const locale = String(ss.getSpreadsheetLocale() || '').toLowerCase();
     sep = /^(id|de|fr|it|nl|pt|es|ru|tr|pl|cs|da|fi|el|hu|nb|nn|ro|sk|sl|sv|uk|vi)(_|-|$)/.test(locale)
       ? ';'
       : ',';
@@ -1185,7 +1236,11 @@ function buildAksesFormula_(detailSheet) {
   const colLetter = getDetailColumnLetter_(detailSheet, 'klasifikasi_akses', 'M');
   const rangeRef = ref + '!' + colLetter + '9:' + colLetter;
   const s = formulaSep_(detailSheet);
-  return "=IFERROR(TEXTJOIN(\" & \"" + s + " TRUE" + s + " UNIQUE(FILTER(" + rangeRef + s + " " + rangeRef + "<>\"\")))" + s + " \"Terbuka\")";
+  return "=IF(COUNTIF(" + rangeRef + s + " \"*Terbuka*\")>0" + s + " \"Terbuka\"" + s + 
+         "IF(COUNTIF(" + rangeRef + s + " \"*Biasa*\")>0" + s + " \"Terbuka\"" + s + 
+         "IF(COUNTIF(" + rangeRef + s + " \"*Terbatas*\")>0" + s + " \"Terbatas\"" + s + 
+         "IF(COUNTIF(" + rangeRef + s + " \"*Rahasia*\")>0" + s + " \"Rahasia\"" + s + 
+         " \"Terbuka\"))))";
 }
 
 function setRekapFormulaCell_(sheet, rowIndex, headerMap, aliases, formula) {

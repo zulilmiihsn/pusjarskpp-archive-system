@@ -31,17 +31,24 @@
     populateDashboardNav();
     updateNavActive();
 
-    if (state.view === 'process') renderProcess();
-    else if (state.view === 'document_process') renderDocumentProcess();
-    else if (state.view === 'templates') renderTemplates();
-    else if (state.view === 'history') renderHistory();
-    else if (state.view === 'inactive') renderInactiveSubActivities();
-    else if (state.view === 'audit') renderAuditLog();
-    else if (state.view === 'accounts') renderAccounts();
-    else if (state.view === 'settings') renderSettings();
-    else if (state.view === 'activity_detail') renderActivityDetail();
-    else if (state.view === 'archive_folder') renderArchiveFolder();
-    else renderDashboard();
+    const floatingBar = document.getElementById('submapping-floating-bar');
+    if (floatingBar && state.view !== 'settings') {
+      floatingBar.style.transform = 'translateX(-50%) translateY(100px)';
+      floatingBar.style.opacity = '0';
+      floatingBar.style.pointerEvents = 'none';
+    }
+
+    if (state.view === 'process') { if (typeof window.renderProcess === 'function') window.renderProcess(); else if (typeof renderProcess === 'function') renderProcess(); }
+    else if (state.view === 'document_process') { if (typeof window.renderDocumentProcess === 'function') window.renderDocumentProcess(); else if (typeof renderDocumentProcess === 'function') renderDocumentProcess(); }
+    else if (state.view === 'templates') { if (typeof window.renderTemplates === 'function') window.renderTemplates(); else if (typeof renderTemplates === 'function') renderTemplates(); }
+    else if (state.view === 'history') { if (typeof window.renderHistory === 'function') window.renderHistory(); else if (typeof renderHistory === 'function') renderHistory(); }
+    else if (state.view === 'inactive') { if (typeof window.renderInactiveSubActivities === 'function') window.renderInactiveSubActivities(); else if (typeof renderInactiveSubActivities === 'function') renderInactiveSubActivities(); }
+    else if (state.view === 'audit') { if (typeof window.renderAuditLog === 'function') window.renderAuditLog(); else if (typeof renderAuditLog === 'function') renderAuditLog(); }
+    else if (state.view === 'accounts') { if (typeof window.renderAccounts === 'function') window.renderAccounts(); else if (typeof renderAccounts === 'function') renderAccounts(); }
+    else if (state.view === 'settings') { if (typeof window.renderSettings === 'function') window.renderSettings(); else if (typeof renderSettings === 'function') renderSettings(); }
+    else if (state.view === 'activity_detail') { if (typeof window.renderActivityDetail === 'function') window.renderActivityDetail(); else if (typeof renderActivityDetail === 'function') renderActivityDetail(); }
+    else if (state.view === 'archive_folder') { if (typeof window.renderArchiveFolder === 'function') window.renderArchiveFolder(); else if (typeof renderArchiveFolder === 'function') renderArchiveFolder(); }
+    else { if (typeof window.renderDashboard === 'function') window.renderDashboard(); else if (typeof renderDashboard === 'function') renderDashboard(); }
   }
 
   function updateHeader() {

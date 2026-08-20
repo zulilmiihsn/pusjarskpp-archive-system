@@ -17,8 +17,11 @@ README.md
 .gitignore
 .clasp.json
 .claspignore
+patch.js
 tests/**
 scripts/**
+eslint.config.js
+eslint.config.*
 
 # Junk/artefak build & debug — jangan ikut ke-push ke GAS
 Concatenated.html

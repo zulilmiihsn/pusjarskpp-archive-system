@@ -37,6 +37,10 @@ const SettingsController = {
     return SettingsMappingImpl_.updateSubActivityMapping.apply(this, arguments);
   },
 
+  batchUpdateSubActivityMappings: function (payload) {
+    return SettingsMappingImpl_.batchUpdateSubActivityMappings.apply(this, arguments);
+  },
+
   renameDriveItem: function (payload) {
     return SettingsMappingImpl_.renameDriveItem.apply(this, arguments);
   },

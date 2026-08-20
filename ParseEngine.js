@@ -757,10 +757,16 @@ const ParseEngine = (function () {
     // Pass 5: Build result
     const fields = {};
     if (nomorSurat) fields.nomor_surat = nomorSurat;
-    // Kode klasifikasi hanya relevan untuk surat KELUAR. Surat MASUK: biarkan kosong
-    // (jangan autofill) sesuai aturan kearsipan di kantor ini.
-    if (kodeKlasifikasi && direction === 'keluar') fields.kode_klasifikasi = kodeKlasifikasi;
+    // Kode klasifikasi diisi baik untuk surat KELUAR maupun surat MASUK.
+    if (kodeKlasifikasi) fields.kode_klasifikasi = kodeKlasifikasi;
     if (tanggal) fields.tanggal = tanggal;
+    if (docType) {
+      fields.jenis_naskah = { value: docType, confidence: 0.9 };
+    } else if (direction === 'masuk') {
+      fields.jenis_naskah = { value: 'Naskah Masuk', confidence: 0.8 };
+    } else if (direction === 'keluar') {
+      fields.jenis_naskah = { value: 'Surat Keluar', confidence: 0.8 };
+    }
     let uraianFallback = String(fileName || '')
       .replace(/\.[a-z0-9]+$/i, '')
       .replace(/[_-]+/g, ' ')

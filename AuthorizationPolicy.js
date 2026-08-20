@@ -16,7 +16,7 @@ const POLICY_AUTH_ENDPOINTS_ = [
   'editMetadata', 'adoptExistingArchives', 'previewExistingArchives',
   'initInboxResumableUpload', 'initTemplateResumableUpload',
   'uploadResumableChunk', 'uploadSourceFile', 'parseDocumentContent',
-  'addSubActivity', 'syncSubActivities', 'getHistory', 'uploadTemplate',
+  'addSubActivity', 'syncSubActivities', 'repairActivityMapping', 'getHistory', 'uploadTemplate',
   'deleteTemplate', 'saveTemplateCategory', 'renameTemplateCategory',
   'setTemplateCategory', 'listArchiveFolder', 'addArchiveChildFolder',
   'bulkAddArchiveDocumentLinks', 'addArchiveDocumentLink',
@@ -30,7 +30,7 @@ const POLICY_AUTH_ENDPOINTS_ = [
 const POLICY_ADMIN_ENDPOINTS_ = [
   'installMaintenanceTrigger', 'deleteYear', 'updateSubActivityMapping',
   'renameDriveItem', 'trashArchiveFolder', 'deleteSubActivity',
-  'trashSubActivityFolder', 'cleanupTrashedSubActivities',
+  'trashSubActivityFolder', 'cleanupTrashedSubActivities', 'cleanupOrphanedLainLainSheets', 'cleanupAllOrphanedSheets',
   'deleteTemplateCategory', 'purgeSubActivity', 'getAdminAuditLogs',
   'resetWorkspace', 'listAccounts', 'saveAccount', 'deleteAccount'
 ];

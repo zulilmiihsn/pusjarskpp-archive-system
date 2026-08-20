@@ -77,7 +77,7 @@ function wsStyleRekapSheet_(sheet) {
       sheet.setColumnWidth(startCol + index, widthPx);
     });
 
-  wsWriteRekapNotes_(sheet, lastTableRow + 1);
+  wsWriteRekapNotes_(sheet, lastTableRow + 2);
 }
 
 function wsWriteRekapNotes_(sheet, startRow) {
